@@ -20,7 +20,7 @@ class InvoiceCoords extends Db.ObjD<InvoiceCoords> {
 
 class Company extends Db.ObjC<Company> {
 	events = {
-		invoice : new Db.ValueEvent<InvoiceCoords>('invoice').objD(InvoiceCoords)
+		invoice : Db.data(InvoiceCoords)
 	}
 }
 
@@ -37,14 +37,18 @@ class UserAddress extends Db.ObjD<UserAddress> {
 
 class User extends Db.ObjC<User> {
 	events = {
-		anagraphics : new Db.ValueEvent<UserAnagraphics>('anagraphics').objD(UserAnagraphics),
-		bestFriend : new Db.ValueEvent<User>('best'),
+		anagraphics : Db.data(UserAnagraphics),
+		bestFriend : Db.reference(User).named('best'),
 		//addresses : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress),
-		addresses : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress),
-		prioAddress : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress).sortOn('priority'),
-		previousCompanies : new Db.ListEvent<Company>('prevComps')
+		addresses : Db.dataList(UserAddress),
+		prioAddress : Db.dataList(UserAddress).named('addresses').sortOn('priority'),
+		previousCompanies : Db.referenceList(Company).named('prevComps'),
+		logicId : Db.num()
 	}
 }
+
+var u = new User();
+
 
 var baseUrl :string = "https://swashp.firebaseio.com/test"
 Db.def.register(baseUrl + "/users/", User); 
@@ -230,7 +234,7 @@ describe('Db Tests', () => {
 			M.assert('User projection').when(anags[0]).is(M.objectMatching({name:'Mimmi',surname:'Gianni'}));
 		});
 		it('should notify list of D and end of list', (done) => {
-			var adds :Db.EventDetails<UserAddress>[] = [];
+			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			u.events.addresses.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
@@ -269,7 +273,7 @@ describe('Db Tests', () => {
 		});
 		
 		it('should parse correctly a list of Cs', (done) => {
-			var comps :Db.EventDetails<Company>[] = [];
+			var comps :Db.internal.IEventDetails<Company>[] = [];
 			u.events.previousCompanies.add.on(this, (c, det)=> {
 				comps.push(det);
 			});
@@ -293,7 +297,7 @@ describe('Db Tests', () => {
 		});
 		
 		it('should sort the list of Ds', (done) => {
-			var adds :Db.EventDetails<UserAddress>[] = [];
+			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			u.events.prioAddress.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
@@ -320,7 +324,7 @@ describe('Db Tests', () => {
 			done();
 		});
 		it('should work on subqueries', (done) => {
-			var adds :Db.EventDetails<UserAddress>[] = [];
+			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			var ne = u.events.addresses.subQuery().sortOn('priority');
 			ne.add.on(this, (a,det)=> {
 				adds.push(det);
@@ -335,7 +339,7 @@ describe('Db Tests', () => {
 			done();
 		});
 		it('should limit the list of Ds', (done) => {
-			var adds :Db.EventDetails<UserAddress>[] = [];
+			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			var ne = u.events.addresses.subQuery().limit(1);
 			ne.add.on(this, (a,det)=> {
 				adds.push(det);
@@ -398,7 +402,7 @@ describe('Db Tests', () => {
 			var cnt = 1;
 			var lst = '0';
 			function checkRnd() {
-				var id = Db.IdGenerator.next();
+				var id = Db.internal.IdGenerator.next();
 				M.assert('Id is unique ' + id + ' on ' + cnt).when(ids[id]).is(M.aFalsey);
 				M.assert('Id is progressive').when(id > lst).is(true);
 				ids[id] = cnt++;
@@ -479,7 +483,7 @@ describe('Db Tests', () => {
 		});
 		
 		it('should add a new ObjD to set', (done) => {
-			var adds :Db.EventDetails<UserAddress>[] = [];
+			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			u.events.addresses.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
