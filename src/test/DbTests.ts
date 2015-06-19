@@ -13,29 +13,29 @@ interface Firebase {
 */
 
 
-class InvoiceCoords extends Db.ObjD {
+class InvoiceCoords extends Db.Data {
 	vatCode :string;
 	streetAddress :string;
 }
 
-class Company extends Db.ObjC {
+class Company extends Db.Entity {
 	events = {
 		invoice : Db.data(InvoiceCoords)
 	}
 }
 
-class UserAnagraphics extends Db.ObjD {
+class UserAnagraphics extends Db.Data {
 	name :string;
 	surname :string;
 	company :Company;
 }
 
-class UserAddress extends Db.ObjD {
+class UserAddress extends Db.Data {
 	email :string;
 	priority :number;
 }
 
-class User extends Db.ObjC {
+class User extends Db.Entity {
 	events = {
 		anagraphics : Db.data(UserAnagraphics),
 		bestFriend : Db.reference(User).named('best'),
@@ -505,10 +505,11 @@ describe('Db Tests', () => {
 			done();
 		});
 		
-
+		/*
 		it('should update an existing ObjD to the set', (done) => {
 			
 		});
+		*/
 		
 		// Remove from collection
 		

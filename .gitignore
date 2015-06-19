@@ -1,4 +1,3 @@
-/js/
 /node_modules/
 /.settings/
 /.project
@@ -6,3 +5,4 @@
 /typings/
 report.html
 
+/coverage/

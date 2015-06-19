@@ -1,0 +1,236 @@
+/// <reference path="../../typings/tsd.d.ts" />
+export = Db;
+declare class Db {
+    private descriptions;
+    private instances;
+    private socket;
+    setSocket(socket: SocketIO.Socket): void;
+    sendOnSocket(url: string, payload: any): void;
+    load(url: string): Db.Entity;
+    register(baseUrl: string, ctor: new () => Db.Entity): void;
+    computeUrl(inst: Db.Entity): string;
+}
+declare module Db {
+    var serverMode: boolean;
+    var def: Db;
+    function str(): internal.IValueEvent<string>;
+    function num(): internal.IValueEvent<number>;
+    function data<V extends Data>(c: new () => V): internal.IValueEvent<V>;
+    function reference<V extends Entity>(c: new () => V): internal.IValueEvent<V>;
+    function dataList<V extends Data>(c: new () => V): internal.IListEvent<V>;
+    function referenceList<V extends Entity>(c: new () => V): internal.IListEvent<V>;
+    function strList(): internal.IListEvent<string>;
+    function numList(): internal.IListEvent<number>;
+    class Entity {
+        url: string;
+        protected db: Db;
+        events: any;
+        dbInit(url: string, db: Db): void;
+        equals(oth: Entity): boolean;
+        getId(): string;
+        serializeProjections(url: string, projections?: any): void;
+        protected callRemoteMethod(name: string, params: any[]): void;
+    }
+    class Data {
+        url: string;
+        parse(url: string, obj: any, db: Db): void;
+        serialize(db?: Db, ret?: any, projections?: any): any;
+        static isRef(data: any): boolean;
+        static readRef(data: any, db: Db): Entity;
+    }
+    module internal {
+        interface IEvent<V> {
+            named(name: string): IEvent<V>;
+            on(ctx: any, handler: {
+                (data?: V, detail?: IEventDetails<V>): void;
+            }): any;
+            once(ctx: any, handler: {
+                (data?: V, detail?: IEventDetails<V>): void;
+            }): any;
+            off(ctx: any): any;
+            hasHandlers(): boolean;
+        }
+        interface IValueEvent<V> extends IEvent<V> {
+            named(name: string): IValueEvent<V>;
+            broadcast(val: V): void;
+        }
+        interface IListEvent<T> {
+            add: IValueEvent<T>;
+            remove: IEvent<T>;
+            modify: IEvent<T>;
+            all: IEvent<T>;
+            named(name: string): IListEvent<T>;
+            subQuery(): IListEvent<T>;
+            sortOn(field: string, desc?: boolean): IListEvent<T>;
+            limit(limit: number): IListEvent<T>;
+            range(from: any, to: any): IListEvent<T>;
+            equals(val: any): IListEvent<T>;
+        }
+        interface IEventDetails<T> {
+            payload: T;
+            populating: boolean;
+            projected: boolean;
+            listEnd: boolean;
+            originalEvent: string;
+            originalUrl: string;
+            originalKey: string;
+            precedingKey: string;
+            offMe(): void;
+        }
+        class IdGenerator {
+            static PUSH_CHARS: string;
+            static BASE: number;
+            static lastPushTime: number;
+            static lastRandChars: any[];
+            static next(): string;
+        }
+        interface DbObjDescription<X extends Db.Entity> {
+            instantiate(url: string): X;
+        }
+        class EventDetails<T> implements IEventDetails<T> {
+            payload: T;
+            populating: boolean;
+            projected: boolean;
+            listEnd: boolean;
+            originalEvent: string;
+            originalUrl: string;
+            originalKey: string;
+            precedingKey: string;
+            private handler;
+            setHandler(handler: EventHandler<T>): void;
+            offMe(): void;
+        }
+        class EventHandler<T> {
+            event: Event<T>;
+            ctx: any;
+            method: (payload?: T, detail?: EventDetails<T>) => void;
+            static prog: number;
+            myprog: number;
+            first: boolean;
+            after: (h?: EventHandler<T>) => any;
+            _ref: FirebaseQuery;
+            private canceled;
+            private _cbs;
+            constructor(event: Event<T>, ctx: any, method: (payload?: T, detail?: EventDetails<T>) => void);
+            hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void): void;
+            decomission(remove: boolean): boolean;
+            handle(evd: EventDetails<T>): void;
+        }
+        /**
+         * Db based event.
+         *
+         * This events are triggered when the sub key passed as name in constructor is modified.
+         * Which modifications triggers the event and how they are interpreted is based on the transformer passed to
+         * withTransformer.
+         *
+         * When called on(), the event is triggered as soon as possible (maybe even before returning from
+         * the on call if the data is already available). All events are triggered, also those cached before
+         * the call to on, that is "on" doesn't mean "call me when something changes from now on", but also
+         * pre-existing data is sent as events.
+         *
+         * To distinguish, when possible, among pre-existing and new data, the event callback has a parameter
+         * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
+         *
+         */
+        class Event<T> implements IEvent<T> {
+            /**
+             * Name on DB.
+             */
+            protected name: string;
+            /**
+             * Array of current handlers.
+             */
+            protected handlers: EventHandler<T>[];
+            /**
+             * Full url this event is listening to
+             */
+            url: string;
+            /**
+             * Instance of the Db we are using
+             */
+            protected db: Db;
+            /**
+             * Constructor for the D object, if this event returns a D event
+             */
+            _ctorD: new () => Data;
+            /**
+             * If this is a ref
+             */
+            _isRef: boolean;
+            events: string[];
+            protected projVal: T;
+            hrefIniter: (h: EventHandler<T>) => void;
+            constructor();
+            named(name: string): Event<T>;
+            objD(c: new () => Data): Event<T>;
+            /**
+             * Called by the ObjC when the url is set.
+             */
+            dbInit(url: string, db: Db): void;
+            on(ctx: any, handler: {
+                (data?: T, detail?: EventDetails<T>): void;
+            }): void;
+            once(ctx: any, handler: {
+                (data?: T, detail?: EventDetails<T>): void;
+            }): void;
+            offHandler(h: EventHandler<T>): void;
+            protected init(h: EventHandler<T>): void;
+            protected setupHref(h: EventHandler<T>): void;
+            protected setupEvent(h: EventHandler<T>, name: string): void;
+            off(ctx: any): void;
+            static offAll(ctx: any, events: any): void;
+            hasHandlers(): boolean;
+            parseValue(val: any, url?: string): any;
+            projectValue(val: any): void;
+        }
+        class ValueEvent<T> extends Event<T> implements IValueEvent<T> {
+            private broadcasted;
+            private lastBroadcast;
+            broadcast(val: T): void;
+            named(name: string): ValueEvent<T>;
+            protected checkBroadcast(): void;
+            protected save(val: T): void;
+            protected serializeForSave(val: T): any;
+            dbInit(url: string, db: Db): void;
+        }
+        class AddedListEvent<T> extends ValueEvent<T> {
+            constructor();
+            projectValue(val: any): void;
+            protected init(h: EventHandler<T>): void;
+            protected save(val: T): void;
+        }
+        class ListEvent<T> implements IListEvent<T> {
+            add: AddedListEvent<T>;
+            remove: Event<T>;
+            modify: Event<T>;
+            all: Event<T>;
+            private name;
+            private allEvts;
+            private _sortField;
+            private _sortDesc;
+            private _limit;
+            private _rangeFrom;
+            private _rangeTo;
+            private _equals;
+            protected _url: string;
+            protected _db: Db;
+            protected _ctorD: new () => Data;
+            constructor();
+            named(name: string): ListEvent<T>;
+            objD(c: new () => Data): ListEvent<T>;
+            /**
+             * Called by the ObjC when the url is set.
+             */
+            dbInit(url: string, db: Db): void;
+            subQuery(): ListEvent<T>;
+            sortOn(field: string, desc?: boolean): ListEvent<T>;
+            limit(limit: number): ListEvent<T>;
+            range(from: any, to: any): ListEvent<T>;
+            equals(val: any): ListEvent<T>;
+            protected setupHref(h: EventHandler<T>): void;
+        }
+        interface EventDetachable {
+            eventAttached(event: Event<any>): any;
+        }
+    }
+}

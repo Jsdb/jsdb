@@ -15,6 +15,13 @@
   },
   "devDependencies": {
     "blanket": "^1.1.7",
+    "dts-bundle": "^0.2.0",
+    "grunt": "^0.4.5",
+    "grunt-blanket": "0.0.8",
+    "grunt-contrib-clean": "^0.6.0",
+    "grunt-contrib-copy": "^0.8.0",
+    "grunt-dts-bundle": "^0.2.0",
+    "grunt-mocha-test": "^0.12.7",
     "mocha": "^2.2.5",
     "tsMatchers": "SimoneGianni/tsMatchers#noded"
   },
@@ -27,5 +34,8 @@
         "node_modules"
       ]
     }
+  },
+  "typescript": {
+    "definition": "js/main/jsdb.d.ts"
   }
 }
