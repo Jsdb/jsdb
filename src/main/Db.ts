@@ -7,8 +7,8 @@ import Io = require('socket.io');
 
 export = Db;
 class Db {
-	private descriptions :{[index:string]:new ()=>Db.ObjC<any>} = {};
-	private instances :{[index:string]:Db.ObjC<any>} = {};
+	private descriptions :{[index:string]:new ()=>Db.ObjC} = {};
+	private instances :{[index:string]:Db.ObjC} = {};
 	private socket :SocketIO.Socket;
 	
 	setSocket(socket :SocketIO.Socket) {
@@ -19,7 +19,7 @@ class Db {
 		this.socket.emit(url, payload);
 	}
 	
-	load(url :string):Db.ObjC<any> {
+	load(url :string):Db.ObjC {
 		var ret = this.instances[url];
 		if (ret) {
 			return ret;
@@ -38,11 +38,11 @@ class Db {
 		return ret;
 	}
 	
-	register(baseUrl :string, ctor :new ()=>Db.ObjC<any>) {
+	register(baseUrl :string, ctor :new ()=>Db.ObjC) {
 		this.descriptions[baseUrl] = ctor;
 	}
 	
-	computeUrl(inst :Db.ObjC<any>) {
+	computeUrl(inst :Db.ObjC) {
 		var ctor = inst.constructor;
 		var pre :string = null;
 		var pres = Object.keys(this.descriptions);
@@ -74,22 +74,22 @@ module Db {
 		var ret = new internal.ValueEvent<number>();
 		return ret;
 	}
-	export function data<V extends ObjD<any>>(c :new ()=>V) :internal.IValueEvent<V> {
+	export function data<V extends ObjD>(c :new ()=>V) :internal.IValueEvent<V> {
 		var ret = new internal.ValueEvent<V>();
 		ret.objD(c);
 		return ret;
 	}
-	export function reference<V extends ObjC<any>>(c :new ()=>V) :internal.IValueEvent<V> {
+	export function reference<V extends ObjC>(c :new ()=>V) :internal.IValueEvent<V> {
 		var ret = new internal.ValueEvent<V>();
 		return ret;
 	}
 	
-	export function dataList<V extends ObjD<any>>(c :new ()=>V) :internal.IListEvent<V> {
+	export function dataList<V extends ObjD>(c :new ()=>V) :internal.IListEvent<V> {
 		var ret = new internal.ListEvent<V>();
 		ret.objD(c);
 		return ret;
 	}
-	export function referenceList<V extends ObjC<any>>(c :new ()=>V) :internal.IListEvent<V> {
+	export function referenceList<V extends ObjC>(c :new ()=>V) :internal.IListEvent<V> {
 		var ret = new internal.ListEvent<V>();
 		return ret;
 	}
@@ -102,7 +102,7 @@ module Db {
 		return ret;
 	}
 	
-	export class ObjC<T> {
+	export class ObjC {
 		url :string;
 		protected db :Db;
 		public events :any;
@@ -120,7 +120,7 @@ module Db {
 			}
 		}
 		
-		equals(oth :ObjC<any>) {
+		equals(oth :ObjC) {
 			return oth.url == this.url;
 		}
 		
@@ -142,7 +142,7 @@ module Db {
 				JSON.stringify({method: name, params: params}, 
 					function(key,val) {
 						if (val instanceof ObjC) {
-							return <ObjC<any>>val.url;
+							return <ObjC>val.url;
 						}
 						return val;
 					}
@@ -152,7 +152,7 @@ module Db {
 		
 	}
 	
-	export class ObjD<T> {
+	export class ObjD {
 		url: string;
 		
 		parse(url:string, obj :any, db :Db) {
@@ -175,13 +175,13 @@ module Db {
 				if (k == 'url') continue;
 				var v = this[k];
 				if (v instanceof ObjC) {
-					if (db) (<ObjC<any>>v).dbInit(null,db);
-					(<ObjC<any>>v).serializeProjections(this.url, projections[k]);
+					if (db) (<ObjC>v).dbInit(null,db);
+					(<ObjC>v).serializeProjections(this.url, projections[k]);
 					v = {
-						_ref: (<ObjC<any>>v).url
+						_ref: (<ObjC>v).url
 					};
 				} else if (v instanceof ObjD) {
-					ret[k] = (<ObjD<any>>v).serialize(db, {}, projections[k]);
+					ret[k] = (<ObjD>v).serialize(db, {}, projections[k]);
 				}
 				ret[k] = v;
 			}
@@ -192,14 +192,14 @@ module Db {
 			return data && !!data._ref;
 		}
 		
-		static readRef<X>(data:any, db:Db) :ObjC<X> {
+		static readRef(data:any, db:Db) :ObjC {
 			if (!data) return null;
 			if (typeof(data) === 'object') {
 				var objc = db.load(data._ref);
 				for (var k in data) {
 					if (k == '_ref') continue;
 					var proj = data[k];
-					var event = <Db.internal.AccessEvent>objc.events[k];
+					var event = <Db.internal.Event<any>>objc.events[k];
 					event.projectValue(proj);
 				}
 				return objc;
@@ -302,7 +302,7 @@ module Db {
 			}
 		}
 		
-		export interface DbObjDescription<X extends Db.ObjC<any>> {
+		export interface DbObjDescription<X extends Db.ObjC> {
 			instantiate(url :string):X;
 		}
 		
@@ -324,7 +324,7 @@ module Db {
 			}
 			
 			offMe() {
-				(<AccessEvent><any>this.handler.event).offHandler(this.handler);
+				this.handler.event.offHandler(this.handler);
 			}
 		}
 		
@@ -409,7 +409,7 @@ module Db {
 			/**
 			 * Full url this event is listening to
 			 */
-			protected url :string = null;
+			url :string = null;
 			/**
 			 * Instance of the Db we are using
 			 */
@@ -417,17 +417,18 @@ module Db {
 			/**
 			 * Constructor for the D object, if this event returns a D event
 			 */
-			protected _ctorD :new ()=>ObjD<any> = null;
+			_ctorD :new ()=>ObjD = null;
 			/**
 			 * If this is a ref
 			 */
-			protected _isRef :boolean = true;
+			// TODO should not be implicitly true, could be native
+			_isRef :boolean = true;
 			
-			protected events = ['value'];
+			events = ['value'];
 			
 			protected projVal :T = null;
 			
-			protected hrefIniter :(h :EventHandler<T>)=>void = this.setupHref;
+			hrefIniter :(h :EventHandler<T>)=>void = this.setupHref;
 			
 			constructor() {
 			}
@@ -438,7 +439,7 @@ module Db {
 				return this;
 			}
 			
-			objD(c :new ()=>ObjD<any>) {
+			objD(c :new ()=>ObjD) {
 				this._ctorD = c;
 				this._isRef = false;
 				return this;
@@ -482,7 +483,7 @@ module Db {
 				if (this.url) this.init(h);
 			}
 			
-			protected offHandler(h :EventHandler<T>) {
+			offHandler(h :EventHandler<T>) {
 				//console.log("Decommissioning ", handler);
 				h.decomission(true);
 				this.handlers = this.handlers.filter(ch => ch !== h);
@@ -527,6 +528,7 @@ module Db {
 				this.handlers = this.handlers.filter(h => !h.decomission(h.ctx === ctx));
 			}
 			
+			// TODO move to static
 			public static offAll(ctx :any, events :any) {
 				for (var k in events) {
 					var evt = events[k];
@@ -539,7 +541,7 @@ module Db {
 				return this.handlers.length > 0;
 			}
 			
-			protected parseValue(val, url? :string) {
+			parseValue(val, url? :string) {
 				if (val) {
 					if (this._ctorD) {
 						var objd = new this._ctorD();
@@ -548,11 +550,12 @@ module Db {
 					} else if (this._isRef || ObjD.isRef(val)) {
 						val = ObjD.readRef(val, this.db);
 					}
+					// TODO handle native
 				}
 				return val;
 			}
 			
-			protected projectValue(val) {
+			projectValue(val) {
 				// TODO handle list case
 				val = this.parseValue(val);
 				if (!val) return;
@@ -599,11 +602,11 @@ module Db {
 			protected serializeForSave(val :T) {
 				if (val instanceof ObjC) {
 					// TODO projections
-					(<ObjC<any>><any>val).dbInit(null, this.db);
-					return (<ObjC<any>><any>val).url;
+					(<ObjC><any>val).dbInit(null, this.db);
+					return (<ObjC><any>val).url;
 				} else if (val instanceof ObjD) {
 					// TODO projections
-					return (<ObjD<any>><any>val).serialize(this.db);
+					return (<ObjD><any>val).serialize(this.db);
 				} else {
 					return val;
 				}
@@ -621,8 +624,8 @@ module Db {
 				this.events = ['child_added'];
 			}
 			
-			protected projectValue(val) {
-				// No support for projection of lists
+			projectValue(val) {
+				// TODO No support for projection of lists
 			}
 			
 			protected init(h :EventHandler<T>) {
@@ -644,10 +647,10 @@ module Db {
 				var ref = new Firebase(this.url);
 				if (val instanceof ObjC) {
 					// In case of objC we use the id ad a key, to assure uniqueness
-					ref.child((<ObjC<any>><any>val).getId()).set(ser);
+					ref.child((<ObjC><any>val).getId()).set(ser);
 				} else if (val instanceof ObjD) {
 					// For objD they don't have an id, if it was previously saved here we update it, otherwise it's considered new
-					var objd = (<ObjD<any>><any>val);
+					var objd = (<ObjD><any>val);
 					if (objd.url && objd.url.indexOf(this.url) == 0 && objd.url.substring(this.url.length).indexOf('/') == -1) {
 						new Firebase(objd.url).set(ser);
 					} else {
@@ -679,20 +682,20 @@ module Db {
 			protected _url :string = null;
 			protected _db :Db = null;
 			
-			protected _ctorD :new ()=>ObjD<any> = null;
+			protected _ctorD :new ()=>ObjD = null;
 			
 			constructor() {
 				this.add = new AddedListEvent<T>();
 				this.remove = new Event<T>();
 				this.modify = new Event<T>();
 				this.all = new AddedListEvent<T>();
-				(<AccessEvent><any>this.add).events = ['child_added'];
-				(<AccessEvent><any>this.remove).events = ['child_removed'];
-				(<AccessEvent><any>this.modify).events = ['child_changed','child_moved'];
-				(<AccessEvent><any>this.all).events = ['child_added','child_removed','child_changed','child_moved'];
+				this.add.events = ['child_added'];
+				this.remove.events = ['child_removed'];
+				this.modify.events = ['child_changed','child_moved'];
+				this.all.events = ['child_added','child_removed','child_changed','child_moved'];
 				this.allEvts = [this.add, this.remove, this.modify, this.all];
 				for (var i = 0; i < this.allEvts.length; i++) {
-					var ae = (<AccessEvent><any>this.allEvts[i]);
+					var ae = this.allEvts[i];
 					ae.hrefIniter = (h) => this.setupHref(h);
 				}
 			}
@@ -704,10 +707,10 @@ module Db {
 				return this;
 			}
 			
-			objD(c :new ()=>ObjD<any>) {
+			objD(c :new ()=>ObjD) {
 				this._ctorD = c;
 				for (var i = 0; i < this.allEvts.length; i++) {
-					var ae = (<AccessEvent><any>this.allEvts[i]);
+					var ae = this.allEvts[i];
 					ae._ctorD = c;
 					ae._isRef = false;
 				}
@@ -765,7 +768,7 @@ module Db {
 			
 			
 			protected setupHref(h :EventHandler<T>) {
-				h._ref = new Firebase((<AccessEvent><any>h.event).url);
+				h._ref = new Firebase(h.event.url);
 				if (this._sortField) {
 					h._ref = h._ref.orderByChild(this._sortField);
 					if (this._rangeFrom) {
@@ -794,16 +797,18 @@ module Db {
 		}
 		
 		// TODO remove this
+		/*
 		export interface AccessEvent {
 			url :string;
 			parseValue(val :any):any;
 			projectValue(val :any):any;
-			_ctorD :new ()=>ObjD<any>;
+			_ctorD :new ()=>ObjD;
 			_isRef :boolean;
 			events :string[];
 			hrefIniter :(h :EventHandler<any>)=>void;
 			offHandler(h :EventHandler<any>);
 		}
+		*/
 	
 		export interface EventDetachable {
 			eventAttached(event :Event<any>);

@@ -13,29 +13,29 @@ interface Firebase {
 */
 
 
-class InvoiceCoords extends Db.ObjD<InvoiceCoords> {
+class InvoiceCoords extends Db.ObjD {
 	vatCode :string;
 	streetAddress :string;
 }
 
-class Company extends Db.ObjC<Company> {
+class Company extends Db.ObjC {
 	events = {
 		invoice : Db.data(InvoiceCoords)
 	}
 }
 
-class UserAnagraphics extends Db.ObjD<UserAnagraphics> {
+class UserAnagraphics extends Db.ObjD {
 	name :string;
 	surname :string;
 	company :Company;
 }
 
-class UserAddress extends Db.ObjD<UserAddress> {
+class UserAddress extends Db.ObjD {
 	email :string;
 	priority :number;
 }
 
-class User extends Db.ObjC<User> {
+class User extends Db.ObjC {
 	events = {
 		anagraphics : Db.data(UserAnagraphics),
 		bestFriend : Db.reference(User).named('best'),
