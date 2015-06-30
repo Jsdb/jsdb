@@ -6,7 +6,7 @@ declare class Db {
     private socket;
     setSocket(socket: SocketIO.Socket): void;
     sendOnSocket(url: string, payload: any): void;
-    load(url: string): Db.Entity;
+    load<T extends Db.Entity>(url: string): T;
     register(baseUrl: string, ctor: new () => Db.Entity): void;
     computeUrl(inst: Db.Entity): string;
 }
@@ -24,7 +24,6 @@ declare module Db {
     class Entity {
         url: string;
         protected db: Db;
-        events: any;
         dbInit(url: string, db: Db): void;
         equals(oth: Entity): boolean;
         getId(): string;
@@ -129,6 +128,8 @@ declare module Db {
             decomission(remove: boolean): boolean;
             handle(evd: EventDetails<T>): void;
         }
+        class IsEvent {
+        }
         /**
          * Db based event.
          *
@@ -145,7 +146,7 @@ declare module Db {
          * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
          *
          */
-        class Event<T> implements IEvent<T> {
+        class Event<T> extends IsEvent implements IEvent<T> {
             /**
              * Name on DB.
              */
@@ -234,7 +235,7 @@ declare module Db {
             protected init(h: EventHandler<T>): void;
             protected save(val: T): void;
         }
-        class ListEvent<T> implements IListEvent<T> {
+        class ListEvent<T> extends IsEvent implements IListEvent<T> {
             add: AddedListEvent<T>;
             remove: Event<T>;
             modify: Event<T>;

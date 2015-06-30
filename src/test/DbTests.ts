@@ -17,9 +17,7 @@ class UserQuota extends Db.Data {
 }
 
 class UserPolicy extends Db.Entity {
-	events = {
-		quota : Db.data(UserQuota)
-	}
+	quota = Db.data(UserQuota)
 }
 
 class UserFolder extends Db.Data {
@@ -38,9 +36,7 @@ class InvoiceCoords extends Db.Data {
 }
 
 class Company extends Db.Entity {
-	events = {
-		invoice : Db.data(InvoiceCoords)
-	}
+	invoice = Db.data(InvoiceCoords)
 }
 
 class UserAnagraphics extends Db.Data {
@@ -55,17 +51,15 @@ class UserAddress extends Db.Data {
 }
 
 class User extends Db.Entity {
-	events = {
-		anagraphics : Db.data(UserAnagraphics),
-		policy : Db.reference(UserPolicy),
-		folder : Db.data(UserFolder).preLoad({_quotas:'policy.quota'}),
-		bestFriend : new Db.internal.ValueEvent<User>().named('best'),
-		//addresses : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress),
-		addresses : Db.dataList(UserAddress),
-		prioAddress : Db.dataList(UserAddress).named('addresses').sortOn('priority'),
-		previousCompanies : Db.referenceList(Company).named('prevComps'),
-		logicId : Db.num()
-	}
+	anagraphics = Db.data(UserAnagraphics);
+	policy = Db.reference(UserPolicy);
+	folder = Db.data(UserFolder).preLoad({_quotas:'policy.quota'});
+	bestFriend = new Db.internal.ValueEvent<User>().named('best');
+	//addresses : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress),
+	addresses = Db.dataList(UserAddress);
+	prioAddress = Db.dataList(UserAddress).named('addresses').sortOn('priority');
+	previousCompanies = Db.referenceList(Company).named('prevComps');
+	logicId = Db.num();
 }
 
 var u = new User();
@@ -180,7 +174,7 @@ describe('Db Tests', () => {
 			// Keep reference alive in ram, faster tests and less side effects
 			root.on('value', () => {});
 			
-			u = Db.def.load(baseUrl + '/users/u1');
+			u = <User>Db.def.load(baseUrl + '/users/u1');
 			M.assert('User is not null').when(u).is(M.aTruthy);
 			M.assert('User has right url').when(u.url).is(baseUrl + "/users/u1");
 			opCnter();
@@ -190,7 +184,7 @@ describe('Db Tests', () => {
 		
 		it('should read user C and D',(done) => {
 			var anag :UserAnagraphics = null;
-			u.events.anagraphics.once(this, (a, first)=>{
+			u.anagraphics.once(this, (a, first)=>{
 				anag = a;
 				M.assert('User anagraphic loaded').when(anag).is(M.either(M.aTruthy).and(M.objectMatching({name:'Simone',surname:'Gianni'})));
 				M.assert('User anagraphic right type').when(anag).is(M.instanceOf(UserAnagraphics));
@@ -199,7 +193,7 @@ describe('Db Tests', () => {
 		});
 		it('should update D',() => {
 			var anag :UserAnagraphics = null;
-			u.events.anagraphics.on(this, (a, first)=>{
+			u.anagraphics.on(this, (a, first)=>{
 				anag = a;
 			});
 			
@@ -213,12 +207,12 @@ describe('Db Tests', () => {
 			M.assert('Anagraphic is not the same').when(anag).is(M.not(M.exactly(preAnag)));
 		});
 		it('should return same C', ()=> {
-			var u2 :User = Db.def.load(baseUrl + '/users/u1');
+			var u2 = <User>Db.def.load(baseUrl + '/users/u1');
 			M.assert('Returned same instance of user').when(u2).is(M.exactly(u));
 		});
 		it('should deference simple refs', (done)=> {
 			var friend :User = null;
-			u.events.bestFriend.once(this, (u, first)=>{
+			u.bestFriend.once(this, (u, first)=>{
 				friend = u;
 				M.assert('friend found').when(friend).is(M.aTruthy);
 				M.assert('friend right type').when(friend).is(M.instanceOf(User));
@@ -228,10 +222,10 @@ describe('Db Tests', () => {
 			
 		});
 		it('should dereference composed refs', (done)=> {
-			var u2 :User = Db.def.load(baseUrl + '/users/u2');
+			var u2 = <User>Db.def.load(baseUrl + '/users/u2');
 			
 			var friend :User = null;
-			u2.events.bestFriend.once(this, (u, first)=>{
+			u2.bestFriend.once(this, (u, first)=>{
 				friend = u;
 				M.assert('friend found').when(friend).is(M.aTruthy);
 				M.assert('friend right type').when(friend).is(M.instanceOf(User));
@@ -241,10 +235,10 @@ describe('Db Tests', () => {
 			
 		});
 		it('should dereference refs nexted in ObjC', (done)=> {
-			var u3 :User = Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
 			
 			var anag :UserAnagraphics = null;
-			u3.events.anagraphics.once(this, (a, first)=>{
+			u3.anagraphics.once(this, (a, first)=>{
 				anag = a;
 				M.assert('company is right instance').when(anag.company).is(M.instanceOf(Company));
 				M.assert('company has right url').when(anag.company.url).is(baseUrl + "/companies/c1");
@@ -253,10 +247,10 @@ describe('Db Tests', () => {
 			
 		});
 		it('should consider projections first', () => {
-			var u3 :User = Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
 			
 			var friend :User = null;
-			u3.events.bestFriend.on(this, (u, first)=>{
+			u3.bestFriend.on(this, (u, first)=>{
 				friend = u;
 			});
 			
@@ -265,7 +259,7 @@ describe('Db Tests', () => {
 			M.assert('friend is right one').when(friend.url).is(baseUrl + '/users/u4');
 			
 			var anags = [];
-			friend.events.anagraphics.on(this, (a, first)=> {
+			friend.anagraphics.on(this, (a, first)=> {
 				anags.push(a);
 			});
 			
@@ -275,7 +269,7 @@ describe('Db Tests', () => {
 		
 		it('should notify list of D and end of list', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
-			u.events.addresses.add.on(this, (a,det)=> {
+			u.addresses.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
 			M.assert('Notified all the addresses').when(adds).is(M.withLength(3));
@@ -314,7 +308,7 @@ describe('Db Tests', () => {
 		
 		it('should notify list of D as array with full', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress[]>[] = [];
-			u.events.addresses.full.on(this, (a,det)=> {
+			u.addresses.full.on(this, (a,det)=> {
 				adds.push(det);
 			});
 			M.assert('Sent only once').when(adds).is(M.withLength(1));
@@ -325,7 +319,7 @@ describe('Db Tests', () => {
 		
 		it('should parse correctly a list of Cs', (done) => {
 			var comps :Db.internal.IEventDetails<Company>[] = [];
-			u.events.previousCompanies.add.on(this, (c, det)=> {
+			u.previousCompanies.add.on(this, (c, det)=> {
 				comps.push(det);
 			});
 			M.assert('Notified all the addresses').when(comps).is(M.withLength(3));
@@ -349,7 +343,7 @@ describe('Db Tests', () => {
 		
 		it('should sort the list of Ds', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
-			u.events.prioAddress.add.on(this, (a,det)=> {
+			u.prioAddress.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
 			M.assert('Notified all the addresses').when(adds).is(M.withLength(3));
@@ -376,7 +370,7 @@ describe('Db Tests', () => {
 		});
 		it('should work on subqueries', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
-			var ne = u.events.addresses.subQuery().sortOn('priority');
+			var ne = u.addresses.subQuery().sortOn('priority');
 			ne.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
@@ -391,7 +385,7 @@ describe('Db Tests', () => {
 		});
 		it('should limit the list of Ds', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
-			var ne = u.events.addresses.subQuery().limit(1);
+			var ne = u.addresses.subQuery().limit(1);
 			ne.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
@@ -411,7 +405,7 @@ describe('Db Tests', () => {
 		
 		
 		it('should read a promise', (done) => {
-			u.events.anagraphics
+			u.anagraphics
 			.then((d) => {
 				M.assert('valorized').when(d).is(M.aTruthy);
 				M.assert('correct name').when(d.name).is('Simone');
@@ -424,8 +418,8 @@ describe('Db Tests', () => {
 		});
 	
 		it('should handle multiple promises', (done) => {
-			var pAnag = u.events.anagraphics.promise();
-			var pFriend = u.events.bestFriend.promise();
+			var pAnag = u.anagraphics.promise();
+			var pFriend = u.bestFriend.promise();
 			Promise.all<any>([pAnag,pFriend]).then((vs) => {
 				M.assert('Both promises fullfilled').when(vs).is(M.withLength(2));
 				M.assert('Got anagraphics').when(vs[0]).is(M.instanceOf(UserAnagraphics));
@@ -448,7 +442,7 @@ describe('Db Tests', () => {
 		});
 	
 		it('should honour preload', (done) => {
-			u.events.folder.once(this, (fld) => {
+			u.folder.once(this, (fld) => {
 				M.assert("loaded quota").when(fld._quotas).is(M.aTruthy);
 				M.assert("Right computation").when(fld.getAvailableMessage()).is(15);
 				done();
@@ -458,7 +452,7 @@ describe('Db Tests', () => {
 		
 		it('should serialize objDs correctly', (done) => {
 			var anag :UserAnagraphics = null;
-			u.events.anagraphics.on(this, (a, first)=>{
+			u.anagraphics.on(this, (a, first)=>{
 				anag = a;
 			});
 			
@@ -472,10 +466,10 @@ describe('Db Tests', () => {
 		});
 		
 		it('should serialize objDs with references correctly', (done) => {
-			var u3 :User = Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
 			
 			var anag :UserAnagraphics = null;
-			u3.events.anagraphics.on(this, (a, first)=>{
+			u3.anagraphics.on(this, (a, first)=>{
 				anag = a;
 			});
 			
@@ -543,7 +537,7 @@ describe('Db Tests', () => {
 		it('should save an objD with broadcast', (done) => {
 			var anag :UserAnagraphics = null;
 			var evtCnt = 0;
-			u.events.anagraphics.on(this, (a, det) => {
+			u.anagraphics.on(this, (a, det) => {
 				//console.log("fired with", a);
 				if (anag == null) {
 					anag = a;
@@ -577,12 +571,12 @@ describe('Db Tests', () => {
 			}
 			
 			anag.name = "Sempronio";
-			u.events.anagraphics.broadcast(anag);
+			u.anagraphics.broadcast(anag);
 		});
 		
 		it('should add a new ObjD to set', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
-			u.events.addresses.add.on(this, (a,det)=> {
+			u.addresses.add.on(this, (a,det)=> {
 				adds.push(det);
 			});
 			M.assert('Notified all the addresses').when(adds).is(M.withLength(3));
@@ -592,7 +586,7 @@ describe('Db Tests', () => {
 			
 			var naddr = new UserAddress();
 			naddr.email = 'altro@boh.it';
-			u.events.addresses.add.broadcast(naddr);
+			u.addresses.add.broadcast(naddr);
 			
 			M.assert('Notified new address').when(adds).is(M.withLength(1));
 			M.assert('Notified new address is right').when(adds[0]).is(M.objectMatching({

@@ -110,9 +110,12 @@ var Db;
             if (db === this.db)
                 return;
             this.db = db;
-            var evts = Object.keys(this.events);
+            var evts = Object.keys(this);
             for (var i = 0; i < evts.length; i++) {
-                var ev = this.events[evts[i]];
+                var fld = this[evts[i]];
+                if (!(fld instanceof internal.IsEvent))
+                    continue;
+                var ev = this[evts[i]];
                 ev.named(evts[i]);
                 // TODO also assign name
                 ev.dbInit(url, db, this);
@@ -146,8 +149,8 @@ var Db;
             if (subd.length > 1) {
                 rest = def.substring(subd[0].length + 1);
             }
-            var evt = this.events[subd[0]];
-            if (!evt)
+            var evt = this[subd[0]];
+            if (!evt || !(evt instanceof internal.IsEvent))
                 throw new Error("No event called " + subd[0]);
             return evt.then(function (v) {
                 if (rest && v instanceof Entity) {
@@ -215,7 +218,9 @@ var Db;
                     if (k == '_ref')
                         continue;
                     var proj = data[k];
-                    var event = objc.events[k];
+                    var event = objc[k];
+                    if (!event || !(event instanceof internal.IsEvent))
+                        continue;
                     event.projectValue(proj);
                 }
                 return objc;
@@ -344,6 +349,12 @@ var Db;
             return EventHandler;
         })();
         internal.EventHandler = EventHandler;
+        var IsEvent = (function () {
+            function IsEvent() {
+            }
+            return IsEvent;
+        })();
+        internal.IsEvent = IsEvent;
         /**
          * Db based event.
          *
@@ -360,8 +371,10 @@ var Db;
          * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
          *
          */
-        var Event = (function () {
+        var Event = (function (_super) {
+            __extends(Event, _super);
             function Event() {
+                _super.call(this);
                 /**
                  * Array of current handlers.
                  */
@@ -583,7 +596,7 @@ var Db;
                 }
             };
             return Event;
-        })();
+        })(IsEvent);
         internal.Event = Event;
         var ValueEvent = (function (_super) {
             __extends(ValueEvent, _super);
@@ -743,9 +756,11 @@ var Db;
             return AddedListEvent;
         })(ValueEvent);
         internal.AddedListEvent = AddedListEvent;
-        var ListEvent = (function () {
+        var ListEvent = (function (_super) {
+            __extends(ListEvent, _super);
             function ListEvent() {
                 var _this = this;
+                _super.call(this);
                 this.name = null;
                 this.allEvts = [];
                 this._sortField = null;
@@ -864,7 +879,7 @@ var Db;
                 }
             };
             return ListEvent;
-        })();
+        })(IsEvent);
         internal.ListEvent = ListEvent;
     })(internal = Db.internal || (Db.internal = {}));
 })(Db || (Db = {}));

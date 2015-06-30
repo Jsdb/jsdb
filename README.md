@@ -3,18 +3,28 @@ Js DB
 
 Js DB is a simple, fully event oriented, DB abstraction for JavaScript.
 
+Design principles
+==
+
+* Data on the client is always updated
+* Working on Firebase, not tight to it
+* Client and server use the same library
+* Client and server can share the same model, eventually enhanced
+* Everything is ansynchronous
+* No Anemic Models
+
 
 Reading data
 ============
 
-ObjC
-----
+Entity
+------
 
-**ObjC** are the "entities" of the DB. For example, a User should be an ObjC. Each ObjC has a unique URL, usually composed by *path/id*, where path is usually connected to the class of the ObjC, so for example */users/12312*.
+Entities are the roots of the database. For example, a User should be an Entity. Each Entity has a unique URL, usually composed by *path/id*, where path is usually connected to the class of the Entity, so for example */users/12312*.
 
-ObjCs however don't give direct access to data, they expose events to access those data.
+Entities however don't give direct access to data, they expose events to access those data.
 
-For example, if a User ObjC is like the following :
+For example, if a User Entity is like the following :
 
 ```javascript
 12312 : {
@@ -26,19 +36,17 @@ For example, if a User ObjC is like the following :
 In TypeScript it would be represented as :
 
 ```typescript
-class User extends ObjC<User> {
-	events: {
-		name: new Db.ValueEvent<String>('name'),
-		surname: new Db.ValueEvent<String>('surname')
-	}
+class User extends Db.Entity {
+	name = new Db.ValueEvent<String>('name');
+	surname = new Db.ValueEvent<String>('surname');
 }
 ```
 
-The ObjC is not loaded right away, data is actually fetched only when someone is listening on the events, for example :
+The Entity is not loaded right away, data is actually fetched only when someone is listening on the events, for example :
 
 ```typescript
 u = <User>db.load('/users/12312');
-u.events.name.on(this, (name) => {
+u.name.on(this, (name) => {
 	console.log("User name is " + name);
 });
 ```
@@ -47,15 +55,15 @@ If the name of the user is updated somewhere else, the change will be broadcaste
 
 Moreover :
  
-* An ObjC is a full fledged object, can have its own methods
-* Given the same urls to the DB, it will return the same instance of ObjC
-* ObjC implements an equals() method, based on the url
-* ObjC also implements a getId() method, also based on the url
+* An Entity is a full fledged object, can have its own methods
+* Given the same urls to the DB, it will return the same instance of Entity
+* Entity implements an equals() method, based on the url
+* Entity also implements a getId() method, also based on the url
 
-ObjD
+Data Objects
 ----
 
-Since accessing each single property of an ObjC by itself is cumbersome, properties can be grouped in **ObjD** s:
+Since accessing each single property of an Entity by itself is cumbersome, properties can be grouped in **Data** objects:
 
 ```json
 12312 : {
@@ -67,18 +75,16 @@ Since accessing each single property of an ObjC by itself is cumbersome, propert
 ```
 
 ```typescript
-class AnagraphicData extends ObjD<AnagraphicData> {
+class AnagraphicData extends Db.Data {
 	name :string,
 	surname :string
 }
 
-class User extends ObjC<User> {
-	events: {
-		anagraphic: new Db.ValueEvent<AnagraphicData>('anagraphic').objd(AnagraphicData)
-	}
+class User extends Entity {
+	anagraphic=new Db.ValueEvent<AnagraphicData>('anagraphic').objd(AnagraphicData)
 }
 
-u.events.anagraphic.on(this, (data) => {
+u.anagraphic.on(this, (data) => {
 	console.log("User is " + data.name + " " + data.surname);
 });
 
@@ -86,14 +92,14 @@ u.events.anagraphic.on(this, (data) => {
 
 Moreover :
 
-* Also ObjD are full fledged objects, and can have their own methods.
-* ObjD instances are not to be considered shared, at each event trigger a different instance will be created.
-* ObjD has an url, but not an id, they exist only inside an ObjC
+* Also Data objects are full fledged objects, and can have their own methods.
+* Data objects instances are not to be considered shared, at each event trigger a different instance will be created.
+* Data objects have an url, but not an id, they exist only inside an Entity
 
 Lists
 -----
 
-ObjCs can also contain lists of ObjDs, for example:
+Entities can also contain lists. Lists can be lists on string, number, other of Entities or Data objects. For example:
 
 ```typescript
 class InternetSite {
@@ -102,13 +108,11 @@ class InternetSite {
 	adult :boolean
 }
 
-class User extends ObjC<User> {
-	events: {
-		sites : new Db.ListEvent<InternetSite>('sites').objd(InternetSite)
-	}
+class User extends Entity {
+	sites = new Db.ListEvent<InternetSite>('sites').objd(InternetSite)
 }
 
-u.events.sites.add.on(this, (site) => {
+u.sites.add.on(this, (site) => {
 	if (!site) return; // See the "end of list" event later
 	$('#list').append('<li><a href="' + site.link + '">' + site.name + '</a></li>');
 });
@@ -127,7 +131,7 @@ More on handling events
 Events are triggered both the first time the exsting data are received (once for normal data, once for each existing element for lists), and when a value is later modified. To differentiate between the two, the event callback gets passed a second optional parameter containing a detail of the event.
 
 ```typescript
-u.events.anagraphic.on(this, (data, detail) => {
+u.anagraphic.on(this, (data, detail) => {
 	if (detail.populating) {
 		console.log("User is " + data.name + " " + data.surname);
 	} else {
@@ -135,7 +139,7 @@ u.events.anagraphic.on(this, (data, detail) => {
 	}
 });
 
-u.events.sites.add.on(this, (site, detail) => {
+u.sites.add.on(this, (site, detail) => {
 	if (!site) return;
 	var li = $('<li><a href="' + site.link + '">' + site.name + '</a></li>');
 	$('#list').append(li);
@@ -178,25 +182,23 @@ To unsubscribe from an event, there are a few ways :
 References
 ----------
 
-ObjC and ObjD can contain references to other ObjC. For example, a user can have a partner, a list of friends, and a list of ObjD job positions that refer to some companies :
+Entities and Data objects can contain references to other Entities. For example, a user can have a partner, a list of friends, and a list of Data objects job positions that refer to some companies :
 
 ```typescript
-class Company extends ObjC<Company> {
+class Company extends Entity {
 	// ...
 }
 
-class JobPosition extends ObjD<JobPosition> {
+class JobPosition extends Data {
 	company :Company,
 	role :string,
 	// ...
 }
 
-class User extends ObjC<User> {
-	events = {
-		partner : new ValueEvent<User>('partner'),
-		friends : new ListEvent<User>('friends'),
-		jobs : new ListEvent<JobPosition>('jobs').objd(JobPosition)
-	}
+class User extends Entity {
+	partner = new ValueEvent<User>('partner');
+	friends = new ListEvent<User>('friends');
+	jobs = new ListEvent<JobPosition>('jobs').objd(JobPosition);
 }
 ```
 
@@ -206,17 +208,128 @@ Recap of data structure
 -----------------------
 
 So, to summarize :
-* ObjC does not have data, they only have events
-* Events can yield single values, references to ObjC, ObjD, or lists of these.
-* ObjD can contain any kind of data, other ObjDs and references to ObjCs
+* Entities do not have data, they only have events
+* Events can yield single values, references to Entities, Data objects, or lists of these.
+* Data objects can contain any kind of data, other Data objects and references to Entities
 
+Promises
+--------
+
+Working with async callbacks can be a pain, especially when you're not dealing with proper "events" but actually with data loading.
+
+Promises are a well known, documented and supported way to deal with this problem in the JS world. 
+
+All events implements the "thenable" interface, so they are already usable as such in many situations. Moreover, the have a ```promise``` method that return a full Promise implementation.
+
+However, ```thenable``` and ```Promises``` will are not a valid and complete replacement of the normal event systems, because :
+
+* They are resolved only once, so later updates to the data will not be re-notified.
+* They operate on the underlying data, not on the ```EventDetail```
+
+
+
+Preloading
+----------
+
+Sometimes it happens that a Data object needs to operate together with other Data objects. For example, we could have the following :
+
+```typescript
+class PermissionLevel extends Db.Entity {
+	limits = Db.data(FileLimits);
+	// ...
+}
+
+class FileLimits extends Db.Data {
+	quota :number; // Max size in bytes in the personal folder
+	maxFiles :number; // Max number of files in the personal folder
+	// ...
+}
+
+class User extends Db.Entity {
+	permissionLevel = Db.reference(PermissionLevel);
+	personalFolder = Db.data(Folder);
+}
+
+class Folder extends Db.Data {
+	numberOfFiles :number;
+	usedSize :number;
+
+	public canUpload(bytes :number) :boolean {
+		// This is a sync method, but to return the value we need to load
+		// our User->permission->limits before, which could be TWO async callbacks
+	}
+
+	public getFreeSpace() :number // same
+	public getRemainigFiles() :number // same
+}
+```
+
+Even if this can be done making all the methods async, since the quota in the file limits does not change that often, it's completely overkill.
+
+Using Promises can make the async part less problematic, but is still overkill for the same reasons as above.
+
+It would be way easier to pre-load what needed while loading the Folder, inject the FileLimits in the Folder instance, and use it inside.
+
+This can be done with "preload" an promises :
+
+```typescript
+.preload({
+	"setLimits" : "permissionLevel.limits"
+});
+
+class User extends Db.Entity {
+	permissionLevel : Db.reference(PermissionLevel),
+	personalFolder : Db.data(Folder)
+			.preload({"setLimits":"permissionLevel.limits"})
+	// OR programmatically, if more elaborate
+	personalFolder : Db.data(Folder).preload((loadPromise) => {
+		var limitsPromise = 
+			this.event.permissionLevel.then((permissionLevel) => {
+				return pl.limits.promise();
+			});
+		return 
+			Promise.all<any>([loadPromise,limitsPromise])
+			.then((objs) => {
+				<Folder>objs[0].setLimits(<FileLimits>objs[1]);
+			});		
+	});
+}
+
+class Folder extends Db.Data {
+	numberOfFiles :number;
+	usedSize :number;
+
+	private _fileLimits :FileLimits;
+	public setLimits(fl :FileLimits) {
+		this._fileLimits = fl;
+		// Or optionally, to keep it updated
+		fl.updated.on((nv) => { this._fileLimits = nv });
+	}
+
+	public canUpload(bytes :number) :boolean {
+		return 
+			this.numberOfFiles +1 < this._fileLimits.maxFiles 
+			&& this.usedSize + bytes < this._fileLimits.
+	}
+
+	// ...
+}
+
+```
+
+The formal process is :
+
+* Whenever the "personalFolder" event is triggered
+* The ```preload``` function is called, passing the event promise as a single parameter
+* The ```preload``` can start any async operation before registering its callback on the loading promise, so that (at least the first time) loading of other elements go on parallel.
+* 
 
 Customising lists
 -----------------
 
 ListEvents normally yield all the elements in the list, in the order the underlying storage returns them. However it can often be beneficial to have list elements sorted, or limit their number, or filter out some of them.
 
-On a ListEvents of ObjD, the following methods can be used :
+On a ListEvents of Data objects, the following methods can be used :
 
 * `sortOn(field :string, desc = true)` : sorts the list on the given field, sorting depends on the type of the field.
 * `limit(num :number)` : limits the number of elements returned in the list.
@@ -226,21 +339,19 @@ On a ListEvents of ObjD, the following methods can be used :
 An example of a reason to use these methods could be a blog post having comments, and being the comments potentially hundreds we want to display the last 5 avoiding to load all of them.
 
 ```typescript
-class Comment extends ObjD<Comment> {
+class Comment extends Data {
 	dateTime :number,
 	author: string,
 	text: string,
 	// ...
 }
 
-class BlogPost extends ObjC<BlogPost> {
-	events = {
-		comments : new ListEvent<Comment>('posts').objd(Comment),
-		lastComments : new ListEvent<Comment>('posts')
-			.objd(Comment)
-			.sortOn('dateTime', true)
-			.limit(10)
-	}
+class BlogPost extends Entity {
+	comments = new ListEvent<Comment>('posts').objd(Comment);
+	lastComments = new ListEvent<Comment>('posts')
+		.objd(Comment)
+		.sortOn('dateTime', true)
+		.limit(10);
 }
 ```
 
@@ -294,9 +405,9 @@ user12345 : {
 
 ```
 
-A projection is a (possibly reduced) copy of an ObjD, placed in another part of the tree so that it can be fetched faster.
+A projection is a (possibly reduced) copy of a Data object, placed in another part of the tree so that it can be fetched faster.
 
-TODO Query on ObjC
+TODO Query on Entities
 ------------------
 
 Writing
@@ -320,11 +431,26 @@ Firebase considerations
 
 
 
+TODO
+====
 
-
+* Make Data optional
+	* Recurse everything passed in broadcast, looking for references
+		* Limited to an optional list of keys
+* Database as "Entity" object :
+	* List events for entities
+	* As a consequence, queries
+	* Needed a "index" function, to build fields on the entity object itself for querying
+* Projections
+* "updated" event for Data objects?
+	* also with a "broadcast"?
+* .getEntity on Data?
+* Key references on entity type_id, useful for queries
+	* Do the same also in collections
+	* Support passing an Entity as argument to queries, to support querying on these (like is Group is an entity, and users have a group, query all users having that group)
 
 
 
  
 
- 
+ 

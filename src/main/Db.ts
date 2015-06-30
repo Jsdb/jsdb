@@ -22,10 +22,10 @@ class Db {
 		this.socket.emit(url, payload);
 	}
 	
-	load(url :string):Db.Entity {
+	load<T extends Db.Entity>(url :string):T {
 		var ret = this.instances[url];
 		if (ret) {
-			return ret;
+			return <T>ret;
 		}
 		var preurl = url.substring(0, url.lastIndexOf('/')+1);
 		var ctor = this.descriptions[preurl];
@@ -38,7 +38,7 @@ class Db {
 		// TODO register for cancellation
 		
 		this.instances[url] = ret;
-		return ret;
+		return <T>ret;
 	}
 	
 	register(baseUrl :string, ctor :new ()=>Db.Entity) {
@@ -108,15 +108,16 @@ module Db {
 	export class Entity {
 		url :string;
 		protected db :Db;
-		public events :any;
 		
 		dbInit(url :string, db :Db) {
 			this.url = url || this.url || db.computeUrl(this);
 			if (db === this.db) return;
 			this.db = db;
-			var evts = Object.keys(this.events);
+			var evts = Object.keys(this);
 			for (var i = 0; i < evts.length; i++) {
-				var ev = <internal.Event<any>>this.events[evts[i]];
+				var fld = this[evts[i]];
+				if (!(fld instanceof internal.IsEvent)) continue;
+				var ev = <internal.Event<any>>this[evts[i]];
 				ev.named(evts[i]);
 				// TODO also assign name
 				ev.dbInit(url,db, this);
@@ -159,8 +160,8 @@ module Db {
 			if (subd.length > 1) {
 				rest = def.substring(subd[0].length + 1);
 			}
-			var evt :internal.Event<any> = this.events[subd[0]];
-			if (!evt) throw new Error("No event called " + subd[0]);
+			var evt :internal.Event<any> = this[subd[0]];
+			if (!evt || !(evt instanceof internal.IsEvent)) throw new Error("No event called " + subd[0]);
 			return evt.then((v :any) => {
 				if (rest && v instanceof Entity) {
 					return (<Entity>v).getPromise(rest);
@@ -220,7 +221,8 @@ module Db {
 				for (var k in data) {
 					if (k == '_ref') continue;
 					var proj = data[k];
-					var event = <Db.internal.Event<any>>objc.events[k];
+					var event = <Db.internal.Event<any>>objc[k];
+					if (!event || !(event instanceof internal.IsEvent)) continue; 
 					event.projectValue(proj);
 				}
 				return objc;
@@ -413,6 +415,10 @@ module Db {
 			
 		}
 		
+		export class IsEvent {
+			
+		}
+		
 		/**
 		 * Db based event. 
 		 * 
@@ -429,7 +435,7 @@ module Db {
 		 * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
 		 * 
 		 */
-		export class Event<T> implements IEvent<T> {
+		export class Event<T> extends IsEvent implements IEvent<T> {
 			
 			/**
 			 * Name on DB.
@@ -468,6 +474,7 @@ module Db {
 			hrefIniter :(h :EventHandler<T>)=>void = this.setupHref;
 			
 			constructor() {
+				super();
 			}
 			
 			named(name :string) {
@@ -834,7 +841,7 @@ module Db {
 			}
 		}
 		
-		export class ListEvent<T> implements IListEvent<T> {
+		export class ListEvent<T> extends IsEvent implements IListEvent<T> {
 			public add :AddedListEvent<T>;
 			public remove :Event<T>;
 			public modify :Event<T>;
@@ -858,6 +865,7 @@ module Db {
 			protected _ctorD :new ()=>Data = null;
 			
 			constructor() {
+				super();
 				this.add = new AddedListEvent<T>();
 				this.remove = new Event<T>();
 				this.modify = new Event<T>();
