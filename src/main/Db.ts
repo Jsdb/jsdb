@@ -3,6 +3,9 @@
 
 import Firebase = require('firebase');
 import Io = require('socket.io');
+import PromiseModule = require('es6-promise');
+
+var Promise = PromiseModule.Promise;
 
 
 export = Db;
@@ -116,7 +119,7 @@ module Db {
 				var ev = <internal.Event<any>>this.events[evts[i]];
 				ev.named(evts[i]);
 				// TODO also assign name
-				ev.dbInit(url,db);
+				ev.dbInit(url,db, this);
 			}
 		}
 		
@@ -150,6 +153,23 @@ module Db {
 			);
 		}
 		
+		getPromise<T>(def :string) :Promise<T> {
+			var subd = def.split('.');
+			var rest = null;
+			if (subd.length > 1) {
+				rest = def.substring(subd[0].length + 1);
+			}
+			var evt :internal.Event<any> = this.events[subd[0]];
+			if (!evt) throw new Error("No event called " + subd[0]);
+			return evt.then((v :any) => {
+				if (rest && v instanceof Entity) {
+					return (<Entity>v).getPromise(rest);
+				} else {
+					return <T>v;
+				}
+			});
+		}
+		
 	}
 	
 	export class Data {
@@ -173,6 +193,7 @@ module Db {
 			for (var i = 0; i < ks.length; i++) {
 				var k = ks[i];
 				if (k == 'url') continue;
+				if (k.charAt(0) == '_') continue;
 				var v = this[k];
 				if (v instanceof Entity) {
 					if (db) (<Entity>v).dbInit(null,db);
@@ -210,24 +231,39 @@ module Db {
 	}
 	
 	export module internal {
-		export interface IEvent<V> {
-			named(name :string) :IEvent<V>;
+		export interface IEventListen<V> {
 			on(ctx :any, handler: { (data?: V, detail?:IEventDetails<V>): void });
 			once(ctx :any, handler: { (data?: V, detail?:IEventDetails<V>): void });
 			off(ctx :any):any;
 			hasHandlers() :boolean;
 		}
 		
-		export interface IValueEvent<V> extends IEvent<V> {
+		export interface IEvent<V> extends IEventListen<V> {
+			named(name :string) :IEvent<V>;
+		}
+		
+		export interface IValueEvent<V> extends IEvent<V>, Thenable<V> {
 			named(name :string) :IValueEvent<V>;
 			broadcast(val :V):void;
+			promise() :Promise<V>;
+			preLoad(f :(promise :Promise<V>)=>void) :IValueEvent<V>;
+			preLoad(bind :any) :IValueEvent<V>;
 		}
+		
+		export interface IArrayValueEvent<V> extends IEvent<V[]>, Thenable<V[]> {
+			named(name :string) :IArrayValueEvent<V>;
+			promise() :Promise<V[]>;
+			preLoad(f :(promise :Promise<V[]>)=>void) :IArrayValueEvent<V>;
+			preLoad(bind :any) :IArrayValueEvent<V>;
+		}
+		
 		
 		export interface IListEvent<T> {
 			add :IValueEvent<T>;
 			remove :IEvent<T>;
 			modify :IEvent<T>;
 			all :IEvent<T>;
+			full: IArrayValueEvent<T>;
 
 			named(name :string) :IListEvent<T>;
 			subQuery() :IListEvent<T>;
@@ -343,8 +379,6 @@ module Db {
 			) {}
 			
 			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void) {
-				//console.log(this.myprog + " : Listening on " + this._ref.toString() + " " + event, fn);
-				//console.trace();
 				this._cbs.push({event:event, fn:fn});
 				// TODO do something on cancelCallback? It's here only because of method signature
 				this._ref.on(event, fn, (err) => {}, this);
@@ -423,6 +457,10 @@ module Db {
 			// TODO should not be implicitly true, could be native
 			_isRef :boolean = true;
 			
+			_preload :(p:Promise<T>)=>Promise<any> = null;
+			
+			_entity :Entity = null;
+
 			events = ['value'];
 			
 			protected projVal :T = null;
@@ -443,13 +481,43 @@ module Db {
 				this._isRef = false;
 				return this;
 			}
+			preLoad(f :(promise :Promise<T>)=>Promise<any>);
+			preLoad(f :{[index:string]:string});
+			preLoad(f :any) {
+				if (typeof f === 'function') {
+					this._preload = f;
+				} else {
+					this._preload = (prom) => {
+						var ks = Object.keys(f);
+						var pms :Promise<any>[] = [];
+						pms.push(prom);
+						for (var i = 0; i < ks.length; i++) {
+							pms[i+1] = this._entity.getPromise(f[ks[i]]); 
+						}
+						return Promise.all(pms).then((vals) => {
+							var data = vals[0];
+							for (var i = 0; i < ks.length; i++) {
+								var k = ks[i];
+								if (data[k] && typeof data[k] === 'function') {
+									(<()=>any>data[k]).apply(data,vals[i+1]);
+								} else {
+									data[k] = vals[i+1]
+								}
+							}
+						});
+					};
+				}
+				return this;
+			}
+
 			
 			/**
 			 * Called by the ObjC when the url is set.
 			 */
-			dbInit(url :string, db :Db) {
+			dbInit(url :string, db :Db, entity :Entity) {
 				this.url = url + '/' + this.name;
 				this.db = db;
+				this._entity = entity;
 				// At this point someone could already have registered some handler
 				for (var i = 0; i < this.handlers.length; i++) {
 					this.init(this.handlers[i]);
@@ -482,6 +550,25 @@ module Db {
 				if (this.url) this.init(h);
 			}
 			
+			promise() :Promise<T> {
+				return this.then((v) => v);
+			}
+			
+			then<U>(onFulfilled: (value: T) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Promise<U>;
+			then<U>(onFulfilled: (value: T) => U | Thenable<U>, onRejected?: (error: any) => void): Promise<U>
+			{
+				var fu :(data:U|Thenable<U>)=>void = null;
+				var ret = new Promise<U>((res,err) => {
+					fu = res;
+				});
+				this.once(this, (data,detail) => {
+					if (!detail.projected) {
+						fu(onFulfilled(data));
+					}
+				});
+				return ret;
+			}
+			
 			offHandler(h :EventHandler<T>) {
 				//console.log("Decommissioning ", handler);
 				h.decomission(true);
@@ -511,15 +598,34 @@ module Db {
 			}
 			
 			protected setupEvent(h :EventHandler<T>, name :string) {
+				// TODO what the second time the event fires?
+				var proFunc:(value:T)=>void = null;
+				var fireprom = null;
+				if (this._preload) {
+					var prom = new Promise<T>((ok,err) => {
+						proFunc = ok;
+					});
+					// Use the returned promise
+					fireprom = this._preload(prom);
+				}
 				h.hook(name, (ds, pre) => {
 					var evd = new EventDetails<T>();
 					evd.payload = this.parseValue(ds.val(), ds.ref().toString());
+					if (proFunc) {
+						proFunc(evd.payload);
+					}
 					evd.originalEvent = name;
 					evd.originalUrl = ds.ref().toString();
 					evd.originalKey = ds.key();
 					evd.precedingKey = pre;
 					evd.populating = h.first;
-					h.handle(evd);
+					if (fireprom) {
+						fireprom.then(()=> {
+							h.handle(evd);
+						});
+					} else {
+						h.handle(evd);
+					}
 				});
 			}
 			
@@ -579,9 +685,16 @@ module Db {
 				this.checkBroadcast();
 			}
 			
-			named(name :string) {
+			named(name :string) :ValueEvent<T> {
 				if (this.name) return this;
 				super.named(name);
+				return this;
+			}
+			
+			preLoad(f :(promise :Promise<T>)=>Promise<any>);
+			preLoad(f :{[index:string]:string});
+			preLoad(f :any) {
+				super.preLoad(f);
 				return this;
 			}
 			
@@ -611,11 +724,70 @@ module Db {
 				}
 			}
 			
-			dbInit(url :string, db :Db) {
-				super.dbInit(url, db);
-				this.checkBroadcast;
+			dbInit(url :string, db :Db, entity :Entity) {
+				super.dbInit(url, db, entity);
+				this.checkBroadcast();
 			}
 		}
+		
+		export class ArrayValueEvent<T> extends Event<T[]> implements IArrayValueEvent<T> {
+			private broadcasted = false;
+			private lastBroadcast :T;
+			
+			named(name :string) {
+				if (this.name) return this;
+				super.named(name);
+				return this;
+			}
+			
+			parseValue(val, url? :string) {
+				if (val) {
+					var nval = [];
+					var ks = Object.keys(val);
+					for (var i = 0; i < ks.length; i++) {
+						var sval = val[ks[i]];
+						sval = super.parseValue(sval, url + '/' + ks[i]);
+						nval.push(sval);
+					}
+					val = nval;
+				}
+				return val;
+			}
+			
+			preLoad(f :(promise :Promise<T[]>)=>Promise<any>);
+			preLoad(f :{[index:string]:string});
+			preLoad(f :any) {
+				super.preLoad(f);
+				return this;
+			}
+		}
+		
+		
+		/*
+		export class LoadedEntityEvent extends Event<Entity> implements ILoadedEntityEvent {
+			private tosave = false;
+			
+			constructor(private entity : Entity) {
+				super();
+			}
+			
+			save() {
+				this.tosave = true;
+				this.trySave();
+			}
+			
+			private trySave() {
+				if (!this.tosave) return;
+				if (!this.db) return;
+				// TODO save data entity, will be an update
+			}
+			
+			dbInit(url :string, db :Db) {
+				super.dbInit(url, db);
+				this.trySave();
+			}
+		}
+		*/
 		
 		export class AddedListEvent<T> extends ValueEvent<T> {
 			constructor() {
@@ -667,9 +839,10 @@ module Db {
 			public remove :Event<T>;
 			public modify :Event<T>;
 			public all :Event<T>;
+			public full :ArrayValueEvent<T>;
 			
 			private name :string = null;
-			private allEvts :Event<T>[] = [];
+			private allEvts :Event<T|T[]>[] = [];
 			
 			private _sortField :string = null;
 			private _sortDesc :boolean = false;
@@ -680,6 +853,7 @@ module Db {
 			
 			protected _url :string = null;
 			protected _db :Db = null;
+			protected _entity :Entity = null;
 			
 			protected _ctorD :new ()=>Data = null;
 			
@@ -688,11 +862,12 @@ module Db {
 				this.remove = new Event<T>();
 				this.modify = new Event<T>();
 				this.all = new AddedListEvent<T>();
+				this.full = new ArrayValueEvent<T>();
 				this.add.events = ['child_added'];
 				this.remove.events = ['child_removed'];
 				this.modify.events = ['child_changed','child_moved'];
 				this.all.events = ['child_added','child_removed','child_changed','child_moved'];
-				this.allEvts = [this.add, this.remove, this.modify, this.all];
+				this.allEvts = [this.add, this.remove, this.modify, this.all, this.full];
 				for (var i = 0; i < this.allEvts.length; i++) {
 					var ae = this.allEvts[i];
 					ae.hrefIniter = (h) => this.setupHref(h);
@@ -719,11 +894,12 @@ module Db {
 			/**
 			 * Called by the ObjC when the url is set.
 			 */
-			dbInit(url :string, db :Db) {
+			dbInit(url :string, db :Db, entity :Entity) {
 				this._url = url;
 				this._db = db;
+				this._entity = entity;
 				for (var i = 0; i < this.allEvts.length; i++) {
-					this.allEvts[i].dbInit(url, db);
+					this.allEvts[i].dbInit(url, db, entity);
 				}
 			}
 			
@@ -739,7 +915,7 @@ module Db {
 				ret._rangeFrom = this._rangeFrom;
 				ret._rangeTo = this._rangeTo;
 				ret._equals = this._equals;
-				ret.dbInit(this._url, this._db);
+				ret.dbInit(this._url, this._db, this._entity);
 				return ret;
 			}
 			
@@ -766,7 +942,7 @@ module Db {
 			}
 			
 			
-			protected setupHref(h :EventHandler<T>) {
+			protected setupHref(h :EventHandler<T|T[]>) {
 				h._ref = new Firebase(h.event.url);
 				if (this._sortField) {
 					h._ref = h._ref.orderByChild(this._sortField);
@@ -794,20 +970,6 @@ module Db {
 			}
 	
 		}
-		
-		// TODO remove this
-		/*
-		export interface AccessEvent {
-			url :string;
-			parseValue(val :any):any;
-			projectValue(val :any):any;
-			_ctorD :new ()=>ObjD;
-			_isRef :boolean;
-			events :string[];
-			hrefIniter :(h :EventHandler<any>)=>void;
-			offHandler(h :EventHandler<any>);
-		}
-		*/
 	
 		export interface EventDetachable {
 			eventAttached(event :Event<any>);

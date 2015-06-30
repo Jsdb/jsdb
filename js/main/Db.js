@@ -6,6 +6,8 @@ var __extends = this.__extends || function (d, b) {
     d.prototype = new __();
 };
 var Firebase = require('firebase');
+var PromiseModule = require('es6-promise');
+var Promise = PromiseModule.Promise;
 var Db = (function () {
     function Db() {
         this.descriptions = {};
@@ -113,7 +115,7 @@ var Db;
                 var ev = this.events[evts[i]];
                 ev.named(evts[i]);
                 // TODO also assign name
-                ev.dbInit(url, db);
+                ev.dbInit(url, db, this);
             }
         };
         Entity.prototype.equals = function (oth) {
@@ -137,6 +139,24 @@ var Db;
                 }
                 return val;
             }));
+        };
+        Entity.prototype.getPromise = function (def) {
+            var subd = def.split('.');
+            var rest = null;
+            if (subd.length > 1) {
+                rest = def.substring(subd[0].length + 1);
+            }
+            var evt = this.events[subd[0]];
+            if (!evt)
+                throw new Error("No event called " + subd[0]);
+            return evt.then(function (v) {
+                if (rest && v instanceof Entity) {
+                    return v.getPromise(rest);
+                }
+                else {
+                    return v;
+                }
+            });
         };
         return Entity;
     })();
@@ -164,6 +184,8 @@ var Db;
             for (var i = 0; i < ks.length; i++) {
                 var k = ks[i];
                 if (k == 'url')
+                    continue;
+                if (k.charAt(0) == '_')
                     continue;
                 var v = this[k];
                 if (v instanceof Entity) {
@@ -287,8 +309,6 @@ var Db;
                 this._cbs = [];
             }
             EventHandler.prototype.hook = function (event, fn) {
-                //console.log(this.myprog + " : Listening on " + this._ref.toString() + " " + event, fn);
-                //console.trace();
                 this._cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
                 this._ref.on(event, fn, function (err) {
@@ -363,6 +383,8 @@ var Db;
                  */
                 // TODO should not be implicitly true, could be native
                 this._isRef = true;
+                this._preload = null;
+                this._entity = null;
                 this.events = ['value'];
                 this.projVal = null;
                 this.hrefIniter = this.setupHref;
@@ -378,12 +400,42 @@ var Db;
                 this._isRef = false;
                 return this;
             };
+            Event.prototype.preLoad = function (f) {
+                var _this = this;
+                if (typeof f === 'function') {
+                    this._preload = f;
+                }
+                else {
+                    this._preload = function (prom) {
+                        var ks = Object.keys(f);
+                        var pms = [];
+                        pms.push(prom);
+                        for (var i = 0; i < ks.length; i++) {
+                            pms[i + 1] = _this._entity.getPromise(f[ks[i]]);
+                        }
+                        return Promise.all(pms).then(function (vals) {
+                            var data = vals[0];
+                            for (var i = 0; i < ks.length; i++) {
+                                var k = ks[i];
+                                if (data[k] && typeof data[k] === 'function') {
+                                    data[k].apply(data, vals[i + 1]);
+                                }
+                                else {
+                                    data[k] = vals[i + 1];
+                                }
+                            }
+                        });
+                    };
+                }
+                return this;
+            };
             /**
              * Called by the ObjC when the url is set.
              */
-            Event.prototype.dbInit = function (url, db) {
+            Event.prototype.dbInit = function (url, db, entity) {
                 this.url = url + '/' + this.name;
                 this.db = db;
+                this._entity = entity;
                 for (var i = 0; i < this.handlers.length; i++) {
                     this.init(this.handlers[i]);
                 }
@@ -414,6 +466,21 @@ var Db;
                 if (this.url)
                     this.init(h);
             };
+            Event.prototype.promise = function () {
+                return this.then(function (v) { return v; });
+            };
+            Event.prototype.then = function (onFulfilled, onRejected) {
+                var fu = null;
+                var ret = new Promise(function (res, err) {
+                    fu = res;
+                });
+                this.once(this, function (data, detail) {
+                    if (!detail.projected) {
+                        fu(onFulfilled(data));
+                    }
+                });
+                return ret;
+            };
             Event.prototype.offHandler = function (h) {
                 //console.log("Decommissioning ", handler);
                 h.decomission(true);
@@ -441,15 +508,35 @@ var Db;
             };
             Event.prototype.setupEvent = function (h, name) {
                 var _this = this;
+                // TODO what the second time the event fires?
+                var proFunc = null;
+                var fireprom = null;
+                if (this._preload) {
+                    var prom = new Promise(function (ok, err) {
+                        proFunc = ok;
+                    });
+                    // Use the returned promise
+                    fireprom = this._preload(prom);
+                }
                 h.hook(name, function (ds, pre) {
                     var evd = new EventDetails();
                     evd.payload = _this.parseValue(ds.val(), ds.ref().toString());
+                    if (proFunc) {
+                        proFunc(evd.payload);
+                    }
                     evd.originalEvent = name;
                     evd.originalUrl = ds.ref().toString();
                     evd.originalKey = ds.key();
                     evd.precedingKey = pre;
                     evd.populating = h.first;
-                    h.handle(evd);
+                    if (fireprom) {
+                        fireprom.then(function () {
+                            h.handle(evd);
+                        });
+                    }
+                    else {
+                        h.handle(evd);
+                    }
                 });
             };
             Event.prototype.off = function (ctx) {
@@ -515,6 +602,10 @@ var Db;
                 _super.prototype.named.call(this, name);
                 return this;
             };
+            ValueEvent.prototype.preLoad = function (f) {
+                _super.prototype.preLoad.call(this, f);
+                return this;
+            };
             ValueEvent.prototype.checkBroadcast = function () {
                 if (!this.url || !this.broadcasted)
                     return;
@@ -541,13 +632,70 @@ var Db;
                     return val;
                 }
             };
-            ValueEvent.prototype.dbInit = function (url, db) {
-                _super.prototype.dbInit.call(this, url, db);
-                this.checkBroadcast;
+            ValueEvent.prototype.dbInit = function (url, db, entity) {
+                _super.prototype.dbInit.call(this, url, db, entity);
+                this.checkBroadcast();
             };
             return ValueEvent;
         })(Event);
         internal.ValueEvent = ValueEvent;
+        var ArrayValueEvent = (function (_super) {
+            __extends(ArrayValueEvent, _super);
+            function ArrayValueEvent() {
+                _super.apply(this, arguments);
+                this.broadcasted = false;
+            }
+            ArrayValueEvent.prototype.named = function (name) {
+                if (this.name)
+                    return this;
+                _super.prototype.named.call(this, name);
+                return this;
+            };
+            ArrayValueEvent.prototype.parseValue = function (val, url) {
+                if (val) {
+                    var nval = [];
+                    var ks = Object.keys(val);
+                    for (var i = 0; i < ks.length; i++) {
+                        var sval = val[ks[i]];
+                        sval = _super.prototype.parseValue.call(this, sval, url + '/' + ks[i]);
+                        nval.push(sval);
+                    }
+                    val = nval;
+                }
+                return val;
+            };
+            ArrayValueEvent.prototype.preLoad = function (f) {
+                _super.prototype.preLoad.call(this, f);
+                return this;
+            };
+            return ArrayValueEvent;
+        })(Event);
+        internal.ArrayValueEvent = ArrayValueEvent;
+        /*
+        export class LoadedEntityEvent extends Event<Entity> implements ILoadedEntityEvent {
+            private tosave = false;
+            
+            constructor(private entity : Entity) {
+                super();
+            }
+            
+            save() {
+                this.tosave = true;
+                this.trySave();
+            }
+            
+            private trySave() {
+                if (!this.tosave) return;
+                if (!this.db) return;
+                // TODO save data entity, will be an update
+            }
+            
+            dbInit(url :string, db :Db) {
+                super.dbInit(url, db);
+                this.trySave();
+            }
+        }
+        */
         var AddedListEvent = (function (_super) {
             __extends(AddedListEvent, _super);
             function AddedListEvent() {
@@ -608,16 +756,18 @@ var Db;
                 this._equals = null;
                 this._url = null;
                 this._db = null;
+                this._entity = null;
                 this._ctorD = null;
                 this.add = new AddedListEvent();
                 this.remove = new Event();
                 this.modify = new Event();
                 this.all = new AddedListEvent();
+                this.full = new ArrayValueEvent();
                 this.add.events = ['child_added'];
                 this.remove.events = ['child_removed'];
                 this.modify.events = ['child_changed', 'child_moved'];
                 this.all.events = ['child_added', 'child_removed', 'child_changed', 'child_moved'];
-                this.allEvts = [this.add, this.remove, this.modify, this.all];
+                this.allEvts = [this.add, this.remove, this.modify, this.all, this.full];
                 for (var i = 0; i < this.allEvts.length; i++) {
                     var ae = this.allEvts[i];
                     ae.hrefIniter = function (h) { return _this.setupHref(h); };
@@ -643,11 +793,12 @@ var Db;
             /**
              * Called by the ObjC when the url is set.
              */
-            ListEvent.prototype.dbInit = function (url, db) {
+            ListEvent.prototype.dbInit = function (url, db, entity) {
                 this._url = url;
                 this._db = db;
+                this._entity = entity;
                 for (var i = 0; i < this.allEvts.length; i++) {
-                    this.allEvts[i].dbInit(url, db);
+                    this.allEvts[i].dbInit(url, db, entity);
                 }
             };
             ListEvent.prototype.subQuery = function () {
@@ -662,7 +813,7 @@ var Db;
                 ret._rangeFrom = this._rangeFrom;
                 ret._rangeTo = this._rangeTo;
                 ret._equals = this._equals;
-                ret.dbInit(this._url, this._db);
+                ret.dbInit(this._url, this._db, this._entity);
                 return ret;
             };
             ListEvent.prototype.sortOn = function (field, desc) {

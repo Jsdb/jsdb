@@ -11,7 +11,26 @@ interface Firebase {
 	flush();
 }
 */
+class UserQuota extends Db.Data {
+	maxMessages = 100;
+	maxInvoices = 10;
+}
 
+class UserPolicy extends Db.Entity {
+	events = {
+		quota : Db.data(UserQuota)
+	}
+}
+
+class UserFolder extends Db.Data {
+	_quotas :UserQuota;
+	usedMessages = 0;
+	usedInvoices = 0;
+	
+	getAvailableMessage() {
+		return this._quotas.maxMessages - this.usedMessages;
+	}
+}
 
 class InvoiceCoords extends Db.Data {
 	vatCode :string;
@@ -38,7 +57,9 @@ class UserAddress extends Db.Data {
 class User extends Db.Entity {
 	events = {
 		anagraphics : Db.data(UserAnagraphics),
-		bestFriend : Db.reference(User).named('best'),
+		policy : Db.reference(UserPolicy),
+		folder : Db.data(UserFolder).preLoad({_quotas:'policy.quota'}),
+		bestFriend : new Db.internal.ValueEvent<User>().named('best'),
 		//addresses : new Db.ListEvent<UserAddress>('addresses').objD(UserAddress),
 		addresses : Db.dataList(UserAddress),
 		prioAddress : Db.dataList(UserAddress).named('addresses').sortOn('priority'),
@@ -53,9 +74,9 @@ var u = new User();
 var baseUrl :string = "https://swashp.firebaseio.com/test"
 Db.def.register(baseUrl + "/users/", User); 
 Db.def.register(baseUrl + "/companies/", Company); 
+Db.def.register(baseUrl + "/policies/", UserPolicy);
 
 describe('Db Tests', () => {
-	describe('Reading', () => {
 		var compsFb :Firebase;
 		var usersFb :Firebase;
 		var c1Fb :Firebase;
@@ -63,7 +84,7 @@ describe('Db Tests', () => {
 		var u2Fb :Firebase;
 		var u :User;
 		beforeEach(function (done) {
-			this.timeout(10000);
+			this.timeout(100000);
 			//console.log("Starting before each");
 			var opcnt = 1;
 			function opCnter() { 
@@ -85,6 +106,15 @@ describe('Db Tests', () => {
 				}
 			}, opCnter);
 			
+			var polsFb = new Firebase(baseUrl + '/policies');
+			opcnt++;
+			polsFb.child('po1').set({
+				quota : {
+					maxMessages : 20,
+					maxInvoices : 10
+				}
+			}, opCnter);
+			
 			usersFb = new Firebase(baseUrl + '/users');
 			u1Fb = usersFb.child('u1');
 			opcnt++;
@@ -94,6 +124,12 @@ describe('Db Tests', () => {
 					surname: 'Gianni'
 				},
 				best: baseUrl + '/users/u2',
+				policy: baseUrl + '/policies/po1',
+				folder: {
+					usedMessages: 5,
+					usedInvoices: 10
+				},
+				
 				addresses: {
 					a00 : {
 						email: 'simoneg@apache.org',
@@ -149,6 +185,9 @@ describe('Db Tests', () => {
 			M.assert('User has right url').when(u.url).is(baseUrl + "/users/u1");
 			opCnter();
 		});
+		
+		// TODO nested Data objects
+		
 		it('should read user C and D',(done) => {
 			var anag :UserAnagraphics = null;
 			u.events.anagraphics.once(this, (a, first)=>{
@@ -233,6 +272,7 @@ describe('Db Tests', () => {
 			M.assert('User anagraphic loaded').when(anags[0]).is(M.aTruthy);
 			M.assert('User projection').when(anags[0]).is(M.objectMatching({name:'Mimmi',surname:'Gianni'}));
 		});
+		
 		it('should notify list of D and end of list', (done) => {
 			var adds :Db.internal.IEventDetails<UserAddress>[] = [];
 			u.events.addresses.add.on(this, (a,det)=> {
@@ -271,6 +311,17 @@ describe('Db Tests', () => {
 			}));
 			done();
 		});
+		
+		it('should notify list of D as array with full', (done) => {
+			var adds :Db.internal.IEventDetails<UserAddress[]>[] = [];
+			u.events.addresses.full.on(this, (a,det)=> {
+				adds.push(det);
+			});
+			M.assert('Sent only once').when(adds).is(M.withLength(1));
+			M.assert('Contains all elements').when(adds[0].payload).is(M.withLength(2));
+			done();
+		});
+
 		
 		it('should parse correctly a list of Cs', (done) => {
 			var comps :Db.internal.IEventDetails<Company>[] = [];
@@ -357,6 +408,53 @@ describe('Db Tests', () => {
 		
 		// TODO more testing on queries
 		// TODO delocalized queries (queries that pertain to this object, but are on a different url, based on current ObjC data
+		
+		
+		it('should read a promise', (done) => {
+			u.events.anagraphics
+			.then((d) => {
+				M.assert('valorized').when(d).is(M.aTruthy);
+				M.assert('correct name').when(d.name).is('Simone');
+				return "ciao";
+			})
+			.then((s) => {
+				M.assert('chained').when(s).is('ciao');
+				done();
+			});
+		});
+	
+		it('should handle multiple promises', (done) => {
+			var pAnag = u.events.anagraphics.promise();
+			var pFriend = u.events.bestFriend.promise();
+			Promise.all<any>([pAnag,pFriend]).then((vs) => {
+				M.assert('Both promises fullfilled').when(vs).is(M.withLength(2));
+				M.assert('Got anagraphics').when(vs[0]).is(M.instanceOf(UserAnagraphics));
+				M.assert('Got friend').when(vs[1]).is(M.instanceOf(User));
+				done();
+			});
+		});
+	
+		it('should resolve stringified promises', (done) => {
+			var pFriendAnag = u.getPromise('bestFriend.anagraphics');
+			pFriendAnag.then((fa) => {
+				M.assert("Loaded something").when(fa).is(M.aTruthy);
+				M.assert("Is an anagraphic").when(fa).is(M.instanceOf(UserAnagraphics));
+				M.assert("Is right anagraphic").when(fa).is(M.objectMatching({
+					name: 'Giulio',
+					surname: 'Chidini' 
+				}));
+				done();
+			});
+		});
+	
+		it('should honour preload', (done) => {
+			u.events.folder.once(this, (fld) => {
+				M.assert("loaded quota").when(fld._quotas).is(M.aTruthy);
+				M.assert("Right computation").when(fld.getAvailableMessage()).is(15);
+				done();
+			});
+		});
+		
 		
 		it('should serialize objDs correctly', (done) => {
 			var anag :UserAnagraphics = null;
@@ -525,5 +623,4 @@ describe('Db Tests', () => {
 			
 		});
 		*/
-	})
 });
