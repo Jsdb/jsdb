@@ -1,24 +1,25 @@
 /// <reference path="../../typings/tsd.d.ts" />
 export = Db;
 declare class Db {
-    private descriptions;
-    private instances;
+    baseUrl: string;
     private socket;
+    private namesToRoots;
     setSocket(socket: SocketIO.Socket): void;
     sendOnSocket(url: string, payload: any): void;
+    private scanRoots();
+    private findRoot<T>(url);
     load<T extends Db.Entity>(url: string): T;
-    register(baseUrl: string, ctor: new () => Db.Entity): void;
     computeUrl(inst: Db.Entity): string;
 }
 declare module Db {
     var serverMode: boolean;
-    var def: Db;
     function str(): internal.IValueEvent<string>;
     function num(): internal.IValueEvent<number>;
     function data<V extends Data>(c: new () => V): internal.IValueEvent<V>;
     function reference<V extends Entity>(c: new () => V): internal.IValueEvent<V>;
     function dataList<V extends Data>(c: new () => V): internal.IListEvent<V>;
     function referenceList<V extends Entity>(c: new () => V): internal.IListEvent<V>;
+    function entityRoot<V extends Entity>(c: new () => V): internal.IEntityRoot<V>;
     function strList(): internal.IListEvent<string>;
     function numList(): internal.IListEvent<number>;
     class Entity {
@@ -64,6 +65,10 @@ declare module Db {
             promise(): Promise<V[]>;
             preLoad(f: (promise: Promise<V[]>) => void): IArrayValueEvent<V>;
             preLoad(bind: any): IArrayValueEvent<V>;
+        }
+        interface IEntityRoot<T> {
+            load(id: string): T;
+            named(name: string): IEntityRoot<T>;
         }
         interface IListEvent<T> {
             add: IValueEvent<T>;
@@ -234,6 +239,20 @@ declare module Db {
             projectValue(val: any): void;
             protected init(h: EventHandler<T>): void;
             protected save(val: T): void;
+        }
+        class EntityRoot<T extends Db.Entity> implements IEntityRoot<T> {
+            ctor: new () => T;
+            db: Db;
+            url: string;
+            name: string;
+            instances: {
+                [index: string]: T;
+            };
+            constructor(ctor: new () => T);
+            private composeMyUrl();
+            dbInit(db: Db): void;
+            named(name: string): EntityRoot<T>;
+            load(id: string): T;
         }
         class ListEvent<T> extends IsEvent implements IListEvent<T> {
             add: AddedListEvent<T>;

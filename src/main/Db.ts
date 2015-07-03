@@ -10,9 +10,9 @@ var Promise = PromiseModule.Promise;
 
 export = Db;
 class Db {
-	private descriptions :{[index:string]:new ()=>Db.Entity} = {};
-	private instances :{[index:string]:Db.Entity} = {};
+	baseUrl :string;
 	private socket :SocketIO.Socket;
+	private namesToRoots :{[index:string]:Db.internal.EntityRoot<any>} = {};
 	
 	setSocket(socket :SocketIO.Socket) {
 		this.socket = socket;
@@ -22,41 +22,52 @@ class Db {
 		this.socket.emit(url, payload);
 	}
 	
-	load<T extends Db.Entity>(url :string):T {
-		var ret = this.instances[url];
-		if (ret) {
-			return <T>ret;
+	private scanRoots() {
+		this.namesToRoots = {};
+		var ks = Object.keys(this);
+		for (var i = 0; i < ks.length; i++) {
+			var root : Db.internal.EntityRoot<any> = this[ks[i]];
+			if (!(root instanceof Db.internal.EntityRoot)) continue;
+			root.dbInit(this);
+			root.named(ks[i]);
+			this.namesToRoots[root.name] = root;
 		}
-		var preurl = url.substring(0, url.lastIndexOf('/')+1);
-		var ctor = this.descriptions[preurl];
-		if (!ctor) {
-			throw new Error("The url " + preurl + " is not bound to a C object");
-		}
-		ret = new ctor();
-		ret.dbInit(url, this);
-		
-		// TODO register for cancellation
-		
-		this.instances[url] = ret;
-		return <T>ret;
 	}
 	
-	register(baseUrl :string, ctor :new ()=>Db.Entity) {
-		this.descriptions[baseUrl] = ctor;
+	private findRoot<T extends Db.Entity>(url :string) :Db.internal.EntityRoot<T> {
+		if (url.charAt(0) === '/') url = url.substring(1);
+		var ks = Object.keys(this.namesToRoots);
+		var matching = '';
+		for (var i = 0; i < ks.length; i++) {
+			if (url.indexOf(ks[i]) == 0 && ks.length > matching.length) matching = ks[i]; 
+		}
+		if (matching == '') return null;
+		return <Db.internal.EntityRoot<T>>this.namesToRoots[matching];
+	}
+
+	load<T extends Db.Entity>(url :string):T {
+		if (url.indexOf(this.baseUrl) === 0) url = url.substring(this.baseUrl.length);
+		if (url.charAt(0) === '/') url = url.substring(1);
+		var root = this.findRoot<T>(url);
+		if (!root) {
+			this.scanRoots();
+			root = this.findRoot<T>(url);
+		}
+		if (!root) throw new Error("Cannot find an entity root for " + url + " on " + JSON.stringify(Object.keys(this.namesToRoots)));
+		return root.load(url);
 	}
 	
 	computeUrl(inst :Db.Entity) {
 		var ctor = inst.constructor;
 		var pre :string = null;
-		var pres = Object.keys(this.descriptions);
-		for (var i = 0; i < pres.length; i++) {
-			if (this.descriptions[pres[i]] === ctor) {
-				pre = pres[i];
-				break;
-			}
+		var ks = Object.keys(this);
+		for (var i = 0; i < ks.length; i++) {
+			var root : Db.internal.EntityRoot<any> = this[ks[i]];
+			if (!(root instanceof Db.internal.EntityRoot)) continue;
+			if (root.ctor === ctor) pre = root.url;
 		}
 		if (!pre) throw new Error("The constructor " + ctor + " is not bound to an url");
-		pre += Db.internal.IdGenerator.next();
+		pre += '/' + Db.internal.IdGenerator.next();
 		return pre;
 	}
 }
@@ -65,10 +76,6 @@ module Db {
 	
 	export var serverMode = false;
 		
-	// TODO can't be like this, but ok for now
-	export var def = new Db();
-	
-	
 	export function str() :internal.IValueEvent<string> {
 		var ret = new internal.ValueEvent<string>();
 		return ret;
@@ -96,6 +103,10 @@ module Db {
 		var ret = new internal.ListEvent<V>();
 		return ret;
 	}
+	export function entityRoot<V extends Entity>(c :new()=>V) :internal.IEntityRoot<V> {
+		return new internal.EntityRoot<V>(c);
+	}
+	
 	export function strList() :internal.IListEvent<string> {
 		var ret = new internal.ListEvent<string>();
 		return ret;
@@ -259,6 +270,11 @@ module Db {
 			preLoad(bind :any) :IArrayValueEvent<V>;
 		}
 		
+		export interface IEntityRoot<T> {
+			load(id :string):T;
+			named(name :string) :IEntityRoot<T>;
+			// TODO query methods
+		}
 		
 		export interface IListEvent<T> {
 			add :IValueEvent<T>;
@@ -838,6 +854,58 @@ module Db {
 					// Otherwise we just store it under a random id
 					ref.child(IdGenerator.next()).set(ser);
 				}
+			}
+		}
+		
+		export class EntityRoot<T extends Db.Entity> implements IEntityRoot<T> {
+			ctor :new ()=>T;
+			db :Db;
+			url :string;
+			name :string;
+			
+			instances :{[index:string]:T} = {};
+			 
+			constructor(ctor :new ()=>T) {
+				this.ctor = ctor;
+			}
+			
+			private composeMyUrl() {
+				if (!this.name || !this.db) return;
+				var url = this.db.baseUrl;
+				if (url.charAt(url.length - 1) !== '/') url += '/';
+				url += this.name;
+				this.url = url;
+			}
+			
+			dbInit(db :Db) {
+				this.db = db;
+				this.composeMyUrl();
+				//this.url = db.baseUrl + '/' + this.name;
+			}
+			
+			named(name :string) {
+				if (this.name) return;
+				this.name = name;
+				this.composeMyUrl();
+				//if (this.db) this.url = this.db.baseUrl + '/' + this.name;
+				return this;
+			}
+			
+			load(id :string) :T {
+				if (id.indexOf(this.url) === 0) id = id.substring(this.url.length);
+				if (id.indexOf(this.name) === 0) id = id.substring(this.name.length);
+				if (id.charAt(0) === '/') id = id.substring(1);
+				var ret = this.instances[id];
+				if (ret) {
+					return <T>ret;
+				}
+				ret = new this.ctor();
+				ret.dbInit(this.url + '/' + id, this.db);
+				
+				// TODO register for cancellation
+				
+				this.instances[id] = ret;
+				return <T>ret;
 			}
 		}
 		

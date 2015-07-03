@@ -62,13 +62,22 @@ class User extends Db.Entity {
 	logicId = Db.num();
 }
 
-var u = new User();
-
-
 var baseUrl :string = "https://swashp.firebaseio.com/test"
-Db.def.register(baseUrl + "/users/", User); 
-Db.def.register(baseUrl + "/companies/", Company); 
-Db.def.register(baseUrl + "/policies/", UserPolicy);
+
+class TestDb extends Db {
+	users = Db.entityRoot(User);
+	companies = Db.entityRoot(Company);
+	policies = Db.entityRoot(UserPolicy);
+	
+	constructor() {
+		super();
+		this.baseUrl = baseUrl; 
+	}
+}
+
+var defDb = new TestDb();
+
+var u = new User();
 
 describe('Db Tests', () => {
 		var compsFb :Firebase;
@@ -174,7 +183,7 @@ describe('Db Tests', () => {
 			// Keep reference alive in ram, faster tests and less side effects
 			root.on('value', () => {});
 			
-			u = <User>Db.def.load(baseUrl + '/users/u1');
+			u = <User>defDb.load(baseUrl + '/users/u1');
 			M.assert('User is not null').when(u).is(M.aTruthy);
 			M.assert('User has right url').when(u.url).is(baseUrl + "/users/u1");
 			opCnter();
@@ -207,7 +216,7 @@ describe('Db Tests', () => {
 			M.assert('Anagraphic is not the same').when(anag).is(M.not(M.exactly(preAnag)));
 		});
 		it('should return same C', ()=> {
-			var u2 = <User>Db.def.load(baseUrl + '/users/u1');
+			var u2 = <User>defDb.load(baseUrl + '/users/u1');
 			M.assert('Returned same instance of user').when(u2).is(M.exactly(u));
 		});
 		it('should deference simple refs', (done)=> {
@@ -222,7 +231,7 @@ describe('Db Tests', () => {
 			
 		});
 		it('should dereference composed refs', (done)=> {
-			var u2 = <User>Db.def.load(baseUrl + '/users/u2');
+			var u2 = <User>defDb.load(baseUrl + '/users/u2');
 			
 			var friend :User = null;
 			u2.bestFriend.once(this, (u, first)=>{
@@ -235,7 +244,7 @@ describe('Db Tests', () => {
 			
 		});
 		it('should dereference refs nexted in ObjC', (done)=> {
-			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>defDb.load(baseUrl + '/users/u3');
 			
 			var anag :UserAnagraphics = null;
 			u3.anagraphics.once(this, (a, first)=>{
@@ -247,7 +256,7 @@ describe('Db Tests', () => {
 			
 		});
 		it('should consider projections first', () => {
-			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>defDb.load(baseUrl + '/users/u3');
 			
 			var friend :User = null;
 			u3.bestFriend.on(this, (u, first)=>{
@@ -466,7 +475,7 @@ describe('Db Tests', () => {
 		});
 		
 		it('should serialize objDs with references correctly', (done) => {
-			var u3 = <User>Db.def.load(baseUrl + '/users/u3');
+			var u3 = <User>defDb.load(baseUrl + '/users/u3');
 			
 			var anag :UserAnagraphics = null;
 			u3.anagraphics.on(this, (a, first)=>{
@@ -518,10 +527,10 @@ describe('Db Tests', () => {
 			anag.surname = 'Anag';
 			anag.company = new Company();
 			
-			var url = Db.def.computeUrl(anag.company);
+			var url = defDb.computeUrl(anag.company);
 			M.assert('The new url is correct').when(url).is(M.stringContaining(baseUrl + '/companies/'));
 			
-			var ser = anag.serialize(Db.def);
+			var ser = anag.serialize(defDb);
 			M.assert("objD with ref serialized correctly").when(anag.serialize()).is(M.objectMatchingStrictly(
 				{
 					name:'New',

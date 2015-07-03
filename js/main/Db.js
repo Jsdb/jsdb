@@ -10,8 +10,7 @@ var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
 var Db = (function () {
     function Db() {
-        this.descriptions = {};
-        this.instances = {};
+        this.namesToRoots = {};
     }
     Db.prototype.setSocket = function (socket) {
         this.socket = socket;
@@ -19,38 +18,59 @@ var Db = (function () {
     Db.prototype.sendOnSocket = function (url, payload) {
         this.socket.emit(url, payload);
     };
-    Db.prototype.load = function (url) {
-        var ret = this.instances[url];
-        if (ret) {
-            return ret;
+    Db.prototype.scanRoots = function () {
+        this.namesToRoots = {};
+        var ks = Object.keys(this);
+        for (var i = 0; i < ks.length; i++) {
+            var root = this[ks[i]];
+            if (!(root instanceof Db.internal.EntityRoot))
+                continue;
+            root.dbInit(this);
+            root.named(ks[i]);
+            this.namesToRoots[root.name] = root;
         }
-        var preurl = url.substring(0, url.lastIndexOf('/') + 1);
-        var ctor = this.descriptions[preurl];
-        if (!ctor) {
-            throw new Error("The url " + preurl + " is not bound to a C object");
-        }
-        ret = new ctor();
-        ret.dbInit(url, this);
-        // TODO register for cancellation
-        this.instances[url] = ret;
-        return ret;
     };
-    Db.prototype.register = function (baseUrl, ctor) {
-        this.descriptions[baseUrl] = ctor;
+    Db.prototype.findRoot = function (url) {
+        if (url.charAt(0) === '/')
+            url = url.substring(1);
+        var ks = Object.keys(this.namesToRoots);
+        var matching = '';
+        for (var i = 0; i < ks.length; i++) {
+            if (url.indexOf(ks[i]) == 0 && ks.length > matching.length)
+                matching = ks[i];
+        }
+        if (matching == '')
+            return null;
+        return this.namesToRoots[matching];
+    };
+    Db.prototype.load = function (url) {
+        if (url.indexOf(this.baseUrl) === 0)
+            url = url.substring(this.baseUrl.length);
+        if (url.charAt(0) === '/')
+            url = url.substring(1);
+        var root = this.findRoot(url);
+        if (!root) {
+            this.scanRoots();
+            root = this.findRoot(url);
+        }
+        if (!root)
+            throw new Error("Cannot find an entity root for " + url + " on " + JSON.stringify(Object.keys(this.namesToRoots)));
+        return root.load(url);
     };
     Db.prototype.computeUrl = function (inst) {
         var ctor = inst.constructor;
         var pre = null;
-        var pres = Object.keys(this.descriptions);
-        for (var i = 0; i < pres.length; i++) {
-            if (this.descriptions[pres[i]] === ctor) {
-                pre = pres[i];
-                break;
-            }
+        var ks = Object.keys(this);
+        for (var i = 0; i < ks.length; i++) {
+            var root = this[ks[i]];
+            if (!(root instanceof Db.internal.EntityRoot))
+                continue;
+            if (root.ctor === ctor)
+                pre = root.url;
         }
         if (!pre)
             throw new Error("The constructor " + ctor + " is not bound to an url");
-        pre += Db.internal.IdGenerator.next();
+        pre += '/' + Db.internal.IdGenerator.next();
         return pre;
     };
     return Db;
@@ -58,8 +78,6 @@ var Db = (function () {
 var Db;
 (function (Db) {
     Db.serverMode = false;
-    // TODO can't be like this, but ok for now
-    Db.def = new Db();
     function str() {
         var ret = new internal.ValueEvent();
         return ret;
@@ -92,6 +110,10 @@ var Db;
         return ret;
     }
     Db.referenceList = referenceList;
+    function entityRoot(c) {
+        return new internal.EntityRoot(c);
+    }
+    Db.entityRoot = entityRoot;
     function strList() {
         var ret = new internal.ListEvent();
         return ret;
@@ -756,6 +778,53 @@ var Db;
             return AddedListEvent;
         })(ValueEvent);
         internal.AddedListEvent = AddedListEvent;
+        var EntityRoot = (function () {
+            function EntityRoot(ctor) {
+                this.instances = {};
+                this.ctor = ctor;
+            }
+            EntityRoot.prototype.composeMyUrl = function () {
+                if (!this.name || !this.db)
+                    return;
+                var url = this.db.baseUrl;
+                if (url.charAt(url.length - 1) !== '/')
+                    url += '/';
+                url += this.name;
+                this.url = url;
+            };
+            EntityRoot.prototype.dbInit = function (db) {
+                this.db = db;
+                this.composeMyUrl();
+                //this.url = db.baseUrl + '/' + this.name;
+            };
+            EntityRoot.prototype.named = function (name) {
+                if (this.name)
+                    return;
+                this.name = name;
+                this.composeMyUrl();
+                //if (this.db) this.url = this.db.baseUrl + '/' + this.name;
+                return this;
+            };
+            EntityRoot.prototype.load = function (id) {
+                if (id.indexOf(this.url) === 0)
+                    id = id.substring(this.url.length);
+                if (id.indexOf(this.name) === 0)
+                    id = id.substring(this.name.length);
+                if (id.charAt(0) === '/')
+                    id = id.substring(1);
+                var ret = this.instances[id];
+                if (ret) {
+                    return ret;
+                }
+                ret = new this.ctor();
+                ret.dbInit(this.url + '/' + id, this.db);
+                // TODO register for cancellation
+                this.instances[id] = ret;
+                return ret;
+            };
+            return EntityRoot;
+        })();
+        internal.EntityRoot = EntityRoot;
         var ListEvent = (function (_super) {
             __extends(ListEvent, _super);
             function ListEvent() {
