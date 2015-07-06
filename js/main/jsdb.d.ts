@@ -3,32 +3,32 @@
 declare module 'jsdb' {
     export = Db;
     class Db {
+            baseUrl: string;
             setSocket(socket: SocketIO.Socket): void;
             sendOnSocket(url: string, payload: any): void;
-            load(url: string): Db.Entity;
-            register(baseUrl: string, ctor: new () => Db.Entity): void;
+            load<T extends Db.Entity>(url: string): T;
             computeUrl(inst: Db.Entity): string;
     }
     module Db {
             var serverMode: boolean;
-            var def: Db;
             function str(): internal.IValueEvent<string>;
             function num(): internal.IValueEvent<number>;
             function data<V extends Data>(c: new () => V): internal.IValueEvent<V>;
             function reference<V extends Entity>(c: new () => V): internal.IValueEvent<V>;
             function dataList<V extends Data>(c: new () => V): internal.IListEvent<V>;
             function referenceList<V extends Entity>(c: new () => V): internal.IListEvent<V>;
+            function entityRoot<V extends Entity>(c: new () => V): internal.IEntityRoot<V>;
             function strList(): internal.IListEvent<string>;
             function numList(): internal.IListEvent<number>;
             class Entity {
                     url: string;
                     protected db: Db;
-                    events: any;
                     dbInit(url: string, db: Db): void;
                     equals(oth: Entity): boolean;
                     getId(): string;
                     serializeProjections(url: string, projections?: any): void;
                     protected callRemoteMethod(name: string, params: any[]): void;
+                    getPromise<T>(def: string): Promise<T>;
             }
             class Data {
                     url: string;
@@ -38,8 +38,7 @@ declare module 'jsdb' {
                     static readRef(data: any, db: Db): Entity;
             }
             module internal {
-                    interface IEvent<V> {
-                            named(name: string): IEvent<V>;
+                    interface IEventListen<V> {
                             on(ctx: any, handler: {
                                     (data?: V, detail?: IEventDetails<V>): void;
                             }): any;
@@ -49,15 +48,32 @@ declare module 'jsdb' {
                             off(ctx: any): any;
                             hasHandlers(): boolean;
                     }
-                    interface IValueEvent<V> extends IEvent<V> {
+                    interface IEvent<V> extends IEventListen<V> {
+                            named(name: string): IEvent<V>;
+                    }
+                    interface IValueEvent<V> extends IEvent<V>, Thenable<V> {
                             named(name: string): IValueEvent<V>;
                             broadcast(val: V): void;
+                            promise(): Promise<V>;
+                            preLoad(f: (promise: Promise<V>) => void): IValueEvent<V>;
+                            preLoad(bind: any): IValueEvent<V>;
+                    }
+                    interface IArrayValueEvent<V> extends IEvent<V[]>, Thenable<V[]> {
+                            named(name: string): IArrayValueEvent<V>;
+                            promise(): Promise<V[]>;
+                            preLoad(f: (promise: Promise<V[]>) => void): IArrayValueEvent<V>;
+                            preLoad(bind: any): IArrayValueEvent<V>;
+                    }
+                    interface IEntityRoot<T> {
+                            load(id: string): T;
+                            named(name: string): IEntityRoot<T>;
                     }
                     interface IListEvent<T> {
                             add: IValueEvent<T>;
                             remove: IEvent<T>;
                             modify: IEvent<T>;
                             all: IEvent<T>;
+                            full: IArrayValueEvent<T>;
                             named(name: string): IListEvent<T>;
                             subQuery(): IListEvent<T>;
                             sortOn(field: string, desc?: boolean): IListEvent<T>;
@@ -112,6 +128,8 @@ declare module 'jsdb' {
                             decomission(remove: boolean): boolean;
                             handle(evd: EventDetails<T>): void;
                     }
+                    class IsEvent {
+                    }
                     /**
                         * Db based event.
                         *
@@ -128,7 +146,7 @@ declare module 'jsdb' {
                         * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
                         *
                         */
-                    class Event<T> implements IEvent<T> {
+                    class Event<T> extends IsEvent implements IEvent<T> {
                             /**
                                 * Name on DB.
                                 */
@@ -153,22 +171,30 @@ declare module 'jsdb' {
                                 * If this is a ref
                                 */
                             _isRef: boolean;
+                            _preload: (p: Promise<T>) => Promise<any>;
+                            _entity: Entity;
                             events: string[];
                             protected projVal: T;
                             hrefIniter: (h: EventHandler<T>) => void;
                             constructor();
                             named(name: string): Event<T>;
                             objD(c: new () => Data): Event<T>;
+                            preLoad(f: (promise: Promise<T>) => Promise<any>): any;
+                            preLoad(f: {
+                                    [index: string]: string;
+                            }): any;
                             /**
                                 * Called by the ObjC when the url is set.
                                 */
-                            dbInit(url: string, db: Db): void;
+                            dbInit(url: string, db: Db, entity: Entity): void;
                             on(ctx: any, handler: {
                                     (data?: T, detail?: EventDetails<T>): void;
                             }): void;
                             once(ctx: any, handler: {
                                     (data?: T, detail?: EventDetails<T>): void;
                             }): void;
+                            promise(): Promise<T>;
+                            then<U>(onFulfilled: (value: T) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Promise<U>;
                             offHandler(h: EventHandler<T>): void;
                             protected init(h: EventHandler<T>): void;
                             protected setupHref(h: EventHandler<T>): void;
@@ -182,10 +208,22 @@ declare module 'jsdb' {
                     class ValueEvent<T> extends Event<T> implements IValueEvent<T> {
                             broadcast(val: T): void;
                             named(name: string): ValueEvent<T>;
+                            preLoad(f: (promise: Promise<T>) => Promise<any>): any;
+                            preLoad(f: {
+                                    [index: string]: string;
+                            }): any;
                             protected checkBroadcast(): void;
                             protected save(val: T): void;
                             protected serializeForSave(val: T): any;
-                            dbInit(url: string, db: Db): void;
+                            dbInit(url: string, db: Db, entity: Entity): void;
+                    }
+                    class ArrayValueEvent<T> extends Event<T[]> implements IArrayValueEvent<T> {
+                            named(name: string): ArrayValueEvent<T>;
+                            parseValue(val: any, url?: string): any;
+                            preLoad(f: (promise: Promise<T[]>) => Promise<any>): any;
+                            preLoad(f: {
+                                    [index: string]: string;
+                            }): any;
                     }
                     class AddedListEvent<T> extends ValueEvent<T> {
                             constructor();
@@ -193,13 +231,28 @@ declare module 'jsdb' {
                             protected init(h: EventHandler<T>): void;
                             protected save(val: T): void;
                     }
-                    class ListEvent<T> implements IListEvent<T> {
+                    class EntityRoot<T extends Db.Entity> implements IEntityRoot<T> {
+                            ctor: new () => T;
+                            db: Db;
+                            url: string;
+                            name: string;
+                            instances: {
+                                    [index: string]: T;
+                            };
+                            constructor(ctor: new () => T);
+                            dbInit(db: Db): void;
+                            named(name: string): EntityRoot<T>;
+                            load(id: string): T;
+                    }
+                    class ListEvent<T> extends IsEvent implements IListEvent<T> {
                             add: AddedListEvent<T>;
                             remove: Event<T>;
                             modify: Event<T>;
                             all: Event<T>;
+                            full: ArrayValueEvent<T>;
                             protected _url: string;
                             protected _db: Db;
+                            protected _entity: Entity;
                             protected _ctorD: new () => Data;
                             constructor();
                             named(name: string): ListEvent<T>;
@@ -207,13 +260,13 @@ declare module 'jsdb' {
                             /**
                                 * Called by the ObjC when the url is set.
                                 */
-                            dbInit(url: string, db: Db): void;
+                            dbInit(url: string, db: Db, entity: Entity): void;
                             subQuery(): ListEvent<T>;
                             sortOn(field: string, desc?: boolean): ListEvent<T>;
                             limit(limit: number): ListEvent<T>;
                             range(from: any, to: any): ListEvent<T>;
                             equals(val: any): ListEvent<T>;
-                            protected setupHref(h: EventHandler<T>): void;
+                            protected setupHref(h: EventHandler<T | T[]>): void;
                     }
                     interface EventDetachable {
                             eventAttached(event: Event<any>): any;
