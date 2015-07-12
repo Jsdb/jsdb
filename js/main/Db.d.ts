@@ -33,7 +33,7 @@ declare module Db {
         getPromise<T>(def: string): Promise<T>;
     }
     class Data {
-        url: string;
+        _url: string;
         parse(url: string, obj: any, db: Db): void;
         serialize(db?: Db, ret?: any, projections?: any): any;
         static isRef(data: any): boolean;

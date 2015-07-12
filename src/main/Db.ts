@@ -166,6 +166,9 @@ module Db {
 		}
 		
 		getPromise<T>(def :string) :Promise<T> {
+			if (def == 'this') {
+				return Promise.resolve(<T><any>this);
+			}
 			var subd = def.split('.');
 			var rest = null;
 			if (subd.length > 1) {
@@ -185,10 +188,10 @@ module Db {
 	}
 	
 	export class Data {
-		url: string;
+		_url: string;
 		
 		parse(url:string, obj :any, db :Db) {
-			this.url = url;
+			this._url = url;
 			var ks = Object.keys(obj);
 			for (var i = 0; i < ks.length; i++) {
 				var k = ks[i];
@@ -204,12 +207,11 @@ module Db {
 			var ks = Object.keys(this);
 			for (var i = 0; i < ks.length; i++) {
 				var k = ks[i];
-				if (k == 'url') continue;
 				if (k.charAt(0) == '_') continue;
 				var v = this[k];
 				if (v instanceof Entity) {
 					if (db) (<Entity>v).dbInit(null,db);
-					(<Entity>v).serializeProjections(this.url, projections[k]);
+					(<Entity>v).serializeProjections(this._url, projections[k]);
 					v = {
 						_ref: (<Entity>v).url
 					};
@@ -845,8 +847,8 @@ module Db {
 				} else if (val instanceof Data) {
 					// For objD they don't have an id, if it was previously saved here we update it, otherwise it's considered new
 					var objd = (<Data><any>val);
-					if (objd.url && objd.url.indexOf(this.url) == 0 && objd.url.substring(this.url.length).indexOf('/') == -1) {
-						new Firebase(objd.url).set(ser);
+					if (objd._url && objd._url.indexOf(this.url) == 0 && objd._url.substring(this.url.length).indexOf('/') == -1) {
+						new Firebase(objd._url).set(ser);
 					} else {
 						ref.child(IdGenerator.next()).set(ser);
 					}
