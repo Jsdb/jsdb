@@ -31,13 +31,14 @@ class WithRef extends Db.Entity<WithRef> {
 }
 
 class WithCollections extends Db.Entity<WithCollections> {
-	//list = Db.list(SubEntity);
+	list = Db.list(SubEntity);
 }
 
 class TestDb extends Db {
 	withProps = Db.entityRoot(WithProps);
 	withSubs = Db.entityRoot(WithSubentity);
 	withRefs = Db.entityRoot(WithRef);
+	withCols = Db.entityRoot(WithCollections);
 	
 	constructor() {
 		super(baseUrl);
@@ -59,6 +60,9 @@ describe('Db Tests', () => {
 	var wr1Fb :Firebase;
 	var wr2Fb :Firebase;
 	
+	var wcFb :Firebase;
+	var wc1Fb :Firebase;
+	var wc2Fb :Firebase;
 	
 	
 	beforeEach(function (done) {
@@ -125,6 +129,40 @@ describe('Db Tests', () => {
 			ref: {
 				_ref: wp1Fb.toString()
 			}
+		}, opCnter);
+		
+
+		wcFb = new Firebase(baseUrl + '/withCols');
+		wc1Fb = wcFb.child('wc1');
+		opcnt++;
+		wc1Fb.set({
+			list: [
+				{
+					str: 'Sub1'
+				},
+				{
+					str: 'Sub2'
+				},
+				{
+					str: 'Sub3'
+				}
+			]
+		}, opCnter);
+
+		wc2Fb = wcFb.child('wc2');
+		opcnt++;
+		wc2Fb.set({
+			list: [
+				{
+					str: 'Sub1'
+				},
+				{
+					str: 'Sub2'
+				},
+				{
+					str: 'Sub3'
+				}
+			]
 		}, opCnter);
 		
 		
@@ -238,7 +276,57 @@ describe('Db Tests', () => {
 		
 	});
 	
-	// TODO collections
+	it('should report each element in list as an add event',(done) => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+		wc1.list.add.on(this, (det) => {
+			//console.log("Received event",det);
+			if (det.listEnd) {
+				M.assert("Loaded all elements").when(dets).is(M.withLength(3));
+				for (var i = 0; i < dets.length; i++) {
+					M.assert("Right type").when(dets[i].payload).is(M.instanceOf(SubEntity));
+					M.assert("Right deserialization").when(dets[i].payload.str).is("Sub" + (i+1));
+				}
+				det.offMe();
+				done();
+			} else {
+				dets.push(det);
+			}
+		});
+		
+	});
+	
+	it('should report new elements in list with an add event',(done) => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		//var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+		var state = 0;
+		wc1.list.add.on(this, (det) => {
+			//console.log("Received event on state " + state,det);
+			if (det.listEnd) {
+				state = 1;
+				wc1Fb.child('list/3').set({str:'Sub4'});
+			} else {
+				if (state == 1) {
+					state = 2;
+					M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
+					M.assert("Right deserialization").when(det.payload.str).is("Sub4");
+					done();
+				}
+			}
+		});
+		
+	});
+	
+	
+	// TODO list removal and change events
+	
+	// TODO access to list value array
+	
+	// TODO test map
+	
+	// TODO collections of references
 	
 	// TODO preload
 	
@@ -253,6 +341,8 @@ describe('Db Tests', () => {
 	// TODO write entity in entity, as full object
 	
 	// TODO read and write entity in entity, as reference
+	
+	// TODO write collections
 	
 	// TODO cache cleaning
 	

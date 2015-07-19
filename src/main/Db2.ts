@@ -13,7 +13,7 @@ export = Db;
 class Db {
 	baseUrl :string;
 	
-	cache :{[index:string]:Db.Entity<any>} = {};
+	cache :{[index:string]:any} = {};
 	
 	constructor(baseUrl :string) {
 		this.baseUrl = baseUrl;
@@ -28,16 +28,33 @@ class Db {
 		}
 	}
 	
-	load<T>(url :string) :Db.Entity<T> {
+	// TODO make sure everything pass thru here
+	load<T>(url :string, ctor? :new() => T, val? :any) :T {
 		var ret = this.cache[url];
 		if (ret) return ret;
-		var ks = Object.keys(this);
-		for (var i = 0; i < ks.length; i++) {
-			if (!(this[ks[i]] instanceof Db.internal.EntityRoot)) continue;
-			var er = (<Db.internal.EntityRoot<any>>this[ks[i]]);
-			if (url.indexOf(er.url) === 0) return er.load(url);
+		if (!ctor) {
+			var ks = Object.keys(this);
+			for (var i = 0; i < ks.length; i++) {
+				if (!(this[ks[i]] instanceof Db.internal.EntityRoot)) continue;
+				var er = (<Db.internal.EntityRoot<any>>this[ks[i]]);
+				if (url.indexOf(er.url) === 0) {
+					ctor = er.constr;
+					break;
+				}
+			}
 		}
-		throw "The url " + url + " is not bound by an entity root";
+		if (!ctor) {
+			throw "The url " + url + " is not bound by an entity root";
+		}
+		var inst = <any>new ctor();
+		if (inst.dbInit) {
+			inst.dbInit(url, this);
+		} else if (inst.load && inst.load.dbInit) {
+			inst.load.dbInit(url, this);
+		}
+		// TODO parse the value, in a way similar to dbInit
+		this.cache[url] = inst;
+		return inst;
 	}
 	
 	reset() {
@@ -64,6 +81,10 @@ module Db {
 	export function reference<E extends Entity<any>>(c :new ()=>E) : internal.IReference<E> {
 		var ret = new internal.ReferenceImpl<E>();
 		return ret;
+	}
+	
+	export function list<E extends Entity<any>>(c :new ()=>E) : internal.IList<E> {
+		return new internal.ListImpl<E>(c);
 	}
 	
 	export class Entity<R> {
@@ -130,6 +151,22 @@ module Db {
 			offMe():void;
 		}
 
+		export interface ICollection<E> {
+			// TODO load with specific event
+			add :IEvent<E>;
+			//remove :IEvent<E>;
+			//modify :IEvent<E>;
+		}
+		
+		export interface IList<E> extends ICollection<E> {
+			value :E[];
+		}
+		
+		export interface IMap<E> extends ICollection<E> {
+			value : {[index:string]:E};
+		}
+		
+		
 		export class EntityRoot<E extends Entity<any>> implements IEntityRoot<E> {
 			constr :new() => E = null;
 			db :Db = null;
@@ -157,12 +194,7 @@ module Db {
 				if (url.indexOf(this.url) === -1) {
 					url = this.url + url;
 				}
-				var ret = <E>this.db.cache[url];
-				if (ret) return ret;
-				ret = new this.constr();
-				(<EntityEvent<any>>ret.load).dbInit(url, this.db);
-				this.db.cache[url] = ret;
-				return ret;
+				return this.db.load(url, this.constr);
 			}
 			
 			
@@ -425,8 +457,16 @@ module Db {
 				var ks = Object.keys(this.myEntity);
 				for (var i = 0; i < ks.length; i++) {
 					var se = this.myEntity[ks[i]];
-					if (!(se instanceof Entity)) continue;
-					EntityEvent.getEventFor(se).dbInit(url +'/' + ks[i], db);
+					if (se == null) continue;
+					// Avoid looping on myself
+					if (se === this) continue;
+					if (typeof se === 'object') {
+						if (se.dbInit) {
+							se.dbInit(url +'/' + ks[i], db);
+						} else if (se.load && se.load != null && se.load.dbInit) {
+							se.load.dbInit(url +'/' + ks[i], db);
+						}
+					}
 				}
 			}
 
@@ -463,6 +503,8 @@ module Db {
 					console.log("No _ref for reference in ", val, url);
 					return;
 				}
+				// TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
+				// TODO passing value here can make projections
 				(<ReferenceImpl<any>>this.myEntity).value = this.db.load(val._ref);
 				return <T><any>this.myEntity;
 			}
@@ -472,9 +514,64 @@ module Db {
 		
 		export class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
 			load = new ReferenceEvent<IReference<E>>(this);
-			
 			value: E = null;
+		}
+		
+		export class CollectionEntityEvent<E> extends Event<E> { 
+			ctor :new ()=>E;
 			
+			constructor(c :new ()=>E) {
+				super();
+				this.ctor = c;
+			}
+			
+			parseValue(val, url? :string):E {
+				// TODO should pass val here, for projections and to handle refs
+				var e = this.db.load(url, this.ctor);
+				//var e = new this.ctor();
+				var ev = EntityEvent.getEventFor(e);
+				ev.parseValue(val, url);
+				return e;
+			}
+		}
+		
+		export class CollectionAddedEntityEvent<E> extends CollectionEntityEvent<E> {
+			constructor(c :new ()=>E) {
+				super(c);
+				this.events = ['child_added'];
+			}
+			
+			protected init(h :EventHandler<E>) {
+				this.hrefIniter(h);
+				for (var i = 0; i < this.events.length; i++) {
+					this.setupEvent(h, this.events[i]);
+				}
+				h._ref.once('value', (ds) => {
+					var evd = new EventDetails<E>();
+					evd.listEnd = true;
+					h.handle(evd);
+					h.first = false
+				});
+			}
+
+			
+		}
+		
+		export class CollectionImpl<E> implements ICollection<E> {
+			add :CollectionEntityEvent<E> = null;
+			
+			constructor(c :new ()=>E) {
+				this.add = new CollectionAddedEntityEvent<E>(c);
+			}
+			
+			dbInit(url :string, db :Db) {
+				this.add.dbInit(url, db);
+			}
+		}
+		
+		export class ListImpl<E> extends CollectionImpl<E> implements IList<E> {
+			// TODO implement correct value handling
+			value = [];
 		}
 
 		export interface EventDetachable {

@@ -22,19 +22,36 @@ var Db = (function () {
             er.initDb(this);
         }
     };
-    Db.prototype.load = function (url) {
+    // TODO make sure everything pass thru here
+    Db.prototype.load = function (url, ctor, val) {
         var ret = this.cache[url];
         if (ret)
             return ret;
-        var ks = Object.keys(this);
-        for (var i = 0; i < ks.length; i++) {
-            if (!(this[ks[i]] instanceof Db.internal.EntityRoot))
-                continue;
-            var er = this[ks[i]];
-            if (url.indexOf(er.url) === 0)
-                return er.load(url);
+        if (!ctor) {
+            var ks = Object.keys(this);
+            for (var i = 0; i < ks.length; i++) {
+                if (!(this[ks[i]] instanceof Db.internal.EntityRoot))
+                    continue;
+                var er = this[ks[i]];
+                if (url.indexOf(er.url) === 0) {
+                    ctor = er.constr;
+                    break;
+                }
+            }
         }
-        throw "The url " + url + " is not bound by an entity root";
+        if (!ctor) {
+            throw "The url " + url + " is not bound by an entity root";
+        }
+        var inst = new ctor();
+        if (inst.dbInit) {
+            inst.dbInit(url, this);
+        }
+        else if (inst.load && inst.load.dbInit) {
+            inst.load.dbInit(url, this);
+        }
+        // TODO parse the value, in a way similar to dbInit
+        this.cache[url] = inst;
+        return inst;
     };
     Db.prototype.reset = function () {
         for (var url in this.cache) {
@@ -60,6 +77,10 @@ var Db;
         return ret;
     }
     Db.reference = reference;
+    function list(c) {
+        return new internal.ListImpl(c);
+    }
+    Db.list = list;
     var Entity = (function () {
         function Entity() {
             this.load = new internal.EntityEvent(this);
@@ -109,13 +130,7 @@ var Db;
                 if (url.indexOf(this.url) === -1) {
                     url = this.url + url;
                 }
-                var ret = this.db.cache[url];
-                if (ret)
-                    return ret;
-                ret = new this.constr();
-                ret.load.dbInit(url, this.db);
-                this.db.cache[url] = ret;
-                return ret;
+                return this.db.load(url, this.constr);
             };
             EntityRoot.prototype.save = function (entity) {
                 // TODO implement
@@ -331,9 +346,19 @@ var Db;
                 var ks = Object.keys(this.myEntity);
                 for (var i = 0; i < ks.length; i++) {
                     var se = this.myEntity[ks[i]];
-                    if (!(se instanceof Entity))
+                    if (se == null)
                         continue;
-                    EntityEvent.getEventFor(se).dbInit(url + '/' + ks[i], db);
+                    // Avoid looping on myself
+                    if (se === this)
+                        continue;
+                    if (typeof se === 'object') {
+                        if (se.dbInit) {
+                            se.dbInit(url + '/' + ks[i], db);
+                        }
+                        else if (se.load && se.load != null && se.load.dbInit) {
+                            se.load.dbInit(url + '/' + ks[i], db);
+                        }
+                    }
                 }
             };
             EntityEvent.prototype.parseValue = function (val, url) {
@@ -371,6 +396,8 @@ var Db;
                     console.log("No _ref for reference in ", val, url);
                     return;
                 }
+                // TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
+                // TODO passing value here can make projections
                 this.myEntity.value = this.db.load(val._ref);
                 return this.myEntity;
             };
@@ -387,6 +414,65 @@ var Db;
             return ReferenceImpl;
         })(Entity);
         internal.ReferenceImpl = ReferenceImpl;
+        var CollectionEntityEvent = (function (_super) {
+            __extends(CollectionEntityEvent, _super);
+            function CollectionEntityEvent(c) {
+                _super.call(this);
+                this.ctor = c;
+            }
+            CollectionEntityEvent.prototype.parseValue = function (val, url) {
+                // TODO should pass val here, for projections and to handle refs
+                var e = this.db.load(url, this.ctor);
+                //var e = new this.ctor();
+                var ev = EntityEvent.getEventFor(e);
+                ev.parseValue(val, url);
+                return e;
+            };
+            return CollectionEntityEvent;
+        })(Event);
+        internal.CollectionEntityEvent = CollectionEntityEvent;
+        var CollectionAddedEntityEvent = (function (_super) {
+            __extends(CollectionAddedEntityEvent, _super);
+            function CollectionAddedEntityEvent(c) {
+                _super.call(this, c);
+                this.events = ['child_added'];
+            }
+            CollectionAddedEntityEvent.prototype.init = function (h) {
+                this.hrefIniter(h);
+                for (var i = 0; i < this.events.length; i++) {
+                    this.setupEvent(h, this.events[i]);
+                }
+                h._ref.once('value', function (ds) {
+                    var evd = new EventDetails();
+                    evd.listEnd = true;
+                    h.handle(evd);
+                    h.first = false;
+                });
+            };
+            return CollectionAddedEntityEvent;
+        })(CollectionEntityEvent);
+        internal.CollectionAddedEntityEvent = CollectionAddedEntityEvent;
+        var CollectionImpl = (function () {
+            function CollectionImpl(c) {
+                this.add = null;
+                this.add = new CollectionAddedEntityEvent(c);
+            }
+            CollectionImpl.prototype.dbInit = function (url, db) {
+                this.add.dbInit(url, db);
+            };
+            return CollectionImpl;
+        })();
+        internal.CollectionImpl = CollectionImpl;
+        var ListImpl = (function (_super) {
+            __extends(ListImpl, _super);
+            function ListImpl() {
+                _super.apply(this, arguments);
+                // TODO implement correct value handling
+                this.value = [];
+            }
+            return ListImpl;
+        })(CollectionImpl);
+        internal.ListImpl = ListImpl;
     })(internal = Db.internal || (Db.internal = {}));
 })(Db || (Db = {}));
 module.exports = Db;

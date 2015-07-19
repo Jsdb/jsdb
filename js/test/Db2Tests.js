@@ -47,6 +47,7 @@ var WithCollections = (function (_super) {
     __extends(WithCollections, _super);
     function WithCollections() {
         _super.apply(this, arguments);
+        this.list = Db.list(SubEntity);
     }
     return WithCollections;
 })(Db.Entity);
@@ -57,6 +58,7 @@ var TestDb = (function (_super) {
         this.withProps = Db.entityRoot(WithProps);
         this.withSubs = Db.entityRoot(WithSubentity);
         this.withRefs = Db.entityRoot(WithRef);
+        this.withCols = Db.entityRoot(WithCollections);
         _super.prototype.init.call(this);
     }
     return TestDb;
@@ -71,6 +73,9 @@ describe('Db Tests', function () {
     var wrFb;
     var wr1Fb;
     var wr2Fb;
+    var wcFb;
+    var wc1Fb;
+    var wc2Fb;
     beforeEach(function (done) {
         this.timeout(100000);
         defDb.reset();
@@ -129,6 +134,37 @@ describe('Db Tests', function () {
             ref: {
                 _ref: wp1Fb.toString()
             }
+        }, opCnter);
+        wcFb = new Firebase(baseUrl + '/withCols');
+        wc1Fb = wcFb.child('wc1');
+        opcnt++;
+        wc1Fb.set({
+            list: [
+                {
+                    str: 'Sub1'
+                },
+                {
+                    str: 'Sub2'
+                },
+                {
+                    str: 'Sub3'
+                }
+            ]
+        }, opCnter);
+        wc2Fb = wcFb.child('wc2');
+        opcnt++;
+        wc2Fb.set({
+            list: [
+                {
+                    str: 'Sub1'
+                },
+                {
+                    str: 'Sub2'
+                },
+                {
+                    str: 'Sub3'
+                }
+            ]
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
         root.on('value', function () {
@@ -227,7 +263,49 @@ describe('Db Tests', function () {
             done();
         });
     });
-    // TODO collections
+    it('should report each element in list as an add event', function (done) {
+        var wc1 = defDb.withCols.load('wc1');
+        var dets = [];
+        wc1.list.add.on(_this, function (det) {
+            //console.log("Received event",det);
+            if (det.listEnd) {
+                M.assert("Loaded all elements").when(dets).is(M.withLength(3));
+                for (var i = 0; i < dets.length; i++) {
+                    M.assert("Right type").when(dets[i].payload).is(M.instanceOf(SubEntity));
+                    M.assert("Right deserialization").when(dets[i].payload.str).is("Sub" + (i + 1));
+                }
+                det.offMe();
+                done();
+            }
+            else {
+                dets.push(det);
+            }
+        });
+    });
+    it('should report new elements in list with an add event', function (done) {
+        var wc1 = defDb.withCols.load('wc1');
+        //var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+        var state = 0;
+        wc1.list.add.on(_this, function (det) {
+            //console.log("Received event on state " + state,det);
+            if (det.listEnd) {
+                state = 1;
+                wc1Fb.child('list/3').set({ str: 'Sub4' });
+            }
+            else {
+                if (state == 1) {
+                    state = 2;
+                    M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
+                    M.assert("Right deserialization").when(det.payload.str).is("Sub4");
+                    done();
+                }
+            }
+        });
+    });
+    // TODO list removal and change events
+    // TODO access to list value array
+    // TODO test map
+    // TODO collections of references
     // TODO preload
     // TODO read a sub entity as reference
     // TODO right now references to other entity su entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
@@ -235,6 +313,7 @@ describe('Db Tests', function () {
     // TODO write new entity
     // TODO write entity in entity, as full object
     // TODO read and write entity in entity, as reference
+    // TODO write collections
     // TODO cache cleaning
 });
 //# sourceMappingURL=Db2Tests.js.map

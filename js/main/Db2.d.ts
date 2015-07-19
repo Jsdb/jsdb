@@ -3,17 +3,18 @@ export = Db;
 declare class Db {
     baseUrl: string;
     cache: {
-        [index: string]: Db.Entity<any>;
+        [index: string]: any;
     };
     constructor(baseUrl: string);
     init(): void;
-    load<T>(url: string): Db.Entity<T>;
+    load<T>(url: string, ctor?: new () => T, val?: any): T;
     reset(): void;
 }
 declare module Db {
     function entityRoot<E extends Entity<any>>(c: new () => E): internal.IEntityRoot<E>;
     function embedded<E extends Entity<any>>(c: new () => E): E;
     function reference<E extends Entity<any>>(c: new () => E): internal.IReference<E>;
+    function list<E extends Entity<any>>(c: new () => E): internal.IList<E>;
     class Entity<R> {
         load: internal.IEvent<R>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
@@ -51,6 +52,17 @@ declare module Db {
             originalKey: string;
             precedingKey: string;
             offMe(): void;
+        }
+        interface ICollection<E> {
+            add: IEvent<E>;
+        }
+        interface IList<E> extends ICollection<E> {
+            value: E[];
+        }
+        interface IMap<E> extends ICollection<E> {
+            value: {
+                [index: string]: E;
+            };
         }
         class EntityRoot<E extends Entity<any>> implements IEntityRoot<E> {
             constr: new () => E;
@@ -143,6 +155,23 @@ declare module Db {
         class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
             load: any;
             value: E;
+        }
+        class CollectionEntityEvent<E> extends Event<E> {
+            ctor: new () => E;
+            constructor(c: new () => E);
+            parseValue(val: any, url?: string): E;
+        }
+        class CollectionAddedEntityEvent<E> extends CollectionEntityEvent<E> {
+            constructor(c: new () => E);
+            protected init(h: EventHandler<E>): void;
+        }
+        class CollectionImpl<E> implements ICollection<E> {
+            add: CollectionEntityEvent<E>;
+            constructor(c: new () => E);
+            dbInit(url: string, db: Db): void;
+        }
+        class ListImpl<E> extends CollectionImpl<E> implements IList<E> {
+            value: any[];
         }
         interface EventDetachable {
             eventAttached(event: Event<any>): any;
