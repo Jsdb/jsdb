@@ -49,10 +49,10 @@ class Db {
 		var inst = <any>new ctor();
 		if (inst.dbInit) {
 			inst.dbInit(url, this);
-		} else if (inst.load && inst.load.dbInit) {
+		}
+		if (inst.load && inst.load.dbInit) {
 			inst.load.dbInit(url, this);
 		}
-		// TODO parse the value, in a way similar to dbInit
 		this.cache[url] = inst;
 		return inst;
 	}
@@ -69,37 +69,37 @@ class Db {
 
 module Db {
 	
-	export function entityRoot<E extends Entity<any>>(c :new ()=>E) :internal.IEntityRoot<E> {
+	export function entityRoot<E extends Entity>(c :new ()=>E) :internal.IEntityRoot<E> {
 		return new internal.EntityRoot(c);
 	}
 	
-	export function embedded<E extends Entity<any>>(c :new ()=>E) : E {
+	export function embedded<E extends Entity>(c :new ()=>E) : E {
 		var ret = new c();
 		return ret;
 	}
 	
-	export function reference<E extends Entity<any>>(c :new ()=>E) : internal.IReference<E> {
+	export function reference<E extends Entity>(c :new ()=>E) : internal.IReference<E> {
 		var ret = new internal.ReferenceImpl<E>(c);
 		return ret;
 	}
 	
-	export function list<E extends Entity<any>>(c :new ()=>E) : internal.IList<E> {
+	export function referenceBuilder<E extends Entity>(c :new()=>E) : new()=>internal.ReferenceImpl<E> {
+		return <new() => internal.ReferenceImpl<E>><any>(function() {
+			return new internal.ReferenceImpl<E>(c);
+		});
+	}
+	
+	export function list<E extends Entity>(c :new ()=>E) : internal.IList<E> {
 		return new internal.ListImpl<E>(c);
 	}
 	
-	export function referenceList<E extends Entity<any>>(c :new() => E) : internal.IList<internal.IReference<E>> {
-		return list(<new() => internal.ReferenceImpl<E>><any>(function() {
-			return new internal.ReferenceImpl<E>(c);
-		}));
-	}
-	
-	export class Entity<R> {
-		load :internal.IEvent<R> = new internal.EntityEvent<R>(this);
+	export class Entity {
+		load :internal.IEvent<any> = new internal.EntityEvent<any>(this);
 		
 		
-		then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
-		then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
-		then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => any): Thenable<U> {
+		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
+		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => any): Thenable<U> {
 			var fu :(data:U|Thenable<U>)=>void = null;
 			var ret = new Promise<U>((res,err) => {
 				fu = res;
@@ -115,21 +115,19 @@ module Db {
 			});
 			return ret;
 		}
-		
-		
 
 	}
 	
 	export module internal {
 		
-		export interface IEntityRoot<E extends Entity<any>> {
+		export interface IEntityRoot<E extends Entity> {
 			named(name :string):IEntityRoot<E>;
 			
 			load(id:string):E;
 			save(entity :E);
 		}
 		
-		export interface IReference<E extends Entity<any>> {
+		export interface IReference<E extends Entity> {
 			load :IEvent<IReference<E>>;
 			value :E;
 			then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
@@ -173,7 +171,7 @@ module Db {
 		}
 		
 		
-		export class EntityRoot<E extends Entity<any>> implements IEntityRoot<E> {
+		export class EntityRoot<E extends Entity> implements IEntityRoot<E> {
 			constr :new() => E = null;
 			db :Db = null;
 			//instances :{[index:string]:E} = {};
@@ -448,12 +446,12 @@ module Db {
 		export class EntityEvent<T> extends Event<T> {
 			
 			static getEventFor<T>(x:T):EntityEvent<T> {
-				return (<EntityEvent<T>>(<Entity<T>><any>x).load);
+				return (<EntityEvent<T>>(<Entity><any>x).load);
 			}
 			
-			myEntity :Entity<T> = null;
+			myEntity :T = null;
 			
-			constructor(myEntity :Entity<T>) {
+			constructor(myEntity :T) {
 				super();
 				this.myEntity = myEntity;
 			}
@@ -495,14 +493,12 @@ module Db {
 			}
 		}
 		
-		export class ReferenceEvent<T extends ReferenceImpl<any>> extends EntityEvent<T> {
-			myEntity :ReferenceImpl<T> = null;
-			
+		export class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
 			constructor(myEntity :ReferenceImpl<any>) {
 				super(myEntity);
 			}
 			
-			parseValue(val, url? :string):T {
+			parseValue(val, url? :string):ReferenceImpl<E> {
 				if (!val) {
 					console.log("Value is ", val, url);
 					return;
@@ -514,15 +510,15 @@ module Db {
 				// TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
 				// TODO passing value here can make projections
 				this.myEntity.value = this.db.load(val._ref,this.myEntity._ctor);
-				return <T><any>this.myEntity;
+				return this.myEntity;
 			}
 
 		}
 
 		
-		export class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
+		export class ReferenceImpl<E extends Entity> extends Entity {
 			_ctor : new() => E;
-			load = new ReferenceEvent<ReferenceImpl<E>>(this);
+			load = new ReferenceEvent<E>(this);
 			value: E = null;
 			constructor(c : new() => E) {
 				super();

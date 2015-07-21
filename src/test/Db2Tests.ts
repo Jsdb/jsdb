@@ -7,7 +7,7 @@ import M = require('tsMatchers');
 
 var baseUrl :string = "https://swashp.firebaseio.com/test2/"
 
-class WithProps extends Db.Entity<WithProps> {
+class WithProps extends Db.Entity {
 	str :string;
 	num :number;
 	arr :number[];
@@ -16,21 +16,21 @@ class WithProps extends Db.Entity<WithProps> {
 	}
 }
 
-class SubEntity extends Db.Entity<SubEntity> {
+class SubEntity extends Db.Entity {
 	str :string;
 }
 
-class WithSubentity extends Db.Entity<WithSubentity> {
+class WithSubentity extends Db.Entity {
 	sub = Db.embedded(SubEntity);
 	str :string;
 }
 
-class WithRef extends Db.Entity<WithRef> {
+class WithRef extends Db.Entity {
 	ref = Db.reference(WithProps);
 	str :string;
 }
 
-class WithCollections extends Db.Entity<WithCollections> {
+class WithCollections extends Db.Entity {
 	list = Db.list(SubEntity);
 }
 

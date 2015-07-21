@@ -7,26 +7,27 @@ declare class Db {
     };
     constructor(baseUrl: string);
     init(): void;
-    load<T>(url: string, ctor?: new () => T, val?: any): T;
+    load<T>(url: string, ctor?: new () => T): T;
     reset(): void;
 }
 declare module Db {
-    function entityRoot<E extends Entity<any>>(c: new () => E): internal.IEntityRoot<E>;
-    function embedded<E extends Entity<any>>(c: new () => E): E;
-    function reference<E extends Entity<any>>(c: new () => E): internal.IReference<E>;
-    function list<E extends Entity<any>>(c: new () => E): internal.IList<E>;
-    class Entity<R> {
-        load: internal.IEvent<R>;
-        then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
-        then<U>(onFulfilled?: (value: internal.IEventDetails<R>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
+    function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;
+    function embedded<E extends Entity>(c: new () => E): E;
+    function reference<E extends Entity>(c: new () => E): internal.IReference<E>;
+    function referenceBuilder<E extends Entity>(c: new () => E): new () => internal.ReferenceImpl<E>;
+    function list<E extends Entity>(c: new () => E): internal.IList<E>;
+    class Entity {
+        load: internal.IEvent<any>;
+        then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+        then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
     }
     module internal {
-        interface IEntityRoot<E extends Entity<any>> {
+        interface IEntityRoot<E extends Entity> {
             named(name: string): IEntityRoot<E>;
             load(id: string): E;
             save(entity: E): any;
         }
-        interface IReference<E extends Entity<any>> {
+        interface IReference<E extends Entity> {
             load: IEvent<IReference<E>>;
             value: E;
             then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
@@ -65,7 +66,7 @@ declare module Db {
                 [index: string]: E;
             };
         }
-        class EntityRoot<E extends Entity<any>> implements IEntityRoot<E> {
+        class EntityRoot<E extends Entity> implements IEntityRoot<E> {
             constr: new () => E;
             db: Db;
             name: string;
@@ -144,19 +145,20 @@ declare module Db {
         }
         class EntityEvent<T> extends Event<T> {
             static getEventFor<T>(x: T): EntityEvent<T>;
-            myEntity: Entity<T>;
-            constructor(myEntity: Entity<T>);
+            myEntity: T;
+            constructor(myEntity: T);
             dbInit(url: string, db: Db): void;
             parseValue(val: any, url?: string): T;
         }
-        class ReferenceEvent<T extends ReferenceImpl<any>> extends EntityEvent<T> {
+        class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
             constructor(myEntity: ReferenceImpl<any>);
-            parseValue(val: any, url?: string): T;
+            parseValue(val: any, url?: string): ReferenceImpl<E>;
         }
-        class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
+        class ReferenceImpl<E extends Entity> extends Entity {
             _ctor: new () => E;
-            load: ReferenceEvent<ReferenceImpl<E>>;
+            load: ReferenceEvent<E>;
             value: E;
+            constructor(c: new () => E);
         }
         class CollectionEntityEvent<E> extends Event<E> {
             ctor: new () => E;

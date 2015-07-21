@@ -46,10 +46,9 @@ var Db = (function () {
         if (inst.dbInit) {
             inst.dbInit(url, this);
         }
-        else if (inst.load && inst.load.dbInit) {
+        if (inst.load && inst.load.dbInit) {
             inst.load.dbInit(url, this);
         }
-        // TODO parse the value, in a way similar to dbInit
         this.cache[url] = inst;
         return inst;
     };
@@ -77,16 +76,16 @@ var Db;
         return ret;
     }
     Db.reference = reference;
+    function referenceBuilder(c) {
+        return (function () {
+            return new internal.ReferenceImpl(c);
+        });
+    }
+    Db.referenceBuilder = referenceBuilder;
     function list(c) {
         return new internal.ListImpl(c);
     }
     Db.list = list;
-    function referenceList(c) {
-        return list((function () {
-            return new internal.ReferenceImpl(c);
-        }));
-    }
-    Db.referenceList = referenceList;
     var Entity = (function () {
         function Entity() {
             this.load = new internal.EntityEvent(this);
@@ -392,7 +391,6 @@ var Db;
             __extends(ReferenceEvent, _super);
             function ReferenceEvent(myEntity) {
                 _super.call(this, myEntity);
-                this.myEntity = null;
             }
             ReferenceEvent.prototype.parseValue = function (val, url) {
                 if (!val) {
