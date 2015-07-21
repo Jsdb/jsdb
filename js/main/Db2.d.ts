@@ -55,6 +55,7 @@ declare module Db {
         }
         interface ICollection<E> {
             add: IEvent<E>;
+            remove: IEvent<E>;
         }
         interface IList<E> extends ICollection<E> {
             value: E[];
@@ -153,7 +154,8 @@ declare module Db {
             parseValue(val: any, url?: string): T;
         }
         class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
-            load: any;
+            _ctor: new () => E;
+            load: ReferenceEvent<ReferenceImpl<E>>;
             value: E;
         }
         class CollectionEntityEvent<E> extends Event<E> {
@@ -167,6 +169,7 @@ declare module Db {
         }
         class CollectionImpl<E> implements ICollection<E> {
             add: CollectionEntityEvent<E>;
+            remove: CollectionEntityEvent<E>;
             constructor(c: new () => E);
             dbInit(url: string, db: Db): void;
         }

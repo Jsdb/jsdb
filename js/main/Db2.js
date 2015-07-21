@@ -23,7 +23,7 @@ var Db = (function () {
         }
     };
     // TODO make sure everything pass thru here
-    Db.prototype.load = function (url, ctor, val) {
+    Db.prototype.load = function (url, ctor) {
         var ret = this.cache[url];
         if (ret)
             return ret;
@@ -73,7 +73,7 @@ var Db;
     }
     Db.embedded = embedded;
     function reference(c) {
-        var ret = new internal.ReferenceImpl();
+        var ret = new internal.ReferenceImpl(c);
         return ret;
     }
     Db.reference = reference;
@@ -81,6 +81,12 @@ var Db;
         return new internal.ListImpl(c);
     }
     Db.list = list;
+    function referenceList(c) {
+        return list((function () {
+            return new internal.ReferenceImpl(c);
+        }));
+    }
+    Db.referenceList = referenceList;
     var Entity = (function () {
         function Entity() {
             this.load = new internal.EntityEvent(this);
@@ -386,6 +392,7 @@ var Db;
             __extends(ReferenceEvent, _super);
             function ReferenceEvent(myEntity) {
                 _super.call(this, myEntity);
+                this.myEntity = null;
             }
             ReferenceEvent.prototype.parseValue = function (val, url) {
                 if (!val) {
@@ -398,7 +405,7 @@ var Db;
                 }
                 // TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
                 // TODO passing value here can make projections
-                this.myEntity.value = this.db.load(val._ref);
+                this.myEntity.value = this.db.load(val._ref, this.myEntity._ctor);
                 return this.myEntity;
             };
             return ReferenceEvent;
@@ -406,10 +413,11 @@ var Db;
         internal.ReferenceEvent = ReferenceEvent;
         var ReferenceImpl = (function (_super) {
             __extends(ReferenceImpl, _super);
-            function ReferenceImpl() {
-                _super.apply(this, arguments);
+            function ReferenceImpl(c) {
+                _super.call(this);
                 this.load = new ReferenceEvent(this);
                 this.value = null;
+                this._ctor = c;
             }
             return ReferenceImpl;
         })(Entity);
@@ -455,10 +463,14 @@ var Db;
         var CollectionImpl = (function () {
             function CollectionImpl(c) {
                 this.add = null;
+                this.remove = null;
                 this.add = new CollectionAddedEntityEvent(c);
+                this.remove = new CollectionEntityEvent(c);
+                this.remove.events = ['child_removed'];
             }
             CollectionImpl.prototype.dbInit = function (url, db) {
                 this.add.dbInit(url, db);
+                this.remove.dbInit(url, db);
             };
             return CollectionImpl;
         })();

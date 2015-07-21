@@ -29,7 +29,7 @@ class Db {
 	}
 	
 	// TODO make sure everything pass thru here
-	load<T>(url :string, ctor? :new() => T, val? :any) :T {
+	load<T>(url :string, ctor? :new() => T) :T {
 		var ret = this.cache[url];
 		if (ret) return ret;
 		if (!ctor) {
@@ -79,12 +79,18 @@ module Db {
 	}
 	
 	export function reference<E extends Entity<any>>(c :new ()=>E) : internal.IReference<E> {
-		var ret = new internal.ReferenceImpl<E>();
+		var ret = new internal.ReferenceImpl<E>(c);
 		return ret;
 	}
 	
 	export function list<E extends Entity<any>>(c :new ()=>E) : internal.IList<E> {
 		return new internal.ListImpl<E>(c);
+	}
+	
+	export function referenceList<E extends Entity<any>>(c :new() => E) : internal.IList<internal.IReference<E>> {
+		return list(<new() => internal.ReferenceImpl<E>><any>(function() {
+			return new internal.ReferenceImpl<E>(c);
+		}));
 	}
 	
 	export class Entity<R> {
@@ -154,7 +160,7 @@ module Db {
 		export interface ICollection<E> {
 			// TODO load with specific event
 			add :IEvent<E>;
-			//remove :IEvent<E>;
+			remove :IEvent<E>;
 			//modify :IEvent<E>;
 		}
 		
@@ -490,6 +496,8 @@ module Db {
 		}
 		
 		export class ReferenceEvent<T extends ReferenceImpl<any>> extends EntityEvent<T> {
+			myEntity :ReferenceImpl<T> = null;
+			
 			constructor(myEntity :ReferenceImpl<any>) {
 				super(myEntity);
 			}
@@ -505,7 +513,7 @@ module Db {
 				}
 				// TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
 				// TODO passing value here can make projections
-				(<ReferenceImpl<any>>this.myEntity).value = this.db.load(val._ref);
+				this.myEntity.value = this.db.load(val._ref,this.myEntity._ctor);
 				return <T><any>this.myEntity;
 			}
 
@@ -513,8 +521,13 @@ module Db {
 
 		
 		export class ReferenceImpl<E extends Entity<any>> extends Entity<IReference<E>> {
-			load = new ReferenceEvent<IReference<E>>(this);
+			_ctor : new() => E;
+			load = new ReferenceEvent<ReferenceImpl<E>>(this);
 			value: E = null;
+			constructor(c : new() => E) {
+				super();
+				this._ctor = c;
+			}
 		}
 		
 		export class CollectionEntityEvent<E> extends Event<E> { 
@@ -559,13 +572,17 @@ module Db {
 		
 		export class CollectionImpl<E> implements ICollection<E> {
 			add :CollectionEntityEvent<E> = null;
+			remove :CollectionEntityEvent<E> = null;
 			
 			constructor(c :new ()=>E) {
 				this.add = new CollectionAddedEntityEvent<E>(c);
+				this.remove = new CollectionEntityEvent<E>(c);
+				this.remove.events = ['child_removed'];
 			}
 			
 			dbInit(url :string, db :Db) {
 				this.add.dbInit(url, db);
+				this.remove.dbInit(url, db);
 			}
 		}
 		

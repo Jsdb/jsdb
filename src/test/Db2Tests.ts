@@ -312,6 +312,7 @@ describe('Db Tests', () => {
 					state = 2;
 					M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
 					M.assert("Right deserialization").when(det.payload.str).is("Sub4");
+					det.offMe();
 					done();
 				}
 			}
@@ -319,8 +320,32 @@ describe('Db Tests', () => {
 		
 	});
 	
+	it('should report removal from list', (done) => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		//var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+		var state = 0;
+		wc1.list.remove.on(this, (det) => {
+			M.assert("In right state").when(state).is(1);
+			M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
+			M.assert("Right deserialization").when(det.payload.str).is("Sub3");
+			det.offMe();
+			done();
+		});
+		wc1.list.add.on(this, (det) => {
+			//console.log("Received event on state " + state,det);
+			if (det.listEnd) {
+				state = 1;
+				det.offMe();
+				wc1Fb.child('list/2').remove();
+			}
+		});
+		
+		
+	});
 	
-	// TODO list removal and change events
+	
+	// TODO list change events
 	
 	// TODO access to list value array
 	
@@ -328,10 +353,8 @@ describe('Db Tests', () => {
 	
 	// TODO collections of references
 	
-	// TODO preload
-	
 	// TODO read a sub entity as reference
-	// TODO right now references to other entity su entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
+	// TODO right now references to other entity sub entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
 	
 	
 	// TODO write data on existing entity
@@ -343,7 +366,10 @@ describe('Db Tests', () => {
 	// TODO read and write entity in entity, as reference
 	
 	// TODO write collections
+
+	// TODO preload
 	
 	// TODO cache cleaning
 	
+	// TODO move promises on events
 });

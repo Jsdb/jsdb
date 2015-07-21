@@ -297,23 +297,45 @@ describe('Db Tests', function () {
                     state = 2;
                     M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
                     M.assert("Right deserialization").when(det.payload.str).is("Sub4");
+                    det.offMe();
                     done();
                 }
             }
         });
     });
-    // TODO list removal and change events
+    it('should report removal from list', function (done) {
+        var wc1 = defDb.withCols.load('wc1');
+        //var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+        var state = 0;
+        wc1.list.remove.on(_this, function (det) {
+            M.assert("In right state").when(state).is(1);
+            M.assert("Right type").when(det.payload).is(M.instanceOf(SubEntity));
+            M.assert("Right deserialization").when(det.payload.str).is("Sub3");
+            det.offMe();
+            done();
+        });
+        wc1.list.add.on(_this, function (det) {
+            //console.log("Received event on state " + state,det);
+            if (det.listEnd) {
+                state = 1;
+                det.offMe();
+                wc1Fb.child('list/2').remove();
+            }
+        });
+    });
+    // TODO list change events
     // TODO access to list value array
     // TODO test map
     // TODO collections of references
-    // TODO preload
     // TODO read a sub entity as reference
-    // TODO right now references to other entity su entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
+    // TODO right now references to other entity sub entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
     // TODO write data on existing entity
     // TODO write new entity
     // TODO write entity in entity, as full object
     // TODO read and write entity in entity, as reference
     // TODO write collections
+    // TODO preload
     // TODO cache cleaning
+    // TODO move promises on events
 });
 //# sourceMappingURL=Db2Tests.js.map
