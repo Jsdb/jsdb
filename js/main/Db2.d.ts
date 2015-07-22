@@ -8,6 +8,8 @@ declare class Db {
     constructor(baseUrl: string);
     init(): void;
     load<T>(url: string, ctor?: new () => T): T;
+    save<E extends Db.Entity>(entity: E): Thenable<boolean>;
+    assignUrl<E extends Db.Entity>(entity: E): void;
     reset(): void;
 }
 declare module Db {
@@ -16,8 +18,14 @@ declare module Db {
     function reference<E extends Entity>(c: new () => E): internal.IReference<E>;
     function referenceBuilder<E extends Entity>(c: new () => E): new () => internal.ReferenceImpl<E>;
     function list<E extends Entity>(c: new () => E): internal.IList<E>;
+    class Utils {
+        static entitySerialize(e: Entity, fields?: string[]): any;
+        static rawEntitySerialize(e: Entity, fields?: string[]): any;
+    }
     class Entity {
         load: internal.IEvent<any>;
+        serialize: () => any;
+        save(): Thenable<boolean>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
     }
@@ -25,10 +33,11 @@ declare module Db {
         interface IEntityRoot<E extends Entity> {
             named(name: string): IEntityRoot<E>;
             load(id: string): E;
-            save(entity: E): any;
+            query(): IQuery<E>;
         }
         interface IReference<E extends Entity> {
             load: IEvent<IReference<E>>;
+            url: string;
             value: E;
             then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
             then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
@@ -57,14 +66,30 @@ declare module Db {
         interface ICollection<E> {
             add: IEvent<E>;
             remove: IEvent<E>;
+            query(): IQuery<E>;
         }
         interface IList<E> extends ICollection<E> {
             value: E[];
+            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
         }
         interface IMap<E> extends ICollection<E> {
             value: {
                 [index: string]: E;
             };
+        }
+        interface IQuery<E> extends IList<E> {
+            sortOn(field: string, desc?: boolean): IQuery<E>;
+            limit(limit: number): IQuery<E>;
+            range(from: any, to: any): IQuery<E>;
+            equals(val: any): IQuery<E>;
+        }
+        class IdGenerator {
+            static PUSH_CHARS: string;
+            static BASE: number;
+            static lastPushTime: number;
+            static lastRandChars: any[];
+            static next(): string;
         }
         class EntityRoot<E extends Entity> implements IEntityRoot<E> {
             constr: new () => E;
@@ -74,8 +99,8 @@ declare module Db {
             constructor(c: new () => E);
             named(name: string): EntityRoot<E>;
             initDb(db: Db): void;
+            query(): QueryImpl<E>;
             load(id: string): E;
-            save(entity: E): void;
         }
         class EventDetails<T> implements IEventDetails<T> {
             payload: T;
@@ -144,7 +169,6 @@ declare module Db {
             hasHandlers(): boolean;
         }
         class EntityEvent<T> extends Event<T> {
-            static getEventFor<T>(x: T): EntityEvent<T>;
             myEntity: T;
             constructor(myEntity: T);
             dbInit(url: string, db: Db): void;
@@ -154,9 +178,10 @@ declare module Db {
             constructor(myEntity: ReferenceImpl<any>);
             parseValue(val: any, url?: string): ReferenceImpl<E>;
         }
-        class ReferenceImpl<E extends Entity> extends Entity {
+        class ReferenceImpl<E extends Entity> extends Entity implements IReference<E> {
             _ctor: new () => E;
             load: ReferenceEvent<E>;
+            url: string;
             value: E;
             constructor(c: new () => E);
         }
@@ -170,13 +195,32 @@ declare module Db {
             protected init(h: EventHandler<E>): void;
         }
         class CollectionImpl<E> implements ICollection<E> {
+            ctor: new () => E;
+            db: Db;
+            url: string;
             add: CollectionEntityEvent<E>;
             remove: CollectionEntityEvent<E>;
             constructor(c: new () => E);
             dbInit(url: string, db: Db): void;
+            query(): QueryImpl<E>;
+            protected setupHref(h: EventHandler<E>): void;
         }
         class ListImpl<E> extends CollectionImpl<E> implements IList<E> {
-            value: any[];
+            value: E[];
+            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+        }
+        class QueryImpl<E> extends ListImpl<E> implements IQuery<E> {
+            private _sortField;
+            private _sortDesc;
+            private _limit;
+            private _rangeFrom;
+            private _rangeTo;
+            private _equals;
+            sortOn(field: string, desc?: boolean): QueryImpl<E>;
+            limit(limit: number): QueryImpl<E>;
+            range(from: any, to: any): QueryImpl<E>;
+            equals(val: any): QueryImpl<E>;
+            protected setupHref(h: EventHandler<E>): void;
         }
         interface EventDetachable {
             eventAttached(event: Event<any>): any;

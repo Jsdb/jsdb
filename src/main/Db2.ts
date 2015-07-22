@@ -57,6 +57,32 @@ class Db {
 		return inst;
 	}
 	
+	save<E extends Db.Entity>(entity :E) {
+		var entityEvent = (<Db.internal.EntityEvent<E>>entity.load); 
+		if (!entityEvent.url) {
+			this.assignUrl(entity);
+		}
+		return entity.save();
+	}
+	
+	assignUrl<E extends Db.Entity>(entity :E) {
+		var entityEvent = (<Db.internal.EntityEvent<E>>entity.load); 
+		if (entityEvent.url) return;
+		var ks = Object.keys(this);
+		var root :Db.internal.EntityRoot<E> = null;
+		for (var i = 0; i < ks.length; i++) {
+			if (!(this[ks[i]] instanceof Db.internal.EntityRoot)) continue;
+			var er = (<Db.internal.EntityRoot<any>>this[ks[i]]);
+			if (er.constr == entity.constructor) {
+				root = er;
+				break;
+			}
+		}
+		if (!root) throw "The class " + (entity.constructor) + " is not mapped to an entity root";
+		var id = Db.internal.IdGenerator.next();
+		entityEvent.dbInit(root.url + '/' + id, this);
+	}
+	
 	reset() {
 		for (var url in this.cache) {
 			var e = this.cache[url];
@@ -93,9 +119,57 @@ module Db {
 		return new internal.ListImpl<E>(c);
 	}
 	
+	export class Utils {
+		static entitySerialize(e :Entity, fields? :string[]):any {
+			if (e.serialize) {
+				return e.serialize();
+			}
+			return Utils.rawEntitySerialize(e,fields);
+		}
+		static rawEntitySerialize(e :Entity, fields? :string[]):any {
+			var ret = {};
+			fields = fields || Object.keys(e);
+			for (var i = 0; i < fields.length; i++) {
+				var k = fields[i];
+				if (k == 'load') continue;
+				var v = e[k];
+				if (typeof v === 'function') continue;
+				if (v instanceof Entity) {
+					v = Utils.entitySerialize(v);
+				} else if (v.serialize) {
+					v = v.serialize();
+				}
+				ret[k] = v;
+			}
+			return ret;
+		}
+	}
+	
 	export class Entity {
 		load :internal.IEvent<any> = new internal.EntityEvent<any>(this);
 		
+		serialize : () => any;
+		
+		save() :Thenable<boolean> {
+			var fu :(data:boolean|Thenable<boolean>)=>void = null;
+			var fe :(err?:any)=>void;
+			var ret = new Promise<boolean>((res,err) => {
+				fu = res;
+				fe = err;
+			});
+
+			var url = (<internal.EntityEvent<any>>this.load).url;
+			if (!url) throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
+			new Firebase(url).set(Utils.entitySerialize(this), (err) => {
+				if (!err) {
+					fu(true);
+				} else {
+					fe(err);
+				}
+			});
+			
+			return ret;
+		}
 		
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
@@ -124,11 +198,13 @@ module Db {
 			named(name :string):IEntityRoot<E>;
 			
 			load(id:string):E;
-			save(entity :E);
+			
+			query() :IQuery<E>;
 		}
 		
 		export interface IReference<E extends Entity> {
 			load :IEvent<IReference<E>>;
+			url :string;
 			value :E;
 			then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
 			then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
@@ -160,16 +236,79 @@ module Db {
 			add :IEvent<E>;
 			remove :IEvent<E>;
 			//modify :IEvent<E>;
+			
+			query() :IQuery<E>;
 		}
 		
 		export interface IList<E> extends ICollection<E> {
 			value :E[];
+			
+			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
 		}
 		
 		export interface IMap<E> extends ICollection<E> {
 			value : {[index:string]:E};
 		}
 		
+		export interface IQuery<E> extends IList<E> {
+			sortOn(field :string, desc? :boolean):IQuery<E>;
+			limit(limit :number):IQuery<E>;
+			range(from :any, to :any):IQuery<E>;
+			equals(val :any):IQuery<E>;
+		}
+		
+		export class IdGenerator {
+			// Modeled after base64 web-safe chars, but ordered by ASCII.
+			// SG : removed - and _
+			static PUSH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+			
+			static BASE = IdGenerator.PUSH_CHARS.length;
+		
+			// Timestamp of last push, used to prevent local collisions if you push twice in one ms.
+			static lastPushTime = 0;
+		
+			// We generate 72-bits of randomness which get turned into 14 characters and appended to the
+			// timestamp to prevent collisions with other clients.	We store the last characters we
+			// generated because in the event of a collision, we'll use those same characters except
+			// "incremented" by one.
+			static lastRandChars = [];
+		
+			static next() {
+				var now = new Date().getTime();
+				var duplicateTime = (now === IdGenerator.lastPushTime);
+				IdGenerator.lastPushTime = now;
+		
+				var timeStampChars = new Array(8);
+				for (var i = 7; i >= 0; i--) {
+					timeStampChars[i] = IdGenerator.PUSH_CHARS.charAt(now % IdGenerator.BASE);
+					// NOTE: Can't use << here because javascript will convert to int and lose the upper bits.
+					now = Math.floor(now / IdGenerator.BASE);
+				}
+				if (now !== 0) throw new Error('We should have converted the entire timestamp.');
+		
+				var id = timeStampChars.join('');
+		
+				if (!duplicateTime) {
+					for (i = 0; i < 14; i++) {
+						IdGenerator.lastRandChars[i] = Math.floor(Math.random() * IdGenerator.BASE);
+					}
+				} else {
+					// If the timestamp hasn't changed since last push, use the same random number, except incremented by 1.
+					for (i = 13; i >= 0 && IdGenerator.lastRandChars[i] === IdGenerator.BASE-1; i--) {
+						IdGenerator.lastRandChars[i] = 0;
+					}
+					IdGenerator.lastRandChars[i]++;
+				}
+				for (i = 0; i < 14; i++) {
+					id += IdGenerator.PUSH_CHARS.charAt(IdGenerator.lastRandChars[i]);
+				}
+				if (id.length != 22) throw new Error('Length should be 22, but was ' + id.length);
+		
+				return id;
+			}
+		}
+
 		
 		export class EntityRoot<E extends Entity> implements IEntityRoot<E> {
 			constr :new() => E = null;
@@ -193,6 +332,13 @@ module Db {
 				this.url = db.baseUrl + this.name + '/';
 			}
 			
+			query() {
+				var ret = new QueryImpl(this.constr);
+				ret.dbInit(this.url, this.db);
+				return ret;
+			}
+
+			
 			load(id:string):E 
 			load(url:string) :E {
 				if (url.indexOf(this.url) === -1) {
@@ -201,10 +347,6 @@ module Db {
 				return this.db.load(url, this.constr);
 			}
 			
-			
-			save(entity :E) {
-				// TODO implement
-			}
 		}
 		
 		export class EventDetails<T> implements IEventDetails<T> {
@@ -271,9 +413,13 @@ module Db {
 				//console.log("Handling", evd);
 				//console.trace();
 				evd.setHandler(this);
-				this.method.call(this.ctx, evd);
-				//console.log("Then calling", this.after);
+				// the after is executed before to avoid bouncing
 				if (this.after) this.after(this);
+				try {
+					this.method.call(this.ctx, evd);
+				} finally {
+				}
+				//console.log("Then calling", this.after);
 			}
 			
 		}
@@ -445,9 +591,11 @@ module Db {
 		
 		export class EntityEvent<T> extends Event<T> {
 			
+			/*
 			static getEventFor<T>(x:T):EntityEvent<T> {
 				return (<EntityEvent<T>>(<Entity><any>x).load);
 			}
+			*/
 			
 			myEntity :T = null;
 			
@@ -483,7 +631,7 @@ module Db {
 				for (var i = 0; i < ks.length; i++) {
 					var prev = this.myEntity[ks[i]];
 					if (prev instanceof Entity) {
-						EntityEvent.getEventFor(prev).parseValue(val[ks[i]]);
+						(<EntityEvent<any>>(<Entity>prev).load).parseValue(val[ks[i]]);
 					} else {
 						// TODO handle collections
 						this.myEntity[ks[i]] = val[ks[i]];
@@ -507,18 +655,22 @@ module Db {
 					console.log("No _ref for reference in ", val, url);
 					return;
 				}
-				// TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
-				// TODO passing value here can make projections
+				// passing the constructor here to the db.load method, we have reference to nested objects
 				this.myEntity.value = this.db.load(val._ref,this.myEntity._ctor);
+				this.myEntity.url = val._ref;
+				
+				// TODO parse the value for projections
+
 				return this.myEntity;
 			}
 
 		}
 
 		
-		export class ReferenceImpl<E extends Entity> extends Entity {
+		export class ReferenceImpl<E extends Entity> extends Entity implements IReference<E> {
 			_ctor : new() => E;
 			load = new ReferenceEvent<E>(this);
+			url: string;
 			value: E = null;
 			constructor(c : new() => E) {
 				super();
@@ -538,7 +690,8 @@ module Db {
 				// TODO should pass val here, for projections and to handle refs
 				var e = this.db.load(url, this.ctor);
 				//var e = new this.ctor();
-				var ev = EntityEvent.getEventFor(e);
+				// TODO mess here, value returned form db.load is almost certainly an entity, and collections also handle entities, but it's not stated in generics
+				var ev = (<EntityEvent<any>>(<any>e).load);
 				ev.parseValue(val, url);
 				return e;
 			}
@@ -567,24 +720,129 @@ module Db {
 		}
 		
 		export class CollectionImpl<E> implements ICollection<E> {
+			ctor :new ()=>E;
+			db :Db;
+			url :string;
+			
 			add :CollectionEntityEvent<E> = null;
 			remove :CollectionEntityEvent<E> = null;
 			
 			constructor(c :new ()=>E) {
+				this.ctor = c;
 				this.add = new CollectionAddedEntityEvent<E>(c);
 				this.remove = new CollectionEntityEvent<E>(c);
 				this.remove.events = ['child_removed'];
+				
+				this.add.hrefIniter = (h) => this.setupHref(h);
+				this.remove.hrefIniter = (h) => this.setupHref(h);
 			}
 			
 			dbInit(url :string, db :Db) {
+				this.db = db;
+				this.url = url;
 				this.add.dbInit(url, db);
 				this.remove.dbInit(url, db);
+			}
+			
+			query() {
+				var ret = new QueryImpl(this.ctor);
+				ret.dbInit(this.url, this.db);
+				return ret;
+			}
+			
+			protected setupHref(h :EventHandler<E>) {
+				h._ref = new Firebase(h.event.url);
 			}
 		}
 		
 		export class ListImpl<E> extends CollectionImpl<E> implements IList<E> {
-			// TODO implement correct value handling
-			value = [];
+			value :E[] = [];
+			
+			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>
+			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U> {
+				var fu :(data:U|Thenable<U>)=>void = null;
+				var ret = new Promise<U>((res,err) => {
+					fu = res;
+				});
+				var vals :E[] = [];
+				this.add.on(this, (detail) => {
+					if (detail.listEnd) {
+						detail.offMe();
+						this.value = vals;
+						if (onFulfilled) {
+							fu(onFulfilled());
+						} else {
+							fu(null);
+						}
+					} else {
+						vals.push(detail.payload);
+					}
+				});
+				return ret;
+
+			}
+
+		}
+		
+		export class QueryImpl<E> extends ListImpl<E> implements IQuery<E> {
+			
+			private _sortField :string = null;
+			private _sortDesc :boolean = false;
+			private _limit :number = 0;
+			private _rangeFrom :any = null;
+			private _rangeTo :any = null;
+			private _equals :any = null;
+
+			
+			sortOn(field :string, desc = false) {
+				this._sortField = field;
+				this._sortDesc = desc;
+				return this;
+			}
+			
+			limit(limit :number) {
+				this._limit = limit;
+				return this; 
+			}
+			
+			range(from :any, to :any) {
+				this._rangeFrom = from;
+				this._rangeTo = to;
+				return this;
+			}
+			
+			equals(val :any) {
+				this._equals = val;
+				return this;
+			}
+			
+			protected setupHref(h :EventHandler<E>) {
+				h._ref = new Firebase(h.event.url);
+				if (this._sortField) {
+					h._ref = h._ref.orderByChild(this._sortField);
+					if (this._rangeFrom) {
+						h._ref = h._ref.startAt(this._rangeFrom);
+					}
+					if (this._rangeTo) {
+						h._ref = h._ref.startAt(this._rangeTo);
+					}
+					if (this._equals) {
+						h._ref = h._ref.equalTo(this._equals);
+					}
+				}
+				if (this._sortDesc) {
+					if (this._limit) {
+						h._ref = h._ref.limitToLast(this._limit);
+					} else {
+						h._ref = h._ref.limitToLast(Number.MAX_VALUE);
+					}
+				} else {
+					if (this._limit) {
+						h._ref = h._ref.limitToFirst(this._limit);
+					}
+				}
+			}
+
 		}
 
 		export interface EventDetachable {

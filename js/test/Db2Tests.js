@@ -40,6 +40,7 @@ var WithRef = (function (_super) {
     function WithRef() {
         _super.apply(this, arguments);
         this.ref = Db.reference(WithProps);
+        this.othSubRef = Db.reference(SubEntity);
     }
     return WithRef;
 })(Db.Entity);
@@ -48,6 +49,7 @@ var WithCollections = (function (_super) {
     function WithCollections() {
         _super.apply(this, arguments);
         this.list = Db.list(SubEntity);
+        this.mainRefList = Db.list(Db.referenceBuilder(WithProps));
     }
     return WithCollections;
 })(Db.Entity);
@@ -67,6 +69,7 @@ var defDb = new TestDb();
 describe('Db Tests', function () {
     var wpFb;
     var wp1Fb;
+    var wp2Fb;
     var wsFb;
     var ws1Fb;
     var ws2Fb;
@@ -101,6 +104,16 @@ describe('Db Tests', function () {
                 substr: 'Sub String'
             }
         }, opCnter);
+        wp2Fb = wpFb.child('wp2');
+        opcnt++;
+        wp2Fb.set({
+            str: 'String 2',
+            num: 300,
+            arr: [2, 3, 4],
+            subobj: {
+                substr: 'Sub String'
+            }
+        }, opCnter);
         wsFb = new Firebase(baseUrl + '/withSubs');
         ws1Fb = wsFb.child('ws1');
         opcnt++;
@@ -125,6 +138,9 @@ describe('Db Tests', function () {
             str: 'String 1',
             ref: {
                 _ref: wp1Fb.toString()
+            },
+            othSubRef: {
+                _ref: ws1Fb.toString() + '/sub'
             }
         }, opCnter);
         wr2Fb = wrFb.child('wr2');
@@ -149,6 +165,14 @@ describe('Db Tests', function () {
                 {
                     str: 'Sub3'
                 }
+            ],
+            mainRefList: [
+                {
+                    _ref: wp1Fb.toString()
+                },
+                {
+                    _ref: wp2Fb.toString()
+                },
             ]
         }, opCnter);
         wc2Fb = wcFb.child('wc2');
@@ -263,6 +287,17 @@ describe('Db Tests', function () {
             done();
         });
     });
+    it('should load reference to other entities sub references', function (done) {
+        var wr1 = defDb.withRefs.load('wr1');
+        wr1.then(function (det) {
+            M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.aTruthy);
+            M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.instanceOf(SubEntity));
+            wr1.othSubRef.value.then(function (sdet) {
+                M.assert("Resolved the ref").when(wr1.othSubRef.value.str).is("Sub String 1");
+                done();
+            });
+        });
+    });
     it('should report each element in list as an add event', function (done) {
         var wc1 = defDb.withCols.load('wc1');
         var dets = [];
@@ -324,18 +359,211 @@ describe('Db Tests', function () {
         });
     });
     // TODO list change events
-    // TODO access to list value array
+    // access to list value array
+    it('should work correctly with the "then" on a list', function (done) {
+        var wc1 = defDb.withCols.load('wc1');
+        var dets = [];
+        wc1.list.then(function () {
+            M.assert("Loaded all elements").when(wc1.list.value).is(M.withLength(3));
+            for (var i = 0; i < wc1.list.value.length; i++) {
+                M.assert("Right type").when(wc1.list.value[i]).is(M.instanceOf(SubEntity));
+                M.assert("Right deserialization").when(wc1.list.value[i].str).is("Sub" + (i + 1));
+            }
+            done();
+        });
+    });
     // TODO test map
-    // TODO collections of references
-    // TODO read a sub entity as reference
-    // TODO right now references to other entity sub entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
-    // TODO write data on existing entity
-    // TODO write new entity
+    // collections of references
+    it('should handle a list of references', function (done) {
+        var wc1 = defDb.withCols.load('wc1');
+        var dets = [];
+        wc1.mainRefList.add.on(_this, function (det) {
+            //console.log("Received event",det);
+            if (det.listEnd) {
+                det.offMe();
+                M.assert("Loaded all elements").when(dets).is(M.withLength(2));
+                var proms = [];
+                for (var i = 0; i < dets.length; i++) {
+                    M.assert("Right type").when(dets[i].payload).is(M.instanceOf(Db.internal.ReferenceImpl));
+                    M.assert("Right url").when(dets[i].payload.url).is(wpFb.toString() + "/wp" + (i + 1));
+                    M.assert("Right instantiation").when(dets[i].payload.value).is(M.instanceOf(WithProps));
+                    proms.push(dets[i].payload.then());
+                }
+                // TODO Resolve all and check values 
+                done();
+            }
+            else {
+                dets.push(det);
+            }
+        });
+    });
+    // basic query on entityRoots
+    it('should perform query on entity roots', function (done) {
+        var query = defDb.withProps.query().sortOn('num').equals(300);
+        var dets = [];
+        query.add.on(_this, function (det) {
+            if (det.listEnd) {
+                M.assert("Found only one element").when(dets).is(M.withLength(1));
+                M.assert("Found right entity").when(dets[0].payload).is(M.objectMatching({
+                    str: 'String 2',
+                    num: 300,
+                    arr: [2, 3, 4],
+                    subobj: {
+                        substr: 'Sub String'
+                    }
+                }));
+                done();
+            }
+            else {
+                dets.push(det);
+            }
+        });
+    });
+    // TODO firebase doesn't support this
+    /*
+    it('should sort query correctly',(done) => {
+        var query = defDb.withProps.query().sortOn('num', false);
+        query.then(() => {
+            M.assert("Returned right number of elements").when(query.value).is(M.withLength(2));
+            M.assert("Returned in right order 0").when(query.value[0].num).is(300);
+            M.assert("Returned in right order 1").when(query.value[1].num).is(200);
+            done();
+        });
+        
+    });
+    */
+    // TODO more tests on queries
+    // TODO query on collections
+    // TODO read projections
+    // Serialization, simple
+    it('should serialize basic entity correctly', function () {
+        var wp = new WithProps();
+        wp.num = 1;
+        wp.str = 'abc';
+        wp.arr = [1];
+        wp.subobj.substr = 'cde';
+        var ret = Db.Utils.entitySerialize(wp);
+        M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+            num: 1,
+            str: 'abc',
+            arr: [1],
+            subobj: { substr: 'cde' }
+        }));
+    });
+    it('should serialize correctly sub entities', function () {
+        var ws = new WithSubentity();
+        ws.str = 'abc';
+        var ss = new SubEntity();
+        ws.sub = ss;
+        ss.str = 'cde';
+        var ret = Db.Utils.entitySerialize(ws);
+        M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+            str: 'abc',
+            sub: { str: 'cde' }
+        }));
+    });
+    it('should honour custom serialize', function () {
+        var ss = new SubEntity();
+        ss.str = 'cde';
+        ss.serialize = function () {
+            return { mystr: 'aaa' };
+        };
+        var ret = Db.Utils.entitySerialize(ss);
+        M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+            mystr: 'aaa'
+        }));
+    });
+    it('should honour given fields in serialization', function () {
+        var wp = new WithProps();
+        wp.num = 1;
+        wp.str = 'abc';
+        wp.arr = [1];
+        wp.subobj.substr = 'cde';
+        var ret = Db.Utils.entitySerialize(wp, ['num', 'str']);
+        M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+            num: 1,
+            str: 'abc'
+        }));
+    });
+    // write data on existing entity
+    it('should update an entity', function (done) {
+        var wp1 = defDb.withProps.load('wp1');
+        wp1.then(function () {
+            console.log("Saving");
+            wp1.num = 1000;
+            wp1.str = 'Updated';
+            wp1.arr = [7, 8, 9];
+            wp1.subobj.substr = 'Sub updated';
+            //return wp1.save();
+            wp1.save();
+        }).then(function () {
+            console.log("Checking");
+            wp1Fb.once('value', function (ds) {
+                M.assert('Updated correctly').when(ds.val()).is(M.objectMatching({
+                    num: 1000,
+                    str: 'Updated',
+                    arr: [7, 8, 9],
+                    subobj: { substr: 'Sub updated' }
+                }));
+                done();
+            });
+        });
+        ;
+    });
+    it('should assign right url to a new entity mapped on root', function () {
+        var wp = new WithProps();
+        defDb.assignUrl(wp);
+        M.assert("Assigned right url").when(wp.load.url).is(M.stringContaining(wpFb.toString()));
+    });
+    it('should throw error an a new entity not mapped on root', function () {
+        var wp = new SubEntity();
+        var excp = null;
+        try {
+            defDb.assignUrl(wp);
+        }
+        catch (e) {
+            excp = e;
+        }
+        M.assert("Exception thrown").when(excp).is(M.aTruthy);
+    });
+    // write new entity
+    it('should save a new entity', function (done) {
+        var wp = new WithProps();
+        wp.str = 'abcd';
+        wp.num = 555;
+        wp.arr = [89, 72];
+        wp.subobj.substr = 'eeee';
+        defDb.save(wp).then(function () {
+            var url = wp.load.url;
+            new Firebase(url).once('value', function (ds) {
+                M.assert("New entity saved correctly").when(ds.val()).is(M.objectMatching({
+                    str: 'abcd',
+                    num: 555,
+                    arr: [89, 72],
+                    subobj: { substr: 'eeee' }
+                }));
+                done();
+            });
+        });
+    });
+    it('should trow exception if saving new entity not form db', function () {
+        var wp = new WithProps();
+        var excp = null;
+        try {
+            wp.save();
+        }
+        catch (e) {
+            excp = e;
+        }
+        M.assert("Exception thrown").when(excp).is(M.aTruthy);
+    });
     // TODO write entity in entity, as full object
-    // TODO read and write entity in entity, as reference
+    // TODO write reference
+    // TODO write reference with projections
     // TODO write collections
+    // TODO write back-projections
     // TODO preload
     // TODO cache cleaning
-    // TODO move promises on events
+    // TODO move promises on events?
 });
 //# sourceMappingURL=Db2Tests.js.map

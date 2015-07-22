@@ -27,11 +27,13 @@ class WithSubentity extends Db.Entity {
 
 class WithRef extends Db.Entity {
 	ref = Db.reference(WithProps);
+	othSubRef = Db.reference(SubEntity);
 	str :string;
 }
 
 class WithCollections extends Db.Entity {
 	list = Db.list(SubEntity);
+	mainRefList = Db.list(Db.referenceBuilder(WithProps));
 }
 
 class TestDb extends Db {
@@ -51,6 +53,7 @@ var defDb = new TestDb();
 describe('Db Tests', () => {
 	var wpFb :Firebase;
 	var wp1Fb :Firebase;
+	var wp2Fb :Firebase;
 	
 	var wsFb :Firebase;
 	var ws1Fb :Firebase;
@@ -93,6 +96,17 @@ describe('Db Tests', () => {
 			}
 		}, opCnter);
 		
+		wp2Fb = wpFb.child('wp2');
+		opcnt++;
+		wp2Fb.set({
+			str: 'String 2',
+			num: 300,
+			arr: [2,3,4],
+			subobj: {
+				substr: 'Sub String'
+			}
+		}, opCnter);
+		
 		wsFb = new Firebase(baseUrl + '/withSubs');
 		ws1Fb = wsFb.child('ws1');
 		opcnt++;
@@ -119,6 +133,9 @@ describe('Db Tests', () => {
 			str: 'String 1',
 			ref: {
 				_ref: wp1Fb.toString()
+			},
+			othSubRef : {
+				_ref: ws1Fb.toString() + '/sub'
 			}
 		}, opCnter);
 
@@ -146,6 +163,14 @@ describe('Db Tests', () => {
 				{
 					str: 'Sub3'
 				}
+			],
+			mainRefList : [
+				{
+					_ref: wp1Fb.toString()
+				},
+				{
+					_ref: wp2Fb.toString()
+				},
 			]
 		}, opCnter);
 
@@ -276,6 +301,20 @@ describe('Db Tests', () => {
 		
 	});
 	
+	it('should load reference to other entities sub references', (done) => {
+		var wr1 = defDb.withRefs.load('wr1');
+		
+		wr1.then((det) => {
+			M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.aTruthy);
+			M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.instanceOf(SubEntity));
+			wr1.othSubRef.value.then((sdet) => {
+				M.assert("Resolved the ref").when(wr1.othSubRef.value.str).is("Sub String 1");
+				done();
+			});
+		});
+
+	});
+	
 	it('should report each element in list as an add event',(done) => {
 		var wc1 = defDb.withCols.load('wc1');
 		
@@ -347,29 +386,241 @@ describe('Db Tests', () => {
 	
 	// TODO list change events
 	
-	// TODO access to list value array
+	// access to list value array
+	it('should work correctly with the "then" on a list',(done) => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		var dets :Db.internal.IEventDetails<SubEntity>[] = [];
+		wc1.list.then(() => {
+			M.assert("Loaded all elements").when(wc1.list.value).is(M.withLength(3));
+			for (var i = 0; i < wc1.list.value.length; i++) {
+				M.assert("Right type").when(wc1.list.value[i]).is(M.instanceOf(SubEntity));
+				M.assert("Right deserialization").when(wc1.list.value[i].str).is("Sub" + (i+1));
+			}
+			done();
+		});
+
+	});
 	
 	// TODO test map
+
+	// collections of references
+	it('should handle a list of references',(done) => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		var dets :Db.internal.IEventDetails<Db.internal.ReferenceImpl<WithProps>>[] = [];
+		wc1.mainRefList.add.on(this, (det) => {
+			//console.log("Received event",det);
+			if (det.listEnd) {
+				det.offMe();
+				M.assert("Loaded all elements").when(dets).is(M.withLength(2));
+				var proms :Thenable<any>[] = [];
+				for (var i = 0; i < dets.length; i++) {
+					M.assert("Right type").when(dets[i].payload).is(M.instanceOf(Db.internal.ReferenceImpl));
+					M.assert("Right url").when(dets[i].payload.url).is(wpFb.toString() + "/wp" + (i+1));
+					M.assert("Right instantiation").when(dets[i].payload.value).is(M.instanceOf(WithProps));
+					proms.push(dets[i].payload.then());
+				}
+				// TODO Resolve all and check values 
+				done();
+			} else {
+				dets.push(det);
+			}
+		});
+
+	});
+
+	// basic query on entityRoots
+	it('should perform query on entity roots',(done) => {
+		var query = defDb.withProps.query().sortOn('num').equals(300);
+		var dets :Db.internal.IEventDetails<WithProps>[] = [];
+		query.add.on(this, (det) => {
+			if (det.listEnd) {
+				M.assert("Found only one element").when(dets).is(M.withLength(1));
+				M.assert("Found right entity").when(dets[0].payload).is(M.objectMatching({
+					str: 'String 2',
+					num: 300,
+					arr: [2,3,4],
+					subobj: {
+						substr: 'Sub String'
+					}
+				}));
+				done();
+			} else {
+				dets.push(det);
+			}
+		});
+	});
 	
-	// TODO collections of references
+	// TODO firebase doesn't support this
+	/*
+	it('should sort query correctly',(done) => {
+		var query = defDb.withProps.query().sortOn('num', false);
+		query.then(() => {
+			M.assert("Returned right number of elements").when(query.value).is(M.withLength(2));
+			M.assert("Returned in right order 0").when(query.value[0].num).is(300);
+			M.assert("Returned in right order 1").when(query.value[1].num).is(200);
+			done();
+		});
+		
+	});
+	*/
 	
-	// TODO read a sub entity as reference
-	// TODO right now references to other entity sub entities are not supported because the URL is not mounted on an entity root, but since the reference already has the type informations needed, it could be supported
+	// TODO more tests on queries
 	
+	// TODO query on collections
 	
-	// TODO write data on existing entity
+	// TODO read projections
 	
-	// TODO write new entity
+	// Serialization, simple
+	it('should serialize basic entity correctly', () => {
+		var wp = new WithProps();
+		wp.num = 1;
+		wp.str = 'abc';
+		wp.arr = [1];
+		wp.subobj.substr = 'cde';
+		
+		var ret = Db.Utils.entitySerialize(wp);
+		M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+			num:1,
+			str:'abc',
+			arr:[1],
+			subobj:{substr:'cde'}
+		}));
+		
+	});
+	
+	it('should serialize correctly sub entities', () => {
+		var ws = new WithSubentity();
+		ws.str = 'abc';
+		var ss = new SubEntity();
+		ws.sub = ss;
+		ss.str = 'cde';
+		
+		var ret = Db.Utils.entitySerialize(ws);
+		M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+			str:'abc',
+			sub:{str:'cde'}
+		}));
+	});
+	
+	it('should honour custom serialize', () => {
+		var ss = new SubEntity();
+		ss.str = 'cde';
+		ss.serialize = () => {
+			return { mystr: 'aaa' };
+		};
+		var ret = Db.Utils.entitySerialize(ss);
+		M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+			mystr:'aaa'
+		}));
+	});
+	
+	it('should honour given fields in serialization', () => {
+		var wp = new WithProps();
+		wp.num = 1;
+		wp.str = 'abc';
+		wp.arr = [1];
+		wp.subobj.substr = 'cde';
+		
+		var ret = Db.Utils.entitySerialize(wp, ['num','str']);
+		M.assert("Serialization is correct").when(ret).is(M.objectMatchingStrictly({
+			num: 1,
+			str:'abc'
+		}));
+	});
+	
+	// write data on existing entity
+	it('should update an entity', (done) => {
+		var wp1 = defDb.withProps.load('wp1');
+		wp1
+		.then(() => {
+			console.log("Saving");
+			wp1.num = 1000;
+			wp1.str = 'Updated';
+			wp1.arr = [7,8,9];
+			wp1.subobj.substr = 'Sub updated';
+			//return wp1.save();
+			wp1.save();
+		})
+		.then(() => {
+			console.log("Checking");
+			wp1Fb.once('value',(ds) => {
+				M.assert('Updated correctly').when(ds.val()).is(M.objectMatching({
+					num : 1000,
+					str: 'Updated',
+					arr: [7,8,9],
+					subobj: { substr : 'Sub updated' }
+				}));
+				done();
+			});
+		});
+		;
+	});
+	
+	it('should assign right url to a new entity mapped on root', () => {
+		var wp = new WithProps();
+		defDb.assignUrl(wp);
+		M.assert("Assigned right url").when((<Db.internal.EntityEvent<any>>wp.load).url).is(M.stringContaining(wpFb.toString()));
+	});
+	
+	it('should throw error an a new entity not mapped on root', () => {
+		var wp = new SubEntity();
+		var excp = null;
+		try {
+			defDb.assignUrl(wp);
+		} catch (e) {
+			excp = e;
+		}
+		M.assert("Exception thrown").when(excp).is(M.aTruthy);
+	});
+	
+	// write new entity
+	it('should save a new entity',(done) => {
+		var wp = new WithProps();
+		wp.str = 'abcd';
+		wp.num = 555;
+		wp.arr = [89,72];
+		wp.subobj.substr = 'eeee';
+		defDb.save(wp).then(() => {
+			var url = (<Db.internal.EntityEvent<any>>wp.load).url;
+			new Firebase(url).once('value',(ds) => {
+				M.assert("New entity saved correctly").when(ds.val()).is(M.objectMatching({
+					str: 'abcd',
+					num: 555,
+					arr: [89,72],
+					subobj:{substr:'eeee'}
+				}));
+				done();
+			});
+			
+		});
+	});
+	
+	it('should trow exception if saving new entity not form db', () => {
+		var wp = new WithProps();
+		var excp = null;
+		try {
+			wp.save();
+		} catch (e) {
+			excp = e;
+		}
+		M.assert("Exception thrown").when(excp).is(M.aTruthy);
+	});
 	
 	// TODO write entity in entity, as full object
 	
-	// TODO read and write entity in entity, as reference
+	// TODO write reference
+	
+	// TODO write reference with projections
 	
 	// TODO write collections
 
+	// TODO write back-projections
+	
 	// TODO preload
 	
 	// TODO cache cleaning
 	
-	// TODO move promises on events
+	// TODO move promises on events?
 });

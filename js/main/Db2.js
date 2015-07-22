@@ -52,6 +52,33 @@ var Db = (function () {
         this.cache[url] = inst;
         return inst;
     };
+    Db.prototype.save = function (entity) {
+        var entityEvent = entity.load;
+        if (!entityEvent.url) {
+            this.assignUrl(entity);
+        }
+        return entity.save();
+    };
+    Db.prototype.assignUrl = function (entity) {
+        var entityEvent = entity.load;
+        if (entityEvent.url)
+            return;
+        var ks = Object.keys(this);
+        var root = null;
+        for (var i = 0; i < ks.length; i++) {
+            if (!(this[ks[i]] instanceof Db.internal.EntityRoot))
+                continue;
+            var er = this[ks[i]];
+            if (er.constr == entity.constructor) {
+                root = er;
+                break;
+            }
+        }
+        if (!root)
+            throw "The class " + (entity.constructor) + " is not mapped to an entity root";
+        var id = Db.internal.IdGenerator.next();
+        entityEvent.dbInit(root.url + '/' + id, this);
+    };
     Db.prototype.reset = function () {
         for (var url in this.cache) {
             var e = this.cache[url];
@@ -86,10 +113,62 @@ var Db;
         return new internal.ListImpl(c);
     }
     Db.list = list;
+    var Utils = (function () {
+        function Utils() {
+        }
+        Utils.entitySerialize = function (e, fields) {
+            if (e.serialize) {
+                return e.serialize();
+            }
+            return Utils.rawEntitySerialize(e, fields);
+        };
+        Utils.rawEntitySerialize = function (e, fields) {
+            var ret = {};
+            fields = fields || Object.keys(e);
+            for (var i = 0; i < fields.length; i++) {
+                var k = fields[i];
+                if (k == 'load')
+                    continue;
+                var v = e[k];
+                if (typeof v === 'function')
+                    continue;
+                if (v instanceof Entity) {
+                    v = Utils.entitySerialize(v);
+                }
+                else if (v.serialize) {
+                    v = v.serialize();
+                }
+                ret[k] = v;
+            }
+            return ret;
+        };
+        return Utils;
+    })();
+    Db.Utils = Utils;
     var Entity = (function () {
         function Entity() {
             this.load = new internal.EntityEvent(this);
         }
+        Entity.prototype.save = function () {
+            var fu = null;
+            var fe;
+            var ret = new Promise(function (res, err) {
+                fu = res;
+                fe = err;
+            });
+            var url = this.load.url;
+            if (!url)
+                throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
+            new Firebase(url).set(Utils.entitySerialize(this), function (err) {
+                if (!err) {
+                    fu(true);
+                }
+                else {
+                    fe(err);
+                }
+            });
+            return ret;
+        };
         Entity.prototype.then = function (onFulfilled, onRejected) {
             var fu = null;
             var ret = new Promise(function (res, err) {
@@ -112,6 +191,54 @@ var Db;
     Db.Entity = Entity;
     var internal;
     (function (internal) {
+        var IdGenerator = (function () {
+            function IdGenerator() {
+            }
+            IdGenerator.next = function () {
+                var now = new Date().getTime();
+                var duplicateTime = (now === IdGenerator.lastPushTime);
+                IdGenerator.lastPushTime = now;
+                var timeStampChars = new Array(8);
+                for (var i = 7; i >= 0; i--) {
+                    timeStampChars[i] = IdGenerator.PUSH_CHARS.charAt(now % IdGenerator.BASE);
+                    // NOTE: Can't use << here because javascript will convert to int and lose the upper bits.
+                    now = Math.floor(now / IdGenerator.BASE);
+                }
+                if (now !== 0)
+                    throw new Error('We should have converted the entire timestamp.');
+                var id = timeStampChars.join('');
+                if (!duplicateTime) {
+                    for (i = 0; i < 14; i++) {
+                        IdGenerator.lastRandChars[i] = Math.floor(Math.random() * IdGenerator.BASE);
+                    }
+                }
+                else {
+                    for (i = 13; i >= 0 && IdGenerator.lastRandChars[i] === IdGenerator.BASE - 1; i--) {
+                        IdGenerator.lastRandChars[i] = 0;
+                    }
+                    IdGenerator.lastRandChars[i]++;
+                }
+                for (i = 0; i < 14; i++) {
+                    id += IdGenerator.PUSH_CHARS.charAt(IdGenerator.lastRandChars[i]);
+                }
+                if (id.length != 22)
+                    throw new Error('Length should be 22, but was ' + id.length);
+                return id;
+            };
+            // Modeled after base64 web-safe chars, but ordered by ASCII.
+            // SG : removed - and _
+            IdGenerator.PUSH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+            IdGenerator.BASE = IdGenerator.PUSH_CHARS.length;
+            // Timestamp of last push, used to prevent local collisions if you push twice in one ms.
+            IdGenerator.lastPushTime = 0;
+            // We generate 72-bits of randomness which get turned into 14 characters and appended to the
+            // timestamp to prevent collisions with other clients.	We store the last characters we
+            // generated because in the event of a collision, we'll use those same characters except
+            // "incremented" by one.
+            IdGenerator.lastRandChars = [];
+            return IdGenerator;
+        })();
+        internal.IdGenerator = IdGenerator;
         var EntityRoot = (function () {
             function EntityRoot(c) {
                 this.constr = null;
@@ -131,14 +258,16 @@ var Db;
                 this.db = db;
                 this.url = db.baseUrl + this.name + '/';
             };
+            EntityRoot.prototype.query = function () {
+                var ret = new QueryImpl(this.constr);
+                ret.dbInit(this.url, this.db);
+                return ret;
+            };
             EntityRoot.prototype.load = function (url) {
                 if (url.indexOf(this.url) === -1) {
                     url = this.url + url;
                 }
                 return this.db.load(url, this.constr);
-            };
-            EntityRoot.prototype.save = function (entity) {
-                // TODO implement
             };
             return EntityRoot;
         })();
@@ -201,10 +330,15 @@ var Db;
                 //console.log("Handling", evd);
                 //console.trace();
                 evd.setHandler(this);
-                this.method.call(this.ctx, evd);
-                //console.log("Then calling", this.after);
+                // the after is executed before to avoid bouncing
                 if (this.after)
                     this.after(this);
+                try {
+                    this.method.call(this.ctx, evd);
+                }
+                finally {
+                }
+                //console.log("Then calling", this.after);
             };
             EventHandler.prog = 1;
             return EventHandler;
@@ -340,12 +474,14 @@ var Db;
             __extends(EntityEvent, _super);
             function EntityEvent(myEntity) {
                 _super.call(this);
+                /*
+                static getEventFor<T>(x:T):EntityEvent<T> {
+                    return (<EntityEvent<T>>(<Entity><any>x).load);
+                }
+                */
                 this.myEntity = null;
                 this.myEntity = myEntity;
             }
-            EntityEvent.getEventFor = function (x) {
-                return x.load;
-            };
             EntityEvent.prototype.dbInit = function (url, db) {
                 _super.prototype.dbInit.call(this, url, db);
                 var ks = Object.keys(this.myEntity);
@@ -375,7 +511,7 @@ var Db;
                 for (var i = 0; i < ks.length; i++) {
                     var prev = this.myEntity[ks[i]];
                     if (prev instanceof Entity) {
-                        EntityEvent.getEventFor(prev).parseValue(val[ks[i]]);
+                        prev.load.parseValue(val[ks[i]]);
                     }
                     else {
                         // TODO handle collections
@@ -401,9 +537,10 @@ var Db;
                     console.log("No _ref for reference in ", val, url);
                     return;
                 }
-                // TODO passing the constructor here and passing it to the load, we ould have reference to nested objects
-                // TODO passing value here can make projections
+                // passing the constructor here to the db.load method, we have reference to nested objects
                 this.myEntity.value = this.db.load(val._ref, this.myEntity._ctor);
+                this.myEntity.url = val._ref;
+                // TODO parse the value for projections
                 return this.myEntity;
             };
             return ReferenceEvent;
@@ -430,7 +567,8 @@ var Db;
                 // TODO should pass val here, for projections and to handle refs
                 var e = this.db.load(url, this.ctor);
                 //var e = new this.ctor();
-                var ev = EntityEvent.getEventFor(e);
+                // TODO mess here, value returned form db.load is almost certainly an entity, and collections also handle entities, but it's not stated in generics
+                var ev = e.load;
                 ev.parseValue(val, url);
                 return e;
             };
@@ -460,15 +598,29 @@ var Db;
         internal.CollectionAddedEntityEvent = CollectionAddedEntityEvent;
         var CollectionImpl = (function () {
             function CollectionImpl(c) {
+                var _this = this;
                 this.add = null;
                 this.remove = null;
+                this.ctor = c;
                 this.add = new CollectionAddedEntityEvent(c);
                 this.remove = new CollectionEntityEvent(c);
                 this.remove.events = ['child_removed'];
+                this.add.hrefIniter = function (h) { return _this.setupHref(h); };
+                this.remove.hrefIniter = function (h) { return _this.setupHref(h); };
             }
             CollectionImpl.prototype.dbInit = function (url, db) {
+                this.db = db;
+                this.url = url;
                 this.add.dbInit(url, db);
                 this.remove.dbInit(url, db);
+            };
+            CollectionImpl.prototype.query = function () {
+                var ret = new QueryImpl(this.ctor);
+                ret.dbInit(this.url, this.db);
+                return ret;
+            };
+            CollectionImpl.prototype.setupHref = function (h) {
+                h._ref = new Firebase(h.event.url);
             };
             return CollectionImpl;
         })();
@@ -477,12 +629,96 @@ var Db;
             __extends(ListImpl, _super);
             function ListImpl() {
                 _super.apply(this, arguments);
-                // TODO implement correct value handling
                 this.value = [];
             }
+            ListImpl.prototype.then = function (onFulfilled, onRejected) {
+                var _this = this;
+                var fu = null;
+                var ret = new Promise(function (res, err) {
+                    fu = res;
+                });
+                var vals = [];
+                this.add.on(this, function (detail) {
+                    if (detail.listEnd) {
+                        detail.offMe();
+                        _this.value = vals;
+                        if (onFulfilled) {
+                            fu(onFulfilled());
+                        }
+                        else {
+                            fu(null);
+                        }
+                    }
+                    else {
+                        vals.push(detail.payload);
+                    }
+                });
+                return ret;
+            };
             return ListImpl;
         })(CollectionImpl);
         internal.ListImpl = ListImpl;
+        var QueryImpl = (function (_super) {
+            __extends(QueryImpl, _super);
+            function QueryImpl() {
+                _super.apply(this, arguments);
+                this._sortField = null;
+                this._sortDesc = false;
+                this._limit = 0;
+                this._rangeFrom = null;
+                this._rangeTo = null;
+                this._equals = null;
+            }
+            QueryImpl.prototype.sortOn = function (field, desc) {
+                if (desc === void 0) { desc = false; }
+                this._sortField = field;
+                this._sortDesc = desc;
+                return this;
+            };
+            QueryImpl.prototype.limit = function (limit) {
+                this._limit = limit;
+                return this;
+            };
+            QueryImpl.prototype.range = function (from, to) {
+                this._rangeFrom = from;
+                this._rangeTo = to;
+                return this;
+            };
+            QueryImpl.prototype.equals = function (val) {
+                this._equals = val;
+                return this;
+            };
+            QueryImpl.prototype.setupHref = function (h) {
+                h._ref = new Firebase(h.event.url);
+                if (this._sortField) {
+                    h._ref = h._ref.orderByChild(this._sortField);
+                    if (this._rangeFrom) {
+                        h._ref = h._ref.startAt(this._rangeFrom);
+                    }
+                    if (this._rangeTo) {
+                        h._ref = h._ref.startAt(this._rangeTo);
+                    }
+                    if (this._equals) {
+                        h._ref = h._ref.equalTo(this._equals);
+                    }
+                }
+                if (this._sortDesc) {
+                    if (this._limit) {
+                        h._ref = h._ref.limitToLast(this._limit);
+                    }
+                    else {
+                        h._ref = h._ref.limitToLast(Number.MAX_VALUE);
+                    }
+                }
+                else {
+                    if (this._limit) {
+                        h._ref = h._ref.limitToFirst(this._limit);
+                    }
+                }
+            };
+            return QueryImpl;
+        })(ListImpl);
+        internal.QueryImpl = QueryImpl;
     })(internal = Db.internal || (Db.internal = {}));
 })(Db || (Db = {}));
 module.exports = Db;
