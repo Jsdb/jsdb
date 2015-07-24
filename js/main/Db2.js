@@ -93,8 +93,9 @@ var Db;
         return new internal.EntityRoot(c);
     }
     Db.entityRoot = entityRoot;
-    function embedded(c) {
+    function embedded(c, binding) {
         var ret = new c();
+        ret.load.bind(binding);
         return ret;
     }
     Db.embedded = embedded;
@@ -113,6 +114,13 @@ var Db;
         return new internal.ListImpl(c);
     }
     Db.list = list;
+    function bind(localName, targetName, live) {
+        if (live === void 0) { live = true; }
+        var ret = new internal.BindingImpl();
+        ret.bind(localName, targetName, live);
+        return ret;
+    }
+    Db.bind = bind;
     var Utils = (function () {
         function Utils() {
         }
@@ -147,46 +155,51 @@ var Db;
         return Utils;
     })();
     Db.Utils = Utils;
+    var ResolvablePromise = (function () {
+        function ResolvablePromise() {
+            var _this = this;
+            this.promise = null;
+            this.promise = new Promise(function (ok, err) {
+                _this.resolve = ok;
+                _this.error = err;
+            });
+        }
+        return ResolvablePromise;
+    })();
+    Db.ResolvablePromise = ResolvablePromise;
     var Entity = (function () {
         function Entity() {
             this.load = new internal.EntityEvent(this);
         }
         Entity.prototype.save = function () {
-            var fu = null;
-            var fe;
-            var ret = new Promise(function (res, err) {
-                fu = res;
-                fe = err;
-            });
+            var resprom = new ResolvablePromise();
             var url = this.load.url;
             if (!url)
                 throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
             new Firebase(url).set(Utils.entitySerialize(this), function (err) {
                 if (!err) {
-                    fu(true);
+                    resprom.resolve(true);
                 }
                 else {
-                    fe(err);
+                    resprom.error(err);
                 }
             });
-            return ret;
+            return resprom.promise;
         };
         Entity.prototype.then = function (onFulfilled, onRejected) {
-            var fu = null;
-            var ret = new Promise(function (res, err) {
-                fu = res;
-            });
+            //console.log("Called then on " + this.constructor.name);
+            var resprom = new ResolvablePromise();
             this.load.once(this, function (detail) {
                 if (!detail.projected) {
                     if (onFulfilled) {
-                        fu(onFulfilled(detail));
+                        resprom.resolve(onFulfilled(detail));
                     }
                     else {
-                        fu(null);
+                        resprom.resolve(detail);
                     }
                 }
             });
-            return ret;
+            return resprom.promise;
         };
         return Entity;
     })();
@@ -295,6 +308,74 @@ var Db;
             return EventDetails;
         })();
         internal.EventDetails = EventDetails;
+        var BindingImpl = (function () {
+            function BindingImpl() {
+                this.keys = [];
+                this.bindings = {};
+                this.live = {};
+            }
+            BindingImpl.prototype.bind = function (local, remote, live) {
+                if (live === void 0) { live = true; }
+                this.keys.push(local);
+                this.bindings[local] = remote;
+                this.live[local] = live;
+                return this;
+            };
+            BindingImpl.prototype.resolve = function (parent, entityProm) {
+                var _this = this;
+                var proms = [];
+                proms.push(entityProm);
+                for (var i = 0; i < this.keys.length; i++) {
+                    var k = this.keys[i];
+                    if (k === 'this') {
+                        proms.push(Promise.resolve(parent));
+                        continue;
+                    }
+                    var val = parent[k];
+                    if (val instanceof ReferenceImpl) {
+                        var ri = val;
+                        proms.push(ri.then(function () {
+                            return ri.value;
+                        }));
+                    }
+                    else if (val instanceof Entity) {
+                        proms.push(Promise.resolve(val));
+                    }
+                    else {
+                        proms.push(Promise.resolve(val));
+                    }
+                }
+                return Promise.all(proms).then(function (vals) {
+                    //console.log("Done values ", vals);
+                    var tgt = vals[0].payload;
+                    for (var i = 0; i < _this.keys.length; i++) {
+                        var k = _this.keys[i];
+                        var val = vals[i + 1];
+                        if (val instanceof EventDetails) {
+                            val = val.payload;
+                        }
+                        if (_this.live[k]) {
+                            if (val instanceof Entity) {
+                                val.load.live(tgt);
+                            }
+                            // References needs more attention, because they get here already resolved and need a second copy
+                            if (parent[k] instanceof ReferenceImpl) {
+                                // Wrap in closure for K
+                                (function (k) {
+                                    var ref = parent[k];
+                                    ref.load.on(tgt, function (det) {
+                                        tgt[_this.bindings[k]] = ref.value;
+                                    });
+                                })(k);
+                            }
+                        }
+                        tgt[_this.bindings[k]] = val;
+                    }
+                });
+            };
+            return BindingImpl;
+        })();
+        internal.BindingImpl = BindingImpl;
         var EventHandler = (function () {
             function EventHandler(event, ctx, method) {
                 this.event = event;
@@ -387,6 +468,11 @@ var Db;
                     this.init(h);
                 }
             };
+            Event.prototype.liveMarkerHandler = function () {
+            };
+            Event.prototype.live = function (ctx) {
+                this.on(ctx, this.liveMarkerHandler);
+            };
             Event.prototype.once = function (ctx, handler) {
                 var _this = this;
                 var h = new EventHandler(this, ctx, handler);
@@ -420,21 +506,21 @@ var Db;
             };
             Event.prototype.setupEvent = function (h, name) {
                 var _this = this;
+                //console.log("Setting up event");
+                //console.trace();
                 // TODO what the second time the event fires?
-                var proFunc = null;
+                var resprom = null;
                 var fireprom = null;
                 if (this._preload) {
-                    var prom = new Promise(function (ok, err) {
-                        proFunc = ok;
-                    });
+                    resprom = new ResolvablePromise();
                     // Use the returned promise
-                    fireprom = this._preload(prom);
+                    fireprom = this._preload(resprom.promise);
                 }
                 h.hook(name, function (ds, pre) {
                     var evd = new EventDetails();
                     evd.payload = _this.parseValue(ds.val(), ds.ref().toString());
-                    if (proFunc) {
-                        proFunc(evd.payload);
+                    if (resprom) {
+                        resprom.resolve(evd);
                     }
                     evd.originalEvent = name;
                     evd.originalUrl = ds.ref().toString();
@@ -482,8 +568,22 @@ var Db;
                 }
                 */
                 this.myEntity = null;
+                this.parentEntity = null;
+                this.binding = null;
                 this.myEntity = myEntity;
             }
+            EntityEvent.prototype.bind = function (binding) {
+                var _this = this;
+                if (!binding)
+                    return;
+                this.binding = binding;
+                this._preload = function (p) {
+                    return _this.binding.resolve(_this.parentEntity, p);
+                };
+            };
+            EntityEvent.prototype.setParentEntity = function (parent) {
+                this.parentEntity = parent;
+            };
             EntityEvent.prototype.dbInit = function (url, db) {
                 _super.prototype.dbInit.call(this, url, db);
                 var ks = Object.keys(this.myEntity);
@@ -497,9 +597,15 @@ var Db;
                     if (typeof se === 'object') {
                         if (se.dbInit) {
                             se.dbInit(url + '/' + ks[i], db);
+                            if (se.setParentEntity) {
+                                se.setParentEntity(this.myEntity);
+                            }
                         }
                         else if (se.load && se.load != null && se.load.dbInit) {
                             se.load.dbInit(url + '/' + ks[i], db);
+                            if (se.load.setParentEntity) {
+                                se.load.setParentEntity(this.myEntity);
+                            }
                         }
                     }
                 }
@@ -650,27 +756,24 @@ var Db;
             }
             ListImpl.prototype.then = function (onFulfilled, onRejected) {
                 var _this = this;
-                var fu = null;
-                var ret = new Promise(function (res, err) {
-                    fu = res;
-                });
+                var resprom = new ResolvablePromise();
                 var vals = [];
                 this.add.on(this, function (detail) {
                     if (detail.listEnd) {
                         detail.offMe();
                         _this.value = vals;
                         if (onFulfilled) {
-                            fu(onFulfilled());
+                            resprom.resolve(onFulfilled());
                         }
                         else {
-                            fu(null);
+                            resprom.resolve(null);
                         }
                     }
                     else {
                         vals.push(detail.payload);
                     }
                 });
-                return ret;
+                return resprom.promise;
             };
             return ListImpl;
         })(CollectionImpl);

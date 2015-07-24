@@ -27,6 +27,13 @@ var SubEntity = (function (_super) {
     }
     return SubEntity;
 })(Db.Entity);
+var OthSubEntity = (function (_super) {
+    __extends(OthSubEntity, _super);
+    function OthSubEntity() {
+        _super.apply(this, arguments);
+    }
+    return OthSubEntity;
+})(Db.Entity);
 var WithSubentity = (function (_super) {
     __extends(WithSubentity, _super);
     function WithSubentity() {
@@ -53,6 +60,16 @@ var WithCollections = (function (_super) {
     }
     return WithCollections;
 })(Db.Entity);
+var WithPreloads = (function (_super) {
+    __extends(WithPreloads, _super);
+    function WithPreloads() {
+        _super.apply(this, arguments);
+        this.oth = Db.embedded(OthSubEntity, Db.bind('sub', '_sub', true).bind('ref', '_ref', true).bind('this', '_parent', false));
+        this.sub = Db.embedded(SubEntity);
+        this.ref = Db.reference(WithProps);
+    }
+    return WithPreloads;
+})(Db.Entity);
 var TestDb = (function (_super) {
     __extends(TestDb, _super);
     function TestDb() {
@@ -61,6 +78,7 @@ var TestDb = (function (_super) {
         this.withSubs = Db.entityRoot(WithSubentity);
         this.withRefs = Db.entityRoot(WithRef);
         this.withCols = Db.entityRoot(WithCollections);
+        this.withPre = Db.entityRoot(WithPreloads);
         _super.prototype.init.call(this);
     }
     return TestDb;
@@ -79,6 +97,9 @@ describe('Db Tests', function () {
     var wcFb;
     var wc1Fb;
     var wc2Fb;
+    var wplFb;
+    var wpl1Fb;
+    var wpl2Fb;
     beforeEach(function (done) {
         this.timeout(100000);
         defDb.reset();
@@ -189,6 +210,20 @@ describe('Db Tests', function () {
                     str: 'Sub3'
                 }
             ]
+        }, opCnter);
+        wplFb = new Firebase(baseUrl + '/withPre');
+        wpl1Fb = wplFb.child('wpl1');
+        opcnt++;
+        wpl1Fb.set({
+            oth: {
+                num: 123
+            },
+            ref: {
+                _ref: wp1Fb.toString()
+            },
+            sub: {
+                str: 'abc'
+            }
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
         root.on('value', function () {
@@ -432,6 +467,48 @@ describe('Db Tests', function () {
         
     });
     */
+    // Binding
+    it('should bind and keep live on subentity and parent', function (done) {
+        var wpl1 = defDb.withPre.load('wpl1');
+        wpl1.oth.then(function () {
+            M.assert("Loaded the subentity").when(wpl1.sub.str).is('abc');
+            M.assert("Inited the bound").when(wpl1.oth._sub).is(M.aTruthy);
+            M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
+            M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
+            var fbsub = new Firebase(wpl1.sub.load.url);
+            fbsub.update({ str: 'cde' }, function (ds) {
+                M.assert("Updated the subentity").when(wpl1.oth._sub.str).is('cde');
+                done();
+            });
+        });
+    });
+    // TODO update live when a reference pointer is changed
+    it('should bind and keep live on reference pointer', function (done) {
+        var wpl1 = defDb.withPre.load('wpl1');
+        wpl1.oth.then(function () {
+            M.assert("Loaded the ref").when(wpl1.ref.value).is(M.aTruthy);
+            M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
+            M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
+            var fbsub = new Firebase(wpl1.ref.load.url);
+            fbsub.update({ _ref: wp2Fb.toString() }, function (ds) {
+                M.assert("Updated the reference pointer").when(wpl1.oth._ref.str).is('String 2');
+                done();
+            });
+        });
+    });
+    it('should bind and keep live on referenced entity', function (done) {
+        var wpl1 = defDb.withPre.load('wpl1');
+        wpl1.oth.then(function () {
+            M.assert("Loaded the ref").when(wpl1.ref.value).is(M.aTruthy);
+            M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
+            M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
+            var fbsub = new Firebase(wpl1.ref.url);
+            fbsub.update({ str: 'cde' }, function (ds) {
+                M.assert("Updated the subentity").when(wpl1.oth._ref.str).is('cde');
+                done();
+            });
+        });
+    });
     // TODO more tests on queries
     // TODO query on collections
     // TODO read projections
@@ -600,6 +677,7 @@ describe('Db Tests', function () {
     // TODO incremental remove on collections
     // TODO write back-projections
     // TODO preload
+    // TODO reference preload
     // TODO cache cleaning
     // TODO move promises on events?
 });

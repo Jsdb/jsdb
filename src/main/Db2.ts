@@ -99,8 +99,9 @@ module Db {
 		return new internal.EntityRoot(c);
 	}
 	
-	export function embedded<E extends Entity>(c :new ()=>E) : E {
+	export function embedded<E extends Entity>(c :new ()=>E, binding? :internal.IBinding) : E {
 		var ret = new c();
+		(<internal.EntityEvent<any>>ret.load).bind(<internal.BindingImpl>binding);
 		return ret;
 	}
 	
@@ -117,6 +118,12 @@ module Db {
 	
 	export function list<E extends Entity>(c :new ()=>E) : internal.IList<E> {
 		return new internal.ListImpl<E>(c);
+	}
+	
+	export function bind(localName :string, targetName :string, live :boolean = true) :internal.IBinding {
+		var ret = new internal.BindingImpl();
+		ret.bind(localName, targetName,live);
+		return ret;
 	}
 	
 	export class Utils {
@@ -146,49 +153,55 @@ module Db {
 		}
 	}
 	
-	export class Entity {
+	export class ResolvablePromise<X> {
+		promise :Promise<X> = null;
+		resolve :(val :X|Thenable<X>)=>void;
+		error :(err? :any)=>void;
+		constructor() {
+			this.promise = new Promise<X>((ok,err) => {
+				this.resolve = ok;
+				this.error = err;
+			});
+		}
+	}
+	
+	export class Entity implements Thenable<internal.IEventDetails<any>> {
 		load :internal.IEvent<any> = new internal.EntityEvent<any>(this);
 		
 		serialize : () => any;
 		
 		save() :Thenable<boolean> {
-			var fu :(data:boolean|Thenable<boolean>)=>void = null;
-			var fe :(err?:any)=>void;
-			var ret = new Promise<boolean>((res,err) => {
-				fu = res;
-				fe = err;
-			});
+			var resprom = new ResolvablePromise<boolean>();
 
 			var url = (<internal.EntityEvent<any>>this.load).url;
 			if (!url) throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
 			new Firebase(url).set(Utils.entitySerialize(this), (err) => {
 				if (!err) {
-					fu(true);
+					resprom.resolve(true);
 				} else {
-					fe(err);
+					resprom.error(err);
 				}
 			});
 			
-			return ret;
+			return resprom.promise;
 		}
 		
+		then() :Thenable<internal.IEventDetails<any>>
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
-		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => any): Thenable<U> {
-			var fu :(data:U|Thenable<U>)=>void = null;
-			var ret = new Promise<U>((res,err) => {
-				fu = res;
-			});
+		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => any): Thenable<U> | Thenable<internal.IEventDetails<any>> {
+			//console.log("Called then on " + this.constructor.name);
+			var resprom = new ResolvablePromise<U|internal.IEventDetails<any>>();
 			this.load.once(this, (detail) => {
 				if (!detail.projected) {
 					if (onFulfilled) {
-						fu(onFulfilled(detail));
+						resprom.resolve(onFulfilled(detail));
 					} else {
-						fu(null);
+						resprom.resolve(detail);
 					}
 				}
 			});
-			return ret;
+			return resprom.promise;
 		}
 
 	}
@@ -214,8 +227,13 @@ module Db {
 		export interface IEvent<V> {
 			on(ctx :any, handler: { (detail?:IEventDetails<V>): void });
 			once(ctx :any, handler: { (detail?:IEventDetails<V>): void });
+			live(ctx :any);
 			off(ctx :any):any;
 			hasHandlers() :boolean;
+		}
+		
+		export interface IBinding {
+			bind(localName :string, targetName :string, live? :boolean);
 		}
 	
 		
@@ -370,6 +388,69 @@ module Db {
 				this.handler.event.offHandler(this.handler);
 			}
 		}
+		
+		export class BindingImpl implements IBinding {
+			keys :string[] = [];
+			bindings : {[index:string]:string} = {};
+			live : {[index:string]:boolean} = {};
+			bind(local :string, remote :string, live :boolean = true) {
+				this.keys.push(local);
+				this.bindings[local] = remote;
+				this.live[local] = live;
+				return this;
+			}
+			
+			resolve(parent :Entity, entityProm :Promise<IEventDetails<any>>) :Promise<any> {
+				var proms :Thenable<any>[] = [];
+				proms.push(entityProm);
+				for (var i = 0; i < this.keys.length; i++) {
+					var k = this.keys[i];
+					if (k === 'this') {
+						proms.push(Promise.resolve(parent));
+						continue;
+					}
+					var val = parent[k];
+					if (val instanceof ReferenceImpl) {
+						var ri = <ReferenceImpl<any>>val;
+						proms.push(ri.then(() => {
+							return ri.value;
+						}));
+						// TODO keep it live if required
+					} else if (val instanceof Entity) {
+						proms.push(Promise.resolve(<Entity>val));
+					} else {
+						proms.push(Promise.resolve(val));
+					}
+				}
+				return Promise.all(proms).then((vals) => {
+					//console.log("Done values ", vals);
+					var tgt = (<IEventDetails<any>>vals[0]).payload;
+					for (var i = 0; i < this.keys.length; i++) {
+						var k = this.keys[i];
+						var val = vals[i+1];
+						if (val instanceof EventDetails) {
+							val = (<EventDetails<any>>val).payload;
+						}
+						if (this.live[k]) {
+							if (val instanceof Entity) {
+								(<Entity>val).load.live(tgt);
+							}
+							// References needs more attention, because they get here already resolved and need a second copy
+							if (parent[k] instanceof ReferenceImpl) {
+								// Wrap in closure for K
+								((k:string) => {
+									var ref = <ReferenceImpl<any>>parent[k];
+									ref.load.on(tgt,(det)=> {
+										tgt[this.bindings[k]] = ref.value;
+									});
+								})(k);
+							}
+						}
+						tgt[this.bindings[k]]= val;
+					}
+				});
+			}
+		}
 
 		export class EventHandler<T> {
 			static prog = 1;
@@ -440,7 +521,7 @@ module Db {
 			 */
 			protected db :Db = null;
 			
-			_preload :(p:Promise<T>)=>Promise<any> = null;
+			_preload :(p:Promise<EventDetails<T>>)=>Promise<any> = null;
 			
 			events = ['value'];
 			
@@ -474,6 +555,12 @@ module Db {
 				if (this.url) {
 					this.init(h);
 				}
+			}
+			
+			private liveMarkerHandler() {}
+			
+			public live(ctx :any) {
+				this.on(ctx, this.liveMarkerHandler);
 			}
 			
 			public once(ctx :any, handler: { (detail?:EventDetails<T>): void }) {
@@ -520,21 +607,21 @@ module Db {
 			}
 			
 			protected setupEvent(h :EventHandler<T>, name :string) {
+				//console.log("Setting up event");
+				//console.trace();
 				// TODO what the second time the event fires?
-				var proFunc:(value:T)=>void = null;
+				var resprom :ResolvablePromise<EventDetails<T>> = null;
 				var fireprom = null;
 				if (this._preload) {
-					var prom = new Promise<T>((ok,err) => {
-						proFunc = ok;
-					});
+					resprom = new ResolvablePromise();
 					// Use the returned promise
-					fireprom = this._preload(prom);
+					fireprom = this._preload(resprom.promise);
 				}
 				h.hook(name, (ds, pre) => {
 					var evd = new EventDetails<T>();
 					evd.payload = this.parseValue(ds.val(), ds.ref().toString());
-					if (proFunc) {
-						proFunc(evd.payload);
+					if (resprom) {
+						resprom.resolve(evd);
 					}
 					evd.originalEvent = name;
 					evd.originalUrl = ds.ref().toString();
@@ -590,7 +677,7 @@ module Db {
 			*/
 		}
 		
-		export class EntityEvent<T> extends Event<T> {
+		export class EntityEvent<T extends Entity> extends Event<T> {
 			
 			/*
 			static getEventFor<T>(x:T):EntityEvent<T> {
@@ -599,10 +686,24 @@ module Db {
 			*/
 			
 			myEntity :T = null;
+			parentEntity :any = null;
+			binding :BindingImpl = null;
 			
 			constructor(myEntity :T) {
 				super();
 				this.myEntity = myEntity;
+			}
+			
+			bind(binding :BindingImpl) {
+				if (!binding) return;
+				this.binding = binding;
+				this._preload = (p)=> {
+					return this.binding.resolve(this.parentEntity, p);
+				};
+			}
+			
+			setParentEntity(parent :any) {
+				this.parentEntity = parent;
 			}
 			
 			dbInit(url :string, db :Db) {
@@ -616,8 +717,14 @@ module Db {
 					if (typeof se === 'object') {
 						if (se.dbInit) {
 							se.dbInit(url +'/' + ks[i], db);
+							if (se.setParentEntity) {
+								se.setParentEntity(this.myEntity);
+							}
 						} else if (se.load && se.load != null && se.load.dbInit) {
 							se.load.dbInit(url +'/' + ks[i], db);
+							if (se.load.setParentEntity) {
+								se.load.setParentEntity(this.myEntity);
+							}
 						}
 					}
 				}
@@ -774,26 +881,22 @@ module Db {
 			
 			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>
 			then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U> {
-				var fu :(data:U|Thenable<U>)=>void = null;
-				var ret = new Promise<U>((res,err) => {
-					fu = res;
-				});
+				var resprom = new ResolvablePromise<U>();
 				var vals :E[] = [];
 				this.add.on(this, (detail) => {
 					if (detail.listEnd) {
 						detail.offMe();
 						this.value = vals;
 						if (onFulfilled) {
-							fu(onFulfilled());
+							resprom.resolve(onFulfilled());
 						} else {
-							fu(null);
+							resprom.resolve(null);
 						}
 					} else {
 						vals.push(detail.payload);
 					}
 				});
-				return ret;
-
+				return resprom.promise;
 			}
 
 		}

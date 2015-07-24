@@ -20,6 +20,13 @@ class SubEntity extends Db.Entity {
 	str :string;
 }
 
+class OthSubEntity extends Db.Entity {
+	_sub :SubEntity;
+	_ref :WithProps;
+	_parent :any;
+	num :number;
+}
+
 class WithSubentity extends Db.Entity {
 	sub = Db.embedded(SubEntity);
 	str :string;
@@ -36,11 +43,18 @@ class WithCollections extends Db.Entity {
 	mainRefList = Db.list(Db.referenceBuilder(WithProps));
 }
 
+class WithPreloads extends Db.Entity {
+	oth = Db.embedded(OthSubEntity,Db.bind('sub','_sub',true).bind('ref','_ref',true).bind('this','_parent',false));
+	sub = Db.embedded(SubEntity);
+	ref = Db.reference(WithProps);
+}
+
 class TestDb extends Db {
 	withProps = Db.entityRoot(WithProps);
 	withSubs = Db.entityRoot(WithSubentity);
 	withRefs = Db.entityRoot(WithRef);
 	withCols = Db.entityRoot(WithCollections);
+	withPre = Db.entityRoot(WithPreloads);
 	
 	constructor() {
 		super(baseUrl);
@@ -66,6 +80,10 @@ describe('Db Tests', () => {
 	var wcFb :Firebase;
 	var wc1Fb :Firebase;
 	var wc2Fb :Firebase;
+	
+	var wplFb :Firebase;
+	var wpl1Fb :Firebase;
+	var wpl2Fb :Firebase;
 	
 	
 	beforeEach(function (done) {
@@ -190,6 +208,22 @@ describe('Db Tests', () => {
 			]
 		}, opCnter);
 		
+		
+		wplFb = new Firebase(baseUrl + '/withPre');
+		wpl1Fb = wplFb.child('wpl1');
+		opcnt++;
+		wpl1Fb.set({
+			oth: {
+				num: 123
+			},
+			ref: {
+				_ref: wp1Fb.toString()
+			},
+			sub: {
+				str: 'abc'
+			}
+		}, opCnter);
+
 		
 		// Keep reference alive in ram, faster tests and less side effects
 		root.on('value', () => {});
@@ -466,6 +500,56 @@ describe('Db Tests', () => {
 	});
 	*/
 	
+	// Binding
+	it('should bind and keep live on subentity and parent', (done) => {
+		var wpl1 = defDb.withPre.load('wpl1');
+		
+		wpl1.oth.then(() => {
+			M.assert("Loaded the subentity").when(wpl1.sub.str).is('abc');
+			M.assert("Inited the bound").when(wpl1.oth._sub).is(M.aTruthy);
+			M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
+			M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
+			var fbsub = new Firebase((<Db.internal.EntityEvent<any>>wpl1.sub.load).url);
+			fbsub.update({str:'cde'},function(ds) {
+				M.assert("Updated the subentity").when(wpl1.oth._sub.str).is('cde');
+				done();
+			});
+		});
+	});
+
+	// TODO update live when a reference pointer is changed
+	it('should bind and keep live on reference pointer', (done) => {
+		var wpl1 = defDb.withPre.load('wpl1');
+		
+		wpl1.oth.then(() => {
+			M.assert("Loaded the ref").when(wpl1.ref.value).is(M.aTruthy);
+			M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
+			M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
+			var fbsub = new Firebase((<Db.internal.EntityEvent<any>>wpl1.ref.load).url);
+			fbsub.update({_ref:wp2Fb.toString()},function(ds) {
+				M.assert("Updated the reference pointer").when(wpl1.oth._ref.str).is('String 2');
+				done();
+			});
+		});
+
+	});
+		
+	it('should bind and keep live on referenced entity', (done) => {
+		var wpl1 = defDb.withPre.load('wpl1');
+		
+		wpl1.oth.then(() => {
+			M.assert("Loaded the ref").when(wpl1.ref.value).is(M.aTruthy);
+			M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
+			M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
+			var fbsub = new Firebase(wpl1.ref.url);
+			fbsub.update({str:'cde'},function(ds) {
+				M.assert("Updated the subentity").when(wpl1.oth._ref.str).is('cde');
+				done();
+			});
+		});
+	});
+	
+	
 	// TODO more tests on queries
 	
 	// TODO query on collections
@@ -661,6 +745,8 @@ describe('Db Tests', () => {
 	// TODO write back-projections
 	
 	// TODO preload
+	
+	// TODO reference preload
 	
 	// TODO cache cleaning
 	

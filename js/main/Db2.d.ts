@@ -14,18 +14,26 @@ declare class Db {
 }
 declare module Db {
     function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;
-    function embedded<E extends Entity>(c: new () => E): E;
+    function embedded<E extends Entity>(c: new () => E, binding?: internal.IBinding): E;
     function reference<E extends Entity>(c: new () => E): internal.IReference<E>;
     function referenceBuilder<E extends Entity>(c: new () => E): new () => internal.ReferenceImpl<E>;
     function list<E extends Entity>(c: new () => E): internal.IList<E>;
+    function bind(localName: string, targetName: string, live?: boolean): internal.IBinding;
     class Utils {
         static entitySerialize(e: Entity, fields?: string[]): any;
         static rawEntitySerialize(e: Entity, fields?: string[]): any;
     }
-    class Entity {
+    class ResolvablePromise<X> {
+        promise: Promise<X>;
+        resolve: (val: X | Thenable<X>) => void;
+        error: (err?: any) => void;
+        constructor();
+    }
+    class Entity implements Thenable<internal.IEventDetails<any>> {
         load: internal.IEvent<any>;
         serialize: () => any;
         save(): Thenable<boolean>;
+        then(): Thenable<internal.IEventDetails<any>>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
     }
@@ -49,8 +57,12 @@ declare module Db {
             once(ctx: any, handler: {
                 (detail?: IEventDetails<V>): void;
             }): any;
+            live(ctx: any): any;
             off(ctx: any): any;
             hasHandlers(): boolean;
+        }
+        interface IBinding {
+            bind(localName: string, targetName: string, live?: boolean): any;
         }
         interface IEventDetails<V> {
             payload: V;
@@ -115,6 +127,17 @@ declare module Db {
             setHandler(handler: EventHandler<T>): void;
             offMe(): void;
         }
+        class BindingImpl implements IBinding {
+            keys: string[];
+            bindings: {
+                [index: string]: string;
+            };
+            live: {
+                [index: string]: boolean;
+            };
+            bind(local: string, remote: string, live?: boolean): BindingImpl;
+            resolve(parent: Entity, entityProm: Promise<IEventDetails<any>>): Promise<any>;
+        }
         class EventHandler<T> {
             event: Event<T>;
             ctx: any;
@@ -144,7 +167,7 @@ declare module Db {
              * Instance of the Db we are using
              */
             protected db: Db;
-            _preload: (p: Promise<T>) => Promise<any>;
+            _preload: (p: Promise<EventDetails<T>>) => Promise<any>;
             events: string[];
             protected projVal: T;
             hrefIniter: (h: EventHandler<T>) => void;
@@ -156,6 +179,8 @@ declare module Db {
             on(ctx: any, handler: {
                 (detail?: EventDetails<T>): void;
             }): void;
+            private liveMarkerHandler();
+            live(ctx: any): void;
             once(ctx: any, handler: {
                 (detail?: EventDetails<T>): void;
             }): void;
@@ -168,9 +193,13 @@ declare module Db {
             static offAll(ctx: any, events: any): void;
             hasHandlers(): boolean;
         }
-        class EntityEvent<T> extends Event<T> {
+        class EntityEvent<T extends Entity> extends Event<T> {
             myEntity: T;
+            parentEntity: any;
+            binding: BindingImpl;
             constructor(myEntity: T);
+            bind(binding: BindingImpl): void;
+            setParentEntity(parent: any): void;
             dbInit(url: string, db: Db): void;
             parseValue(val: any, url?: string): T;
         }
