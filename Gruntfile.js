@@ -7,7 +7,7 @@ module.exports = function(grunt) {
 			build : {
 				options : {
 					name : '<%= pkg.name %>',
-					main : 'js/main/Db.d.ts'
+					main : 'js/main/Db2.d.ts'
 				}
 			}
 		},

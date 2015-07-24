@@ -4,85 +4,58 @@ declare module 'jsdb' {
     export = Db;
     class Db {
             baseUrl: string;
-            setSocket(socket: SocketIO.Socket): void;
-            sendOnSocket(url: string, payload: any): void;
-            load<T extends Db.Entity>(url: string): T;
-            computeUrl(inst: Db.Entity): string;
+            cache: {
+                    [index: string]: any;
+            };
+            constructor(baseUrl: string);
+            init(): void;
+            load<T>(url: string, ctor?: new () => T): T;
+            save<E extends Db.Entity>(entity: E): Thenable<boolean>;
+            assignUrl<E extends Db.Entity>(entity: E): void;
+            reset(): void;
     }
     module Db {
-            var serverMode: boolean;
-            function str(): internal.IValueEvent<string>;
-            function num(): internal.IValueEvent<number>;
-            function data<V extends Data>(c: new () => V): internal.IValueEvent<V>;
-            function reference<V extends Entity>(c: new () => V): internal.IValueEvent<V>;
-            function dataList<V extends Data>(c: new () => V): internal.IListEvent<V>;
-            function referenceList<V extends Entity>(c: new () => V): internal.IListEvent<V>;
-            function entityRoot<V extends Entity>(c: new () => V): internal.IEntityRoot<V>;
-            function strList(): internal.IListEvent<string>;
-            function numList(): internal.IListEvent<number>;
-            class Entity {
-                    url: string;
-                    protected db: Db;
-                    dbInit(url: string, db: Db): void;
-                    equals(oth: Entity): boolean;
-                    getId(): string;
-                    serializeProjections(url: string, projections?: any): void;
-                    protected callRemoteMethod(name: string, params: any[]): void;
-                    getPromise<T>(def: string): Promise<T>;
+            function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;
+            function embedded<E extends Entity>(c: new () => E): E;
+            function reference<E extends Entity>(c: new () => E): internal.IReference<E>;
+            function referenceBuilder<E extends Entity>(c: new () => E): new () => internal.ReferenceImpl<E>;
+            function list<E extends Entity>(c: new () => E): internal.IList<E>;
+            class Utils {
+                    static entitySerialize(e: Entity, fields?: string[]): any;
+                    static rawEntitySerialize(e: Entity, fields?: string[]): any;
             }
-            class Data {
-                    url: string;
-                    parse(url: string, obj: any, db: Db): void;
-                    serialize(db?: Db, ret?: any, projections?: any): any;
-                    static isRef(data: any): boolean;
-                    static readRef(data: any, db: Db): Entity;
+            class Entity {
+                    load: internal.IEvent<any>;
+                    serialize: () => any;
+                    save(): Thenable<boolean>;
+                    then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+                    then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
             }
             module internal {
-                    interface IEventListen<V> {
+                    interface IEntityRoot<E extends Entity> {
+                            named(name: string): IEntityRoot<E>;
+                            load(id: string): E;
+                            query(): IQuery<E>;
+                    }
+                    interface IReference<E extends Entity> {
+                            load: IEvent<IReference<E>>;
+                            url: string;
+                            value: E;
+                            then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+                            then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
+                    }
+                    interface IEvent<V> {
                             on(ctx: any, handler: {
-                                    (data?: V, detail?: IEventDetails<V>): void;
+                                    (detail?: IEventDetails<V>): void;
                             }): any;
                             once(ctx: any, handler: {
-                                    (data?: V, detail?: IEventDetails<V>): void;
+                                    (detail?: IEventDetails<V>): void;
                             }): any;
                             off(ctx: any): any;
                             hasHandlers(): boolean;
                     }
-                    interface IEvent<V> extends IEventListen<V> {
-                            named(name: string): IEvent<V>;
-                    }
-                    interface IValueEvent<V> extends IEvent<V>, Thenable<V> {
-                            named(name: string): IValueEvent<V>;
-                            broadcast(val: V): void;
-                            promise(): Promise<V>;
-                            preLoad(f: (promise: Promise<V>) => void): IValueEvent<V>;
-                            preLoad(bind: any): IValueEvent<V>;
-                    }
-                    interface IArrayValueEvent<V> extends IEvent<V[]>, Thenable<V[]> {
-                            named(name: string): IArrayValueEvent<V>;
-                            promise(): Promise<V[]>;
-                            preLoad(f: (promise: Promise<V[]>) => void): IArrayValueEvent<V>;
-                            preLoad(bind: any): IArrayValueEvent<V>;
-                    }
-                    interface IEntityRoot<T> {
-                            load(id: string): T;
-                            named(name: string): IEntityRoot<T>;
-                    }
-                    interface IListEvent<T> {
-                            add: IValueEvent<T>;
-                            remove: IEvent<T>;
-                            modify: IEvent<T>;
-                            all: IEvent<T>;
-                            full: IArrayValueEvent<T>;
-                            named(name: string): IListEvent<T>;
-                            subQuery(): IListEvent<T>;
-                            sortOn(field: string, desc?: boolean): IListEvent<T>;
-                            limit(limit: number): IListEvent<T>;
-                            range(from: any, to: any): IListEvent<T>;
-                            equals(val: any): IListEvent<T>;
-                    }
-                    interface IEventDetails<T> {
-                            payload: T;
+                    interface IEventDetails<V> {
+                            payload: V;
                             populating: boolean;
                             projected: boolean;
                             listEnd: boolean;
@@ -92,6 +65,27 @@ declare module 'jsdb' {
                             precedingKey: string;
                             offMe(): void;
                     }
+                    interface ICollection<E> {
+                            add: IEvent<E>;
+                            remove: IEvent<E>;
+                            query(): IQuery<E>;
+                    }
+                    interface IList<E> extends ICollection<E> {
+                            value: E[];
+                            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+                            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
+                    }
+                    interface IMap<E> extends ICollection<E> {
+                            value: {
+                                    [index: string]: E;
+                            };
+                    }
+                    interface IQuery<E> extends IList<E> {
+                            sortOn(field: string, desc?: boolean): IQuery<E>;
+                            limit(limit: number): IQuery<E>;
+                            range(from: any, to: any): IQuery<E>;
+                            equals(val: any): IQuery<E>;
+                    }
                     class IdGenerator {
                             static PUSH_CHARS: string;
                             static BASE: number;
@@ -99,8 +93,16 @@ declare module 'jsdb' {
                             static lastRandChars: any[];
                             static next(): string;
                     }
-                    interface DbObjDescription<X extends Db.Entity> {
-                            instantiate(url: string): X;
+                    class EntityRoot<E extends Entity> implements IEntityRoot<E> {
+                            constr: new () => E;
+                            db: Db;
+                            name: string;
+                            url: string;
+                            constructor(c: new () => E);
+                            named(name: string): EntityRoot<E>;
+                            initDb(db: Db): void;
+                            query(): QueryImpl<E>;
+                            load(id: string): E;
                     }
                     class EventDetails<T> implements IEventDetails<T> {
                             payload: T;
@@ -117,40 +119,18 @@ declare module 'jsdb' {
                     class EventHandler<T> {
                             event: Event<T>;
                             ctx: any;
-                            method: (payload?: T, detail?: EventDetails<T>) => void;
+                            method: (detail?: EventDetails<T>) => void;
                             static prog: number;
                             myprog: number;
                             first: boolean;
                             after: (h?: EventHandler<T>) => any;
                             _ref: FirebaseQuery;
-                            constructor(event: Event<T>, ctx: any, method: (payload?: T, detail?: EventDetails<T>) => void);
+                            constructor(event: Event<T>, ctx: any, method: (detail?: EventDetails<T>) => void);
                             hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void): void;
                             decomission(remove: boolean): boolean;
                             handle(evd: EventDetails<T>): void;
                     }
-                    class IsEvent {
-                    }
-                    /**
-                        * Db based event.
-                        *
-                        * This events are triggered when the sub key passed as name in constructor is modified.
-                        * Which modifications triggers the event and how they are interpreted is based on the transformer passed to
-                        * withTransformer.
-                        *
-                        * When called on(), the event is triggered as soon as possible (maybe even before returning from
-                        * the on call if the data is already available). All events are triggered, also those cached before
-                        * the call to on, that is "on" doesn't mean "call me when something changes from now on", but also
-                        * pre-existing data is sent as events.
-                        *
-                        * To distinguish, when possible, among pre-existing and new data, the event callback has a parameter
-                        * "first?:boolean", that is set to true for pre-existing data, and false for later updates.
-                        *
-                        */
-                    class Event<T> extends IsEvent implements IEvent<T> {
-                            /**
-                                * Name on DB.
-                                */
-                            protected name: string;
+                    class Event<T> implements IEvent<T> {
                             /**
                                 * Array of current handlers.
                                 */
@@ -163,110 +143,80 @@ declare module 'jsdb' {
                                 * Instance of the Db we are using
                                 */
                             protected db: Db;
-                            /**
-                                * Constructor for the D object, if this event returns a D event
-                                */
-                            _ctorD: new () => Data;
-                            /**
-                                * If this is a ref
-                                */
-                            _isRef: boolean;
                             _preload: (p: Promise<T>) => Promise<any>;
-                            _entity: Entity;
                             events: string[];
                             protected projVal: T;
                             hrefIniter: (h: EventHandler<T>) => void;
                             constructor();
-                            named(name: string): Event<T>;
-                            objD(c: new () => Data): Event<T>;
-                            preLoad(f: (promise: Promise<T>) => Promise<any>): any;
-                            preLoad(f: {
-                                    [index: string]: string;
-                            }): any;
                             /**
-                                * Called by the ObjC when the url is set.
+                                * Called by the Entity when the url is set.
                                 */
-                            dbInit(url: string, db: Db, entity: Entity): void;
+                            dbInit(url: string, db: Db): void;
                             on(ctx: any, handler: {
-                                    (data?: T, detail?: EventDetails<T>): void;
+                                    (detail?: EventDetails<T>): void;
                             }): void;
                             once(ctx: any, handler: {
-                                    (data?: T, detail?: EventDetails<T>): void;
+                                    (detail?: EventDetails<T>): void;
                             }): void;
-                            promise(): Promise<T>;
-                            then<U>(onFulfilled: (value: T) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Promise<U>;
                             offHandler(h: EventHandler<T>): void;
                             protected init(h: EventHandler<T>): void;
                             protected setupHref(h: EventHandler<T>): void;
                             protected setupEvent(h: EventHandler<T>, name: string): void;
+                            protected parseValue(val: any, url: string): T;
                             off(ctx: any): void;
                             static offAll(ctx: any, events: any): void;
                             hasHandlers(): boolean;
-                            parseValue(val: any, url?: string): any;
-                            projectValue(val: any): void;
                     }
-                    class ValueEvent<T> extends Event<T> implements IValueEvent<T> {
-                            broadcast(val: T): void;
-                            named(name: string): ValueEvent<T>;
-                            preLoad(f: (promise: Promise<T>) => Promise<any>): any;
-                            preLoad(f: {
-                                    [index: string]: string;
-                            }): any;
-                            protected checkBroadcast(): void;
-                            protected save(val: T): void;
-                            protected serializeForSave(val: T): any;
-                            dbInit(url: string, db: Db, entity: Entity): void;
+                    class EntityEvent<T> extends Event<T> {
+                            myEntity: T;
+                            constructor(myEntity: T);
+                            dbInit(url: string, db: Db): void;
+                            parseValue(val: any, url?: string): T;
                     }
-                    class ArrayValueEvent<T> extends Event<T[]> implements IArrayValueEvent<T> {
-                            named(name: string): ArrayValueEvent<T>;
-                            parseValue(val: any, url?: string): any;
-                            preLoad(f: (promise: Promise<T[]>) => Promise<any>): any;
-                            preLoad(f: {
-                                    [index: string]: string;
-                            }): any;
+                    class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
+                            constructor(myEntity: ReferenceImpl<any>);
+                            parseValue(val: any, url?: string): ReferenceImpl<E>;
                     }
-                    class AddedListEvent<T> extends ValueEvent<T> {
-                            constructor();
-                            projectValue(val: any): void;
-                            protected init(h: EventHandler<T>): void;
-                            protected save(val: T): void;
+                    class ReferenceImpl<E extends Entity> extends Entity implements IReference<E> {
+                            _ctor: new () => E;
+                            load: ReferenceEvent<E>;
+                            url: string;
+                            value: E;
+                            constructor(c: new () => E);
+                            serialize: () => {
+                                    _ref: any;
+                            };
                     }
-                    class EntityRoot<T extends Db.Entity> implements IEntityRoot<T> {
-                            ctor: new () => T;
+                    class CollectionEntityEvent<E> extends Event<E> {
+                            ctor: new () => E;
+                            constructor(c: new () => E);
+                            parseValue(val: any, url?: string): E;
+                    }
+                    class CollectionAddedEntityEvent<E> extends CollectionEntityEvent<E> {
+                            constructor(c: new () => E);
+                            protected init(h: EventHandler<E>): void;
+                    }
+                    class CollectionImpl<E> implements ICollection<E> {
+                            ctor: new () => E;
                             db: Db;
                             url: string;
-                            name: string;
-                            instances: {
-                                    [index: string]: T;
-                            };
-                            constructor(ctor: new () => T);
-                            dbInit(db: Db): void;
-                            named(name: string): EntityRoot<T>;
-                            load(id: string): T;
+                            add: CollectionEntityEvent<E>;
+                            remove: CollectionEntityEvent<E>;
+                            constructor(c: new () => E);
+                            dbInit(url: string, db: Db): void;
+                            query(): QueryImpl<E>;
+                            protected setupHref(h: EventHandler<E>): void;
                     }
-                    class ListEvent<T> extends IsEvent implements IListEvent<T> {
-                            add: AddedListEvent<T>;
-                            remove: Event<T>;
-                            modify: Event<T>;
-                            all: Event<T>;
-                            full: ArrayValueEvent<T>;
-                            protected _url: string;
-                            protected _db: Db;
-                            protected _entity: Entity;
-                            protected _ctorD: new () => Data;
-                            constructor();
-                            named(name: string): ListEvent<T>;
-                            objD(c: new () => Data): ListEvent<T>;
-                            /**
-                                * Called by the ObjC when the url is set.
-                                */
-                            dbInit(url: string, db: Db, entity: Entity): void;
-                            subQuery(): ListEvent<T>;
-                            sortOn(field: string, desc?: boolean): ListEvent<T>;
-                            limit(limit: number): ListEvent<T>;
-                            range(from: any, to: any): ListEvent<T>;
-                            equals(val: any): ListEvent<T>;
-                            protected setupHref(h: EventHandler<T | T[]>): void;
+                    class ListImpl<E> extends CollectionImpl<E> implements IList<E> {
+                            value: E[];
+                            then<U>(onFulfilled?: () => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
+                    }
+                    class QueryImpl<E> extends ListImpl<E> implements IQuery<E> {
+                            sortOn(field: string, desc?: boolean): QueryImpl<E>;
+                            limit(limit: number): QueryImpl<E>;
+                            range(from: any, to: any): QueryImpl<E>;
+                            equals(val: any): QueryImpl<E>;
+                            protected setupHref(h: EventHandler<E>): void;
                     }
                     interface EventDetachable {
                             eventAttached(event: Event<any>): any;

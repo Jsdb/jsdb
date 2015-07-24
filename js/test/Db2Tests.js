@@ -590,6 +590,10 @@ describe('Db Tests', function () {
             });
         });
     });
+    // TODO cascade of save on non loaded elements
+    // To explain better, i have an entity A that has sub entity B and C, only B has been loaded,
+    // then calling save on A should not write out all the entity A (that would make all other properties
+    // of A including C empty) but issue a save only on B.
     // TODO write reference with projections
     // TODO write full collections
     // TODO incremental add on collections
