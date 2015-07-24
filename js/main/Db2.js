@@ -130,12 +130,14 @@ var Db;
                 if (k == 'load')
                     continue;
                 var v = e[k];
+                if (v == null)
+                    continue;
                 if (typeof v === 'function')
                     continue;
                 if (v instanceof Entity) {
                     v = Utils.entitySerialize(v);
                 }
-                else if (v.serialize) {
+                else if (v['serialize']) {
                     v = v.serialize();
                 }
                 ret[k] = v;
@@ -549,9 +551,24 @@ var Db;
         var ReferenceImpl = (function (_super) {
             __extends(ReferenceImpl, _super);
             function ReferenceImpl(c) {
+                var _this = this;
                 _super.call(this);
                 this.load = new ReferenceEvent(this);
                 this.value = null;
+                this.serialize = function () {
+                    var url = null;
+                    if (_this.value === null) {
+                        url = _this.load.url;
+                    }
+                    else {
+                        url = _this.value.load.url;
+                    }
+                    if (url === null)
+                        return null;
+                    return {
+                        _ref: url
+                    };
+                };
                 this._ctor = c;
             }
             return ReferenceImpl;

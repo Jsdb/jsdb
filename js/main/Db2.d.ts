@@ -184,6 +184,9 @@ declare module Db {
             url: string;
             value: E;
             constructor(c: new () => E);
+            serialize: () => {
+                _ref: any;
+            };
         }
         class CollectionEntityEvent<E> extends Event<E> {
             ctor: new () => E;

@@ -133,10 +133,11 @@ module Db {
 				var k = fields[i];
 				if (k == 'load') continue;
 				var v = e[k];
+				if (v == null) continue;
 				if (typeof v === 'function') continue;
 				if (v instanceof Entity) {
 					v = Utils.entitySerialize(v);
-				} else if (v.serialize) {
+				} else if (v['serialize']) {
 					v = v.serialize();
 				}
 				ret[k] = v;
@@ -676,6 +677,19 @@ module Db {
 				super();
 				this._ctor = c;
 			}
+			
+			serialize = () => {
+				var url = null;
+				if (this.value === null) {
+					url = this.load.url;
+				} else {
+					url = (<EntityEvent<any>>this.value.load).url;
+				}
+				if (url === null) return null;
+				return {
+					_ref : url
+				};
+			};
 		}
 		
 		export class CollectionEntityEvent<E> extends Event<E> { 

@@ -557,10 +557,43 @@ describe('Db Tests', function () {
         }
         M.assert("Exception thrown").when(excp).is(M.aTruthy);
     });
-    // TODO write entity in entity, as full object
-    // TODO write reference
+    // write entity in entity, as full object
+    it('should serialize correctly sub entities', function (done) {
+        var ws = new WithSubentity();
+        ws.str = 'abc';
+        var ss = new SubEntity();
+        ws.sub = ss;
+        ss.str = 'cde';
+        defDb.save(ws).then(function () {
+            new Firebase(ws.load.url).once('value', function (ds) {
+                M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
+                    str: 'abc',
+                    sub: { str: 'cde' }
+                }));
+                done();
+            });
+        });
+    });
+    // write reference
+    it('should write a reference correctly', function (done) {
+        var wp1 = defDb.withProps.load('wp1');
+        var wrn = new WithRef();
+        wrn.str = 'abc';
+        wrn.ref.value = wp1;
+        defDb.save(wrn).then(function () {
+            new Firebase(wrn.load.url).once('value', function (ds) {
+                M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
+                    str: 'abc',
+                    ref: { _ref: wp1.load.url }
+                }));
+                done();
+            });
+        });
+    });
     // TODO write reference with projections
-    // TODO write collections
+    // TODO write full collections
+    // TODO incremental add on collections
+    // TODO incremental remove on collections
     // TODO write back-projections
     // TODO preload
     // TODO cache cleaning
