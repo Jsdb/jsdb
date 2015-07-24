@@ -461,8 +461,8 @@ var Db;
                 var h = new EventHandler(this, ctx, handler);
                 this.handlers.push(h);
                 // At this point the url could not yet have been set
-                if (typeof ctx.eventAttached != 'undefined') {
-                    ctx.eventAttached(this);
+                if (typeof ctx.attached != 'undefined') {
+                    ctx.attached(this);
                 }
                 if (this.url) {
                     this.init(h);
@@ -480,8 +480,8 @@ var Db;
                 h.after = function () {
                     _this.offHandler(h);
                 };
-                if (typeof ctx.eventAttached != 'undefined') {
-                    ctx.eventAttached(this);
+                if (typeof ctx.attached != 'undefined') {
+                    ctx.attached(this);
                 }
                 // At this point the url could not yet have been set
                 if (this.url)

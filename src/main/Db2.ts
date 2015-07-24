@@ -206,6 +206,14 @@ module Db {
 
 	}
 	
+	export interface IOffable {
+		off(ctx:any);
+	}
+	
+	export interface ISelfOffable {
+		attached(event :IOffable);
+	}
+	
 	export module internal {
 		
 		export interface IEntityRoot<E extends Entity> {
@@ -224,7 +232,7 @@ module Db {
 			then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
 		}
 		
-		export interface IEvent<V> {
+		export interface IEvent<V> extends IOffable {
 			on(ctx :any, handler: { (detail?:IEventDetails<V>): void });
 			once(ctx :any, handler: { (detail?:IEventDetails<V>): void });
 			live(ctx :any);
@@ -549,8 +557,8 @@ module Db {
 				var h = new EventHandler<T>(this, ctx, handler);
 				this.handlers.push(h);
 				// At this point the url could not yet have been set
-				if (typeof ctx.eventAttached != 'undefined') {
-					(<EventDetachable>ctx).eventAttached(this);
+				if (typeof ctx.attached != 'undefined') {
+					(<ISelfOffable>ctx).attached(this);
 				}
 				if (this.url) {
 					this.init(h);
@@ -569,8 +577,8 @@ module Db {
 				h.after = ()=> {
 					this.offHandler(h);
 				};
-				if (typeof ctx.eventAttached != 'undefined') {
-					(<EventDetachable>ctx).eventAttached(this);
+				if (typeof ctx.attached != 'undefined') {
+					(<ISelfOffable>ctx).attached(this);
 				}
 				// At this point the url could not yet have been set
 				if (this.url) this.init(h);
@@ -960,10 +968,6 @@ module Db {
 				}
 			}
 
-		}
-
-		export interface EventDetachable {
-			eventAttached(event :Event<any>);
 		}
 
 	}

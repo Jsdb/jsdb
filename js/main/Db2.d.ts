@@ -37,6 +37,12 @@ declare module Db {
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
     }
+    interface IOffable {
+        off(ctx: any): any;
+    }
+    interface ISelfOffable {
+        attached(event: IOffable): any;
+    }
     module internal {
         interface IEntityRoot<E extends Entity> {
             named(name: string): IEntityRoot<E>;
@@ -50,7 +56,7 @@ declare module Db {
             then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
             then<U>(onFulfilled?: (value: internal.IEventDetails<IReference<E>>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
         }
-        interface IEvent<V> {
+        interface IEvent<V> extends IOffable {
             on(ctx: any, handler: {
                 (detail?: IEventDetails<V>): void;
             }): any;
@@ -253,9 +259,6 @@ declare module Db {
             range(from: any, to: any): QueryImpl<E>;
             equals(val: any): QueryImpl<E>;
             protected setupHref(h: EventHandler<E>): void;
-        }
-        interface EventDetachable {
-            eventAttached(event: Event<any>): any;
         }
     }
 }
