@@ -39,6 +39,11 @@ declare module 'jsdb' {
                     then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
                     then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
             }
+            interface IEntityHooks {
+                    postLoad?(evd?: internal.EventDetails<any>): void;
+                    postUpdate?(evd?: internal.EventDetails<any>): void;
+                    prePersist?(evd?: internal.EventDetails<any>): void;
+            }
             interface IOffable {
                     off(ctx: any): any;
             }
@@ -192,6 +197,8 @@ declare module 'jsdb' {
                             protected init(h: EventHandler<T>): void;
                             protected setupHref(h: EventHandler<T>): void;
                             protected setupEvent(h: EventHandler<T>, name: string): void;
+                            protected preTrigger(evd: EventDetails<T>): void;
+                            protected postTrigger(evd: EventDetails<T>): void;
                             protected parseValue(val: any, url: string): T;
                             off(ctx: any): void;
                             static offAll(ctx: any, events: any): void;
@@ -201,11 +208,13 @@ declare module 'jsdb' {
                             myEntity: T;
                             parentEntity: any;
                             binding: BindingImpl;
+                            loaded: boolean;
                             constructor(myEntity: T);
                             bind(binding: BindingImpl): void;
                             setParentEntity(parent: any): void;
                             dbInit(url: string, db: Db): void;
                             parseValue(val: any, url?: string): T;
+                            protected preTrigger(evd: EventDetails<T>): void;
                     }
                     class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
                             constructor(myEntity: ReferenceImpl<any>);

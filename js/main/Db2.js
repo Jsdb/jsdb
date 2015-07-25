@@ -527,15 +527,22 @@ var Db;
                     evd.originalKey = ds.key();
                     evd.precedingKey = pre;
                     evd.populating = h.first;
+                    _this.preTrigger(evd);
                     if (fireprom) {
                         fireprom.then(function () {
                             h.handle(evd);
+                            _this.postTrigger(evd);
                         });
                     }
                     else {
                         h.handle(evd);
+                        _this.postTrigger(evd);
                     }
                 });
+            };
+            Event.prototype.preTrigger = function (evd) {
+            };
+            Event.prototype.postTrigger = function (evd) {
             };
             Event.prototype.parseValue = function (val, url) {
                 throw "Default parse value is not implemented";
@@ -570,6 +577,7 @@ var Db;
                 this.myEntity = null;
                 this.parentEntity = null;
                 this.binding = null;
+                this.loaded = false;
                 this.myEntity = myEntity;
             }
             EntityEvent.prototype.bind = function (binding) {
@@ -627,6 +635,17 @@ var Db;
                     }
                 }
                 return this.myEntity;
+            };
+            EntityEvent.prototype.preTrigger = function (evd) {
+                if (!evd.projected && !this.loaded) {
+                    this.loaded = true;
+                    if (this.myEntity['postLoad']) {
+                        this.myEntity.postLoad(evd);
+                    }
+                }
+                if (this.myEntity['postUpdate']) {
+                    this.myEntity.postUpdate(evd);
+                }
             };
             return EntityEvent;
         })(Event);

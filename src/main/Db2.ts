@@ -206,6 +206,12 @@ module Db {
 
 	}
 	
+	export interface IEntityHooks {
+		postLoad?(evd? :internal.EventDetails<any>):void
+		postUpdate?(evd? :internal.EventDetails<any>):void
+		prePersist?(evd? :internal.EventDetails<any>):void
+	}
+	
 	export interface IOffable {
 		off(ctx:any);
 	}
@@ -636,14 +642,23 @@ module Db {
 					evd.originalKey = ds.key();
 					evd.precedingKey = pre;
 					evd.populating = h.first;
+					this.preTrigger(evd);
 					if (fireprom) {
 						fireprom.then(()=> {
 							h.handle(evd);
+							this.postTrigger(evd);
 						});
 					} else {
 						h.handle(evd);
+						this.postTrigger(evd);
 					}
 				});
+			}
+			
+			protected preTrigger(evd :EventDetails<T>) {
+			}
+			
+			protected postTrigger(evd :EventDetails<T>) {
 			}
 			
 			protected parseValue(val, url :string):T {
@@ -696,6 +711,7 @@ module Db {
 			myEntity :T = null;
 			parentEntity :any = null;
 			binding :BindingImpl = null;
+			loaded = false;
 			
 			constructor(myEntity :T) {
 				super();
@@ -754,6 +770,18 @@ module Db {
 					}
 				}
 				return <T><any>this.myEntity;
+			}
+			
+			protected preTrigger(evd :EventDetails<T>) {
+				if (!evd.projected && !this.loaded) {
+					this.loaded = true;
+					if (this.myEntity['postLoad']) {
+						(<IEntityHooks>this.myEntity).postLoad(evd);
+					}
+				}
+				if (this.myEntity['postUpdate']) {
+					(<IEntityHooks>this.myEntity).postUpdate(evd);
+				}
 			}
 		}
 		

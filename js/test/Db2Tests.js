@@ -70,6 +70,26 @@ var WithPreloads = (function (_super) {
     }
     return WithPreloads;
 })(Db.Entity);
+var WithHooks = (function (_super) {
+    __extends(WithHooks, _super);
+    function WithHooks() {
+        _super.apply(this, arguments);
+        this.num = 0;
+        this._postLoadCalled = false;
+        this._postUpdateCalled = false;
+        this._prePersistCalled = false;
+    }
+    WithHooks.prototype.postLoad = function () {
+        this._postLoadCalled = true;
+    };
+    WithHooks.prototype.postUpdate = function () {
+        this._postUpdateCalled = true;
+    };
+    WithHooks.prototype.prePersist = function () {
+        this._prePersistCalled = true;
+    };
+    return WithHooks;
+})(Db.Entity);
 var TestDb = (function (_super) {
     __extends(TestDb, _super);
     function TestDb() {
@@ -79,6 +99,7 @@ var TestDb = (function (_super) {
         this.withRefs = Db.entityRoot(WithRef);
         this.withCols = Db.entityRoot(WithCollections);
         this.withPre = Db.entityRoot(WithPreloads);
+        this.withHooks = Db.entityRoot(WithHooks);
         _super.prototype.init.call(this);
     }
     return TestDb;
@@ -100,6 +121,8 @@ describe('Db Tests', function () {
     var wplFb;
     var wpl1Fb;
     var wpl2Fb;
+    var whFb;
+    var wh1Fb;
     beforeEach(function (done) {
         this.timeout(100000);
         defDb.reset();
@@ -224,6 +247,12 @@ describe('Db Tests', function () {
             sub: {
                 str: 'abc'
             }
+        }, opCnter);
+        whFb = new Firebase(baseUrl + '/withHooks');
+        wh1Fb = whFb.child('wh1');
+        opcnt++;
+        wh1Fb.set({
+            num: 123
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
         root.on('value', function () {
@@ -509,6 +538,16 @@ describe('Db Tests', function () {
             });
         });
     });
+    it('should honour postLoad', function (done) {
+        var wh1 = defDb.withHooks.load('wh1');
+        M.assert("Postload not yet called").when(wh1._postLoadCalled).is(false);
+        M.assert("Postupdate not yet called").when(wh1._postUpdateCalled).is(false);
+        wh1.then(function (det) {
+            M.assert("Postload called").when(wh1._postLoadCalled).is(true);
+            M.assert("Postupdate called").when(wh1._postUpdateCalled).is(true);
+            done();
+        });
+    });
     // TODO more tests on queries
     // TODO query on collections
     // TODO read projections
@@ -676,9 +715,10 @@ describe('Db Tests', function () {
     // TODO incremental add on collections
     // TODO incremental remove on collections
     // TODO write back-projections
-    // TODO preload
-    // TODO reference preload
     // TODO cache cleaning
     // TODO move promises on events?
+    // TODO piggyback on events?
+    // TODO postLoad e prePersist?
+    // TODO default serialization (and deserialization) fields?
 });
 //# sourceMappingURL=Db2Tests.js.map

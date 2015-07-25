@@ -49,12 +49,30 @@ class WithPreloads extends Db.Entity {
 	ref = Db.reference(WithProps);
 }
 
+class WithHooks extends Db.Entity implements Db.IEntityHooks {
+	num :number = 0;
+	_postLoadCalled = false;
+	_postUpdateCalled = false;
+	_prePersistCalled = false;
+	
+	postLoad() {
+		this._postLoadCalled = true;
+	}
+	postUpdate() {
+		this._postUpdateCalled = true;
+	}
+	prePersist() {
+		this._prePersistCalled = true;
+	}
+}
+
 class TestDb extends Db {
 	withProps = Db.entityRoot(WithProps);
 	withSubs = Db.entityRoot(WithSubentity);
 	withRefs = Db.entityRoot(WithRef);
 	withCols = Db.entityRoot(WithCollections);
 	withPre = Db.entityRoot(WithPreloads);
+	withHooks = Db.entityRoot(WithHooks);
 	
 	constructor() {
 		super(baseUrl);
@@ -85,6 +103,8 @@ describe('Db Tests', () => {
 	var wpl1Fb :Firebase;
 	var wpl2Fb :Firebase;
 	
+	var whFb :Firebase;
+	var wh1Fb :Firebase;
 	
 	beforeEach(function (done) {
 		this.timeout(100000);
@@ -224,6 +244,12 @@ describe('Db Tests', () => {
 			}
 		}, opCnter);
 
+		whFb = new Firebase(baseUrl + '/withHooks');
+		wh1Fb = whFb.child('wh1');
+		opcnt++;
+		wh1Fb.set({
+			num: 123
+		}, opCnter);
 		
 		// Keep reference alive in ram, faster tests and less side effects
 		root.on('value', () => {});
@@ -549,6 +575,17 @@ describe('Db Tests', () => {
 		});
 	});
 	
+	it('should honour postLoad', (done) => {
+		var wh1 = defDb.withHooks.load('wh1');
+		M.assert("Postload not yet called").when(wh1._postLoadCalled).is(false);
+		M.assert("Postupdate not yet called").when(wh1._postUpdateCalled).is(false);
+		wh1.then((det)=> {
+			M.assert("Postload called").when(wh1._postLoadCalled).is(true);
+			M.assert("Postupdate called").when(wh1._postUpdateCalled).is(true);
+			done();
+		});
+	});
+	
 	
 	// TODO more tests on queries
 	
@@ -744,11 +781,14 @@ describe('Db Tests', () => {
 
 	// TODO write back-projections
 	
-	// TODO preload
-	
-	// TODO reference preload
-	
 	// TODO cache cleaning
 	
 	// TODO move promises on events?
+	
+	// TODO piggyback on events?
+	
+	// TODO postLoad e prePersist?
+	
+	// TODO default serialization (and deserialization) fields?
+	
 });
