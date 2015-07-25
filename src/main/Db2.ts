@@ -58,16 +58,14 @@ class Db {
 	}
 	
 	save<E extends Db.Entity>(entity :E) {
-		var entityEvent = (<Db.internal.EntityEvent<E>>entity.load); 
-		if (!entityEvent.url) {
+		if (!entity.load.getUrl()) {
 			this.assignUrl(entity);
 		}
 		return entity.save();
 	}
 	
 	assignUrl<E extends Db.Entity>(entity :E) {
-		var entityEvent = (<Db.internal.EntityEvent<E>>entity.load); 
-		if (entityEvent.url) return;
+		if (entity.load.getUrl()) return;
 		var ks = Object.keys(this);
 		var root :Db.internal.EntityRoot<E> = null;
 		for (var i = 0; i < ks.length; i++) {
@@ -80,7 +78,7 @@ class Db {
 		}
 		if (!root) throw "The class " + (entity.constructor) + " is not mapped to an entity root";
 		var id = Db.internal.IdGenerator.next();
-		entityEvent.dbInit(root.url + '/' + id, this);
+		(<Db.internal.EntityEvent<E>>entity.load).dbInit(root.url + '/' + id, this);
 	}
 	
 	reset() {
@@ -166,14 +164,14 @@ module Db {
 	}
 	
 	export class Entity implements Thenable<internal.IEventDetails<any>> {
-		load :internal.IEvent<any> = new internal.EntityEvent<any>(this);
+		load :internal.IEntityEvent<any> = new internal.EntityEvent<any>(this);
 		
 		serialize : () => any;
 		
 		save() :Thenable<boolean> {
 			var resprom = new ResolvablePromise<boolean>();
 
-			var url = (<internal.EntityEvent<any>>this.load).url;
+			var url = this.load.getUrl();
 			if (!url) throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
 			new Firebase(url).set(Utils.entitySerialize(this), (err) => {
 				if (!err) {
@@ -210,6 +208,7 @@ module Db {
 		postLoad?(evd? :internal.EventDetails<any>):void
 		postUpdate?(evd? :internal.EventDetails<any>):void
 		prePersist?(evd? :internal.EventDetails<any>):void
+		preEvict?():boolean;
 	}
 	
 	export interface IOffable {
@@ -244,6 +243,11 @@ module Db {
 			live(ctx :any);
 			off(ctx :any):any;
 			hasHandlers() :boolean;
+		}
+		
+		export interface IEntityEvent<V> extends IEvent<V> {
+			getUrl() :string;
+			getDb() :Db;
 		}
 		
 		export interface IBinding {
@@ -700,7 +704,7 @@ module Db {
 			*/
 		}
 		
-		export class EntityEvent<T extends Entity> extends Event<T> {
+		export class EntityEvent<T extends Entity> extends Event<T> implements IEntityEvent<T> {
 			
 			/*
 			static getEventFor<T>(x:T):EntityEvent<T> {
@@ -716,6 +720,14 @@ module Db {
 			constructor(myEntity :T) {
 				super();
 				this.myEntity = myEntity;
+			}
+			
+			getUrl() :string {
+				return this.url;
+			}
+			
+			getDb() :Db {
+				return this.db;
 			}
 			
 			bind(binding :BindingImpl) {
@@ -826,7 +838,7 @@ module Db {
 				if (this.value === null) {
 					url = this.load.url;
 				} else {
-					url = (<EntityEvent<any>>this.value.load).url;
+					url = this.value.load.getUrl();
 				}
 				if (url === null) return null;
 				return {

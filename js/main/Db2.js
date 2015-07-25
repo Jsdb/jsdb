@@ -53,15 +53,13 @@ var Db = (function () {
         return inst;
     };
     Db.prototype.save = function (entity) {
-        var entityEvent = entity.load;
-        if (!entityEvent.url) {
+        if (!entity.load.getUrl()) {
             this.assignUrl(entity);
         }
         return entity.save();
     };
     Db.prototype.assignUrl = function (entity) {
-        var entityEvent = entity.load;
-        if (entityEvent.url)
+        if (entity.load.getUrl())
             return;
         var ks = Object.keys(this);
         var root = null;
@@ -77,7 +75,7 @@ var Db = (function () {
         if (!root)
             throw "The class " + (entity.constructor) + " is not mapped to an entity root";
         var id = Db.internal.IdGenerator.next();
-        entityEvent.dbInit(root.url + '/' + id, this);
+        entity.load.dbInit(root.url + '/' + id, this);
     };
     Db.prototype.reset = function () {
         for (var url in this.cache) {
@@ -173,7 +171,7 @@ var Db;
         }
         Entity.prototype.save = function () {
             var resprom = new ResolvablePromise();
-            var url = this.load.url;
+            var url = this.load.getUrl();
             if (!url)
                 throw "Cannot save entity because it was not loaded from DB, use Db.save() instead";
             new Firebase(url).set(Utils.entitySerialize(this), function (err) {
@@ -580,6 +578,12 @@ var Db;
                 this.loaded = false;
                 this.myEntity = myEntity;
             }
+            EntityEvent.prototype.getUrl = function () {
+                return this.url;
+            };
+            EntityEvent.prototype.getDb = function () {
+                return this.db;
+            };
             EntityEvent.prototype.bind = function (binding) {
                 var _this = this;
                 if (!binding)
@@ -686,7 +690,7 @@ var Db;
                         url = _this.load.url;
                     }
                     else {
-                        url = _this.value.load.url;
+                        url = _this.value.load.getUrl();
                     }
                     if (url === null)
                         return null;

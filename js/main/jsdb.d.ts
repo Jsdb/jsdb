@@ -32,7 +32,7 @@ declare module 'jsdb' {
                     constructor();
             }
             class Entity implements Thenable<internal.IEventDetails<any>> {
-                    load: internal.IEvent<any>;
+                    load: internal.IEntityEvent<any>;
                     serialize: () => any;
                     save(): Thenable<boolean>;
                     then(): Thenable<internal.IEventDetails<any>>;
@@ -43,6 +43,7 @@ declare module 'jsdb' {
                     postLoad?(evd?: internal.EventDetails<any>): void;
                     postUpdate?(evd?: internal.EventDetails<any>): void;
                     prePersist?(evd?: internal.EventDetails<any>): void;
+                    preEvict?(): boolean;
             }
             interface IOffable {
                     off(ctx: any): any;
@@ -73,6 +74,10 @@ declare module 'jsdb' {
                             live(ctx: any): any;
                             off(ctx: any): any;
                             hasHandlers(): boolean;
+                    }
+                    interface IEntityEvent<V> extends IEvent<V> {
+                            getUrl(): string;
+                            getDb(): Db;
                     }
                     interface IBinding {
                             bind(localName: string, targetName: string, live?: boolean): any;
@@ -204,12 +209,14 @@ declare module 'jsdb' {
                             static offAll(ctx: any, events: any): void;
                             hasHandlers(): boolean;
                     }
-                    class EntityEvent<T extends Entity> extends Event<T> {
+                    class EntityEvent<T extends Entity> extends Event<T> implements IEntityEvent<T> {
                             myEntity: T;
                             parentEntity: any;
                             binding: BindingImpl;
                             loaded: boolean;
                             constructor(myEntity: T);
+                            getUrl(): string;
+                            getDb(): Db;
                             bind(binding: BindingImpl): void;
                             setParentEntity(parent: any): void;
                             dbInit(url: string, db: Db): void;

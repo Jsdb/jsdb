@@ -264,7 +264,7 @@ describe('Db Tests', function () {
         M.assert("Inited entity").when(wp1).is(M.aTruthy);
         var wp2 = defDb.withProps.load('wp1');
         M.assert("Same instance").when(wp2).is(M.exactly(wp1));
-        M.assert("Has right url").when(wp1.load.url).is(baseUrl + 'withProps/wp1');
+        M.assert("Has right url").when(wp1.load.getUrl()).is(baseUrl + 'withProps/wp1');
     });
     it('should load data', function (done) {
         var wp1 = defDb.withProps.load('wp1');
@@ -504,7 +504,7 @@ describe('Db Tests', function () {
             M.assert("Inited the bound").when(wpl1.oth._sub).is(M.aTruthy);
             M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
             M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
-            var fbsub = new Firebase(wpl1.sub.load.url);
+            var fbsub = new Firebase(wpl1.sub.load.getUrl());
             fbsub.update({ str: 'cde' }, function (ds) {
                 M.assert("Updated the subentity").when(wpl1.oth._sub.str).is('cde');
                 done();
@@ -629,7 +629,7 @@ describe('Db Tests', function () {
     it('should assign right url to a new entity mapped on root', function () {
         var wp = new WithProps();
         defDb.assignUrl(wp);
-        M.assert("Assigned right url").when(wp.load.url).is(M.stringContaining(wpFb.toString()));
+        M.assert("Assigned right url").when(wp.load.getUrl()).is(M.stringContaining(wpFb.toString()));
     });
     it('should throw error an a new entity not mapped on root', function () {
         var wp = new SubEntity();
@@ -650,7 +650,7 @@ describe('Db Tests', function () {
         wp.arr = [89, 72];
         wp.subobj.substr = 'eeee';
         defDb.save(wp).then(function () {
-            var url = wp.load.url;
+            var url = wp.load.getUrl();
             new Firebase(url).once('value', function (ds) {
                 M.assert("New entity saved correctly").when(ds.val()).is(M.objectMatching({
                     str: 'abcd',
@@ -681,7 +681,7 @@ describe('Db Tests', function () {
         ws.sub = ss;
         ss.str = 'cde';
         defDb.save(ws).then(function () {
-            new Firebase(ws.load.url).once('value', function (ds) {
+            new Firebase(ws.load.getUrl()).once('value', function (ds) {
                 M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
                     str: 'abc',
                     sub: { str: 'cde' }
@@ -697,10 +697,10 @@ describe('Db Tests', function () {
         wrn.str = 'abc';
         wrn.ref.value = wp1;
         defDb.save(wrn).then(function () {
-            new Firebase(wrn.load.url).once('value', function (ds) {
+            new Firebase(wrn.load.getUrl()).once('value', function (ds) {
                 M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
                     str: 'abc',
-                    ref: { _ref: wp1.load.url }
+                    ref: { _ref: wp1.load.getUrl() }
                 }));
                 done();
             });
