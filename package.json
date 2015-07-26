@@ -1,6 +1,6 @@
 {
   "name": "jsdb",
-  "version": "1.0.0",
+  "version": "git+https://m7ldlbMzKufT9IsOv6EXNdMvpXPy6Rfz:x-oauth-basic@bitbucket.org/swashp/jsdb.git",
   "description": "",
   "main": "js/Db2.js",
   "scripts": {
