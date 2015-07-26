@@ -16,9 +16,18 @@ class WithProps extends Db.Entity {
 	}
 }
 
+class ServerWithProps extends WithProps {
+	serverStuff :string;
+}
+
 class SubEntity extends Db.Entity {
 	str :string;
 }
+
+class ServerSubEntity extends SubEntity {
+	serverStuff :string;
+}
+
 
 class OthSubEntity extends Db.Entity {
 	_sub :SubEntity;
@@ -32,10 +41,19 @@ class WithSubentity extends Db.Entity {
 	str :string;
 }
 
+class ServerWithSubentity extends WithSubentity {
+	sub = Db.embedded(ServerSubEntity);
+}
+
 class WithRef extends Db.Entity {
 	ref = Db.reference(WithProps);
 	othSubRef = Db.reference(SubEntity);
 	str :string;
+}
+
+class ServerWithRef extends WithRef {
+	ref = Db.reference(ServerWithProps);
+	othSubRef = Db.reference(ServerSubEntity);
 }
 
 class WithCollections extends Db.Entity {
@@ -80,9 +98,22 @@ class TestDb extends Db {
 	}
 }
 
-var defDb = new TestDb();
+class ServerTestDb extends TestDb {
+	withProps = Db.entityRoot(ServerWithProps);
+	withRefs = Db.entityRoot(ServerWithRef);
+	withSubs = Db.entityRoot(ServerWithSubentity);
+	
+	constructor() {
+		super();
+		super.init();
+	}
 
-describe('Db Tests', () => {
+}
+
+var defDb = new TestDb();
+var serDb = new ServerTestDb();
+
+describe('Db2 Tests', () => {
 	var wpFb :Firebase;
 	var wp1Fb :Firebase;
 	var wp2Fb :Firebase;
@@ -543,7 +574,7 @@ describe('Db Tests', () => {
 		});
 	});
 
-	// TODO update live when a reference pointer is changed
+	// update live when a reference pointer is changed
 	it('should bind and keep live on reference pointer', (done) => {
 		var wpl1 = defDb.withPre.load('wpl1');
 		
@@ -718,7 +749,7 @@ describe('Db Tests', () => {
 		});
 	});
 	
-	it('should trow exception if saving new entity not form db', () => {
+	it('should trow exception if saving new entity not from db', () => {
 		var wp = new WithProps();
 		var excp = null;
 		try {
@@ -765,6 +796,71 @@ describe('Db Tests', () => {
 		});
 	});
 	
+	// client/server differences
+	it('should properly load root entity for server',(done) => {
+		var wp1 = serDb.withProps.load('wp1');
+		wp1.then((det) => {
+			M.assert('Right type').when(wp1).is(M.instanceOf(ServerWithProps));
+			M.assert('Data loaded').when(wp1).is(M.objectMatching({
+				str: 'String 1',
+				num: 200,
+				arr: [1,2,3],
+				subobj: {
+					substr: 'Sub String'
+				}
+			}));
+			done();
+		});
+	});
+	
+	it('should load sub entities for server',(done) => {
+		var ws1 = serDb.withSubs.load('ws1');
+		ws1.then((det) => {
+			M.assert("Right type").when(ws1.sub).is(M.instanceOf(ServerSubEntity));
+			M.assert("Loaded main").when(ws1.str).is('String 1');
+			M.assert("Loaded subentity").when(ws1.sub.str).is('Sub String 1');
+			done();
+		});
+	});
+
+	it('should load sub entites reference withOUT the main one for server', (done) => {
+		var wr1 = serDb.withRefs.load('wr2');
+		
+		wr1.ref.then((det) => {
+			M.assert("Loaded the ref").when(wr1.ref.value).is(M.aTruthy);
+			M.assert("Loaded the ref").when(wr1.ref.value).is(M.instanceOf(ServerWithProps));
+			return wr1.ref.value.then();
+		}).then(() => {
+			M.assert("Loaded the ref").when(wr1.ref.value).is(M.objectMatching({
+				str: 'String 1',
+				num: 200,
+				arr: [1,2,3],
+				subobj: {
+					substr: 'Sub String'
+				}
+			}));
+			M.assert("Didn't load the main one").when(wr1.str).is(M.undefinedValue);
+			done();
+		});
+		
+	});
+
+	
+	it('should load reference to other entities sub references for server', (done) => {
+		var wr1 = serDb.withRefs.load('wr1');
+		
+		wr1.then((det) => {
+			M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.aTruthy);
+			M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.instanceOf(ServerSubEntity));
+			wr1.othSubRef.value.then((sdet) => {
+				M.assert("Resolved the ref").when(wr1.othSubRef.value.str).is("Sub String 1");
+				done();
+			});
+		});
+
+	});
+
+	
 	// TODO cascade of save on non loaded elements
 	// To explain better, i have an entity A that has sub entity B and C, only B has been loaded,
 	// then calling save on A should not write out all the entity A (that would make all other properties
@@ -782,13 +878,26 @@ describe('Db Tests', () => {
 	// TODO write back-projections
 	
 	// TODO cache cleaning
+	// TODO invert IOffable? make every listener check if he's still valid or not and remove those that aren't from event 
+	// side instead of relying on a destroy being called on all removed stuff?
 	
 	// TODO move promises on events?
 	
 	// TODO piggyback on events?
 	
-	// TODO postLoad e prePersist?
+	// TODO prePersist
 	
 	// TODO default serialization (and deserialization) fields?
 	
+	// TODO decouple deserialization from event handlers
+	// Currently, each event handler holds it's firebase reference and hooks itself to the firebase events. As such,
+	// if three clients are listening on a single entity update, there will be three handlers hooked, three deserializations,
+	// three eventDetails instances, three preUpdate calls and so on. This has been done to make each event handler 
+	// independent, so that Firebase handles its internal cache without needing to implement it on our side, but given the
+	// multiplication of quite heavy stuff (like deserialization etc..) could be better to hook on the Firebase once
+	// PER EVENT and not PER HANDLER, and unsubscribe when all hadlers have been removed. 
+	
+	// TODO externalize firebase?
+	
 });
+

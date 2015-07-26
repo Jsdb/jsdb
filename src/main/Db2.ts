@@ -23,7 +23,8 @@ class Db {
 		var ks = Object.keys(this);
 		for (var i = 0; i < ks.length; i++) {
 			if (!(this[ks[i]] instanceof Db.internal.EntityRoot)) continue;
-			var er = (<Db.internal.EntityRoot<any>>this[ks[i]]).named(ks[i]);
+			var er = (<Db.internal.EntityRoot<any>>this[ks[i]]);
+			er.named(ks[i]);
 			er.initDb(this);
 		}
 	}

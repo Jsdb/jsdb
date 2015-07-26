@@ -18,7 +18,8 @@ var Db = (function () {
         for (var i = 0; i < ks.length; i++) {
             if (!(this[ks[i]] instanceof Db.internal.EntityRoot))
                 continue;
-            var er = this[ks[i]].named(ks[i]);
+            var er = this[ks[i]];
+            er.named(ks[i]);
             er.initDb(this);
         }
     };

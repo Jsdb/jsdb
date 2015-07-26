@@ -20,6 +20,13 @@ var WithProps = (function (_super) {
     }
     return WithProps;
 })(Db.Entity);
+var ServerWithProps = (function (_super) {
+    __extends(ServerWithProps, _super);
+    function ServerWithProps() {
+        _super.apply(this, arguments);
+    }
+    return ServerWithProps;
+})(WithProps);
 var SubEntity = (function (_super) {
     __extends(SubEntity, _super);
     function SubEntity() {
@@ -27,6 +34,13 @@ var SubEntity = (function (_super) {
     }
     return SubEntity;
 })(Db.Entity);
+var ServerSubEntity = (function (_super) {
+    __extends(ServerSubEntity, _super);
+    function ServerSubEntity() {
+        _super.apply(this, arguments);
+    }
+    return ServerSubEntity;
+})(SubEntity);
 var OthSubEntity = (function (_super) {
     __extends(OthSubEntity, _super);
     function OthSubEntity() {
@@ -42,6 +56,14 @@ var WithSubentity = (function (_super) {
     }
     return WithSubentity;
 })(Db.Entity);
+var ServerWithSubentity = (function (_super) {
+    __extends(ServerWithSubentity, _super);
+    function ServerWithSubentity() {
+        _super.apply(this, arguments);
+        this.sub = Db.embedded(ServerSubEntity);
+    }
+    return ServerWithSubentity;
+})(WithSubentity);
 var WithRef = (function (_super) {
     __extends(WithRef, _super);
     function WithRef() {
@@ -51,6 +73,15 @@ var WithRef = (function (_super) {
     }
     return WithRef;
 })(Db.Entity);
+var ServerWithRef = (function (_super) {
+    __extends(ServerWithRef, _super);
+    function ServerWithRef() {
+        _super.apply(this, arguments);
+        this.ref = Db.reference(ServerWithProps);
+        this.othSubRef = Db.reference(ServerSubEntity);
+    }
+    return ServerWithRef;
+})(WithRef);
 var WithCollections = (function (_super) {
     __extends(WithCollections, _super);
     function WithCollections() {
@@ -104,8 +135,20 @@ var TestDb = (function (_super) {
     }
     return TestDb;
 })(Db);
+var ServerTestDb = (function (_super) {
+    __extends(ServerTestDb, _super);
+    function ServerTestDb() {
+        _super.call(this);
+        this.withProps = Db.entityRoot(ServerWithProps);
+        this.withRefs = Db.entityRoot(ServerWithRef);
+        this.withSubs = Db.entityRoot(ServerWithSubentity);
+        _super.prototype.init.call(this);
+    }
+    return ServerTestDb;
+})(TestDb);
 var defDb = new TestDb();
-describe('Db Tests', function () {
+var serDb = new ServerTestDb();
+describe('Db2 Tests', function () {
     var wpFb;
     var wp1Fb;
     var wp2Fb;
@@ -511,7 +554,7 @@ describe('Db Tests', function () {
             });
         });
     });
-    // TODO update live when a reference pointer is changed
+    // update live when a reference pointer is changed
     it('should bind and keep live on reference pointer', function (done) {
         var wpl1 = defDb.withPre.load('wpl1');
         wpl1.oth.then(function () {
@@ -662,7 +705,7 @@ describe('Db Tests', function () {
             });
         });
     });
-    it('should trow exception if saving new entity not form db', function () {
+    it('should trow exception if saving new entity not from db', function () {
         var wp = new WithProps();
         var excp = null;
         try {
@@ -706,6 +749,61 @@ describe('Db Tests', function () {
             });
         });
     });
+    // client/server differences
+    it('should properly load root entity for server', function (done) {
+        var wp1 = serDb.withProps.load('wp1');
+        wp1.then(function (det) {
+            M.assert('Right type').when(wp1).is(M.instanceOf(ServerWithProps));
+            M.assert('Data loaded').when(wp1).is(M.objectMatching({
+                str: 'String 1',
+                num: 200,
+                arr: [1, 2, 3],
+                subobj: {
+                    substr: 'Sub String'
+                }
+            }));
+            done();
+        });
+    });
+    it('should load sub entities for server', function (done) {
+        var ws1 = serDb.withSubs.load('ws1');
+        ws1.then(function (det) {
+            M.assert("Right type").when(ws1.sub).is(M.instanceOf(ServerSubEntity));
+            M.assert("Loaded main").when(ws1.str).is('String 1');
+            M.assert("Loaded subentity").when(ws1.sub.str).is('Sub String 1');
+            done();
+        });
+    });
+    it('should load sub entites reference withOUT the main one for server', function (done) {
+        var wr1 = serDb.withRefs.load('wr2');
+        wr1.ref.then(function (det) {
+            M.assert("Loaded the ref").when(wr1.ref.value).is(M.aTruthy);
+            M.assert("Loaded the ref").when(wr1.ref.value).is(M.instanceOf(ServerWithProps));
+            return wr1.ref.value.then();
+        }).then(function () {
+            M.assert("Loaded the ref").when(wr1.ref.value).is(M.objectMatching({
+                str: 'String 1',
+                num: 200,
+                arr: [1, 2, 3],
+                subobj: {
+                    substr: 'Sub String'
+                }
+            }));
+            M.assert("Didn't load the main one").when(wr1.str).is(M.undefinedValue);
+            done();
+        });
+    });
+    it('should load reference to other entities sub references for server', function (done) {
+        var wr1 = serDb.withRefs.load('wr1');
+        wr1.then(function (det) {
+            M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.aTruthy);
+            M.assert("Loaded the ref").when(wr1.othSubRef.value).is(M.instanceOf(ServerSubEntity));
+            wr1.othSubRef.value.then(function (sdet) {
+                M.assert("Resolved the ref").when(wr1.othSubRef.value.str).is("Sub String 1");
+                done();
+            });
+        });
+    });
     // TODO cascade of save on non loaded elements
     // To explain better, i have an entity A that has sub entity B and C, only B has been loaded,
     // then calling save on A should not write out all the entity A (that would make all other properties
@@ -716,9 +814,19 @@ describe('Db Tests', function () {
     // TODO incremental remove on collections
     // TODO write back-projections
     // TODO cache cleaning
+    // TODO invert IOffable? make every listener check if he's still valid or not and remove those that aren't from event 
+    // side instead of relying on a destroy being called on all removed stuff?
     // TODO move promises on events?
     // TODO piggyback on events?
-    // TODO postLoad e prePersist?
+    // TODO prePersist
     // TODO default serialization (and deserialization) fields?
+    // TODO decouple deserialization from event handlers
+    // Currently, each event handler holds it's firebase reference and hooks itself to the firebase events. As such,
+    // if three clients are listening on a single entity update, there will be three handlers hooked, three deserializations,
+    // three eventDetails instances, three preUpdate calls and so on. This has been done to make each event handler 
+    // independent, so that Firebase handles its internal cache without needing to implement it on our side, but given the
+    // multiplication of quite heavy stuff (like deserialization etc..) could be better to hook on the Firebase once
+    // PER EVENT and not PER HANDLER, and unsubscribe when all hadlers have been removed. 
+    // TODO externalize firebase?
 });
 //# sourceMappingURL=Db2Tests.js.map
