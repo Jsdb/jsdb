@@ -2,7 +2,7 @@
   "name": "jsdb",
   "version": "1.0.0",
   "description": "",
-  "main": "js/db2.js",
+  "main": "js/Db2.js",
   "scripts": {
     "test": "mocha -r blanket -R html-cov js/test > coverage.html"
   },
