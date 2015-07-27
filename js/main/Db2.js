@@ -607,7 +607,10 @@ var Db;
                 _super.prototype.dbInit.call(this, url, db);
                 var ks = Object.keys(this.myEntity);
                 for (var i = 0; i < ks.length; i++) {
-                    var se = this.myEntity[ks[i]];
+                    var k = ks[i];
+                    if (k.charAt(0) == '_')
+                        continue;
+                    var se = this.myEntity[k];
                     if (se == null)
                         continue;
                     // Avoid looping on myself
@@ -615,13 +618,13 @@ var Db;
                         continue;
                     if (typeof se === 'object') {
                         if (se.dbInit) {
-                            se.dbInit(url + '/' + ks[i], db);
+                            se.dbInit(url + '/' + k, db);
                             if (se.setParentEntity) {
                                 se.setParentEntity(this.myEntity);
                             }
                         }
                         else if (se.load && se.load != null && se.load.dbInit) {
-                            se.load.dbInit(url + '/' + ks[i], db);
+                            se.load.dbInit(url + '/' + k, db);
                             if (se.load.setParentEntity) {
                                 se.load.setParentEntity(this.myEntity);
                             }
