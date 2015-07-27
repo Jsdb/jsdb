@@ -784,6 +784,7 @@ describe('Db2 Tests', () => {
 	// write reference
 	it('should write a reference correctly', (done) => {
 		var wp1 = defDb.withProps.load('wp1');
+		var url = wp1.load.getUrl();
 		var wrn = new WithRef();
 		wrn.str = 'abc';
 		wrn.ref.value = wp1; 
@@ -791,7 +792,7 @@ describe('Db2 Tests', () => {
 			new Firebase(wrn.load.getUrl()).once('value', (ds) => {
 				M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
 					str:'abc',
-					ref:{_ref:wp1.load.getUrl()}
+					ref:{_ref:url}
 				}));
 				done();
 			});

@@ -664,11 +664,20 @@ var Db;
             return EntityEvent;
         })(Event);
         internal.EntityEvent = EntityEvent;
+        // Note : this was extending EntityEvent, but that caused initDb to be applied to the contained entity, which is a reference so should not change its URL
         var ReferenceEvent = (function (_super) {
             __extends(ReferenceEvent, _super);
             function ReferenceEvent(myEntity) {
-                _super.call(this, myEntity);
+                _super.call(this);
+                this.myEntity = null;
+                this.myEntity = myEntity;
             }
+            ReferenceEvent.prototype.getUrl = function () {
+                return this.url;
+            };
+            ReferenceEvent.prototype.getDb = function () {
+                return this.db;
+            };
             ReferenceEvent.prototype.parseValue = function (val, url) {
                 if (!val) {
                     console.log("Value is ", val, url);
@@ -685,7 +694,7 @@ var Db;
                 return this.myEntity;
             };
             return ReferenceEvent;
-        })(EntityEvent);
+        })(Event);
         internal.ReferenceEvent = ReferenceEvent;
         var ReferenceImpl = (function (_super) {
             __extends(ReferenceImpl, _super);

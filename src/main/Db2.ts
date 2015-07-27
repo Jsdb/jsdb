@@ -806,9 +806,21 @@ module Db {
 			}
 		}
 		
-		export class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
+		// Note : this was extending EntityEvent, but that caused initDb to be applied to the contained entity, which is a reference so should not change its URL
+		export class ReferenceEvent<E extends Entity> extends Event<ReferenceImpl<E>> implements IEntityEvent<ReferenceImpl<E>> {
+			myEntity :ReferenceImpl<any> = null;
+			
 			constructor(myEntity :ReferenceImpl<any>) {
-				super(myEntity);
+				super();
+				this.myEntity = myEntity;
+			}
+			
+			getUrl() :string {
+				return this.url;
+			}
+			
+			getDb() :Db {
+				return this.db;
 			}
 			
 			parseValue(val, url? :string):ReferenceImpl<E> {

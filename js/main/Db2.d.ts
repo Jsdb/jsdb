@@ -226,8 +226,11 @@ declare module Db {
             parseValue(val: any, url?: string): T;
             protected preTrigger(evd: EventDetails<T>): void;
         }
-        class ReferenceEvent<E extends Entity> extends EntityEvent<ReferenceImpl<E>> {
+        class ReferenceEvent<E extends Entity> extends Event<ReferenceImpl<E>> implements IEntityEvent<ReferenceImpl<E>> {
+            myEntity: ReferenceImpl<any>;
             constructor(myEntity: ReferenceImpl<any>);
+            getUrl(): string;
+            getDb(): Db;
             parseValue(val: any, url?: string): ReferenceImpl<E>;
         }
         class ReferenceImpl<E extends Entity> extends Entity implements IReference<E> {
