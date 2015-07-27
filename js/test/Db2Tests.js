@@ -597,6 +597,7 @@ describe('Db2 Tests', function () {
     // Serialization, simple
     it('should serialize basic entity correctly', function () {
         var wp = new WithProps();
+        wp._local = 5;
         wp.num = 1;
         wp.str = 'abc';
         wp.arr = [1];

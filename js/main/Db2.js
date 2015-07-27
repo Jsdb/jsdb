@@ -140,6 +140,8 @@ var Db;
                 var k = fields[i];
                 if (k == 'load')
                     continue;
+                if (k.charAt(0) == '_')
+                    continue;
                 var v = e[k];
                 if (v == null)
                     continue;

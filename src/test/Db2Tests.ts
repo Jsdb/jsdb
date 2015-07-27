@@ -8,6 +8,7 @@ import M = require('tsMatchers');
 var baseUrl :string = "https://swashp.firebaseio.com/test2/"
 
 class WithProps extends Db.Entity {
+	_local :number;
 	str :string;
 	num :number;
 	arr :number[];
@@ -627,6 +628,7 @@ describe('Db2 Tests', () => {
 	// Serialization, simple
 	it('should serialize basic entity correctly', () => {
 		var wp = new WithProps();
+		wp._local = 5;
 		wp.num = 1;
 		wp.str = 'abc';
 		wp.arr = [1];
