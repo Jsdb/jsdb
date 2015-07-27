@@ -13,6 +13,7 @@ declare module 'jsdb' {
             save<E extends Db.Entity>(entity: E): Thenable<boolean>;
             assignUrl<E extends Db.Entity>(entity: E): void;
             reset(): void;
+            erase(): void;
     }
     module Db {
             function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;

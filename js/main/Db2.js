@@ -84,6 +84,10 @@ var Db = (function () {
         }
         this.cache = {};
     };
+    Db.prototype.erase = function () {
+        this.reset();
+        new Firebase(this.baseUrl).remove();
+    };
     return Db;
 })();
 var Db;

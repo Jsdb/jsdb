@@ -11,6 +11,7 @@ declare class Db {
     save<E extends Db.Entity>(entity: E): Thenable<boolean>;
     assignUrl<E extends Db.Entity>(entity: E): void;
     reset(): void;
+    erase(): void;
 }
 declare module Db {
     function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;

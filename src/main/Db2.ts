@@ -90,6 +90,11 @@ class Db {
 		}
 		this.cache = {};
 	}
+	
+	erase() {
+		this.reset();
+		new Firebase(this.baseUrl).remove();
+	}
 }
 
 module Db {
