@@ -600,6 +600,13 @@ var Db;
             EntityEvent.prototype.getDb = function () {
                 return this.db;
             };
+            EntityEvent.prototype.isLoaded = function () {
+                return this.loaded;
+            };
+            EntityEvent.prototype.assertLoaded = function () {
+                if (!this.loaded)
+                    throw "Entity " + this + " is not loaded";
+            };
             EntityEvent.prototype.bind = function (binding) {
                 var _this = this;
                 if (!binding)
@@ -679,6 +686,7 @@ var Db;
             function ReferenceEvent(myEntity) {
                 _super.call(this);
                 this.myEntity = null;
+                this.loaded = false;
                 this.myEntity = myEntity;
             }
             ReferenceEvent.prototype.getUrl = function () {
@@ -687,11 +695,19 @@ var Db;
             ReferenceEvent.prototype.getDb = function () {
                 return this.db;
             };
+            ReferenceEvent.prototype.isLoaded = function () {
+                return this.loaded;
+            };
+            ReferenceEvent.prototype.assertLoaded = function () {
+                if (!this.loaded)
+                    throw "Reference " + this.myEntity + " not loaded";
+            };
             ReferenceEvent.prototype.parseValue = function (val, url) {
                 if (!val) {
                     console.log("Value is ", val, url);
                     return;
                 }
+                this.loaded = true;
                 if (!val._ref) {
                     console.log("No _ref for reference in ", val, url);
                     return;

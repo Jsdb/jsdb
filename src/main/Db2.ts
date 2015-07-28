@@ -262,6 +262,8 @@ module Db {
 		export interface IEntityEvent<V> extends IEvent<V> {
 			getUrl() :string;
 			getDb() :Db;
+			isLoaded() :boolean;
+			assertLoaded();
 		}
 		
 		export interface IBinding {
@@ -744,6 +746,14 @@ module Db {
 				return this.db;
 			}
 			
+			isLoaded() :boolean {
+				return this.loaded;
+			}
+			
+			assertLoaded() {
+				if (!this.loaded) throw "Entity " + this + " is not loaded";
+			}
+			
 			bind(binding :BindingImpl) {
 				if (!binding) return;
 				this.binding = binding;
@@ -816,6 +826,7 @@ module Db {
 		// Note : this was extending EntityEvent, but that caused initDb to be applied to the contained entity, which is a reference so should not change its URL
 		export class ReferenceEvent<E extends Entity> extends Event<ReferenceImpl<E>> implements IEntityEvent<ReferenceImpl<E>> {
 			myEntity :ReferenceImpl<any> = null;
+			loaded = false;
 			
 			constructor(myEntity :ReferenceImpl<any>) {
 				super();
@@ -830,11 +841,20 @@ module Db {
 				return this.db;
 			}
 			
+			isLoaded() :boolean {
+				return this.loaded;
+			}
+			
+			assertLoaded() {
+				if (!this.loaded) throw "Reference " + this.myEntity + " not loaded";
+			}
+			
 			parseValue(val, url? :string):ReferenceImpl<E> {
 				if (!val) {
 					console.log("Value is ", val, url);
 					return;
 				}
+				this.loaded = true;
 				if (!val._ref) {
 					console.log("No _ref for reference in ", val, url);
 					return;

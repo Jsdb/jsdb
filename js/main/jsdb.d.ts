@@ -80,6 +80,8 @@ declare module 'jsdb' {
                     interface IEntityEvent<V> extends IEvent<V> {
                             getUrl(): string;
                             getDb(): Db;
+                            isLoaded(): boolean;
+                            assertLoaded(): any;
                     }
                     interface IBinding {
                             bind(localName: string, targetName: string, live?: boolean): any;
@@ -219,6 +221,8 @@ declare module 'jsdb' {
                             constructor(myEntity: T);
                             getUrl(): string;
                             getDb(): Db;
+                            isLoaded(): boolean;
+                            assertLoaded(): void;
                             bind(binding: BindingImpl): void;
                             setParentEntity(parent: any): void;
                             dbInit(url: string, db: Db): void;
@@ -227,9 +231,12 @@ declare module 'jsdb' {
                     }
                     class ReferenceEvent<E extends Entity> extends Event<ReferenceImpl<E>> implements IEntityEvent<ReferenceImpl<E>> {
                             myEntity: ReferenceImpl<any>;
+                            loaded: boolean;
                             constructor(myEntity: ReferenceImpl<any>);
                             getUrl(): string;
                             getDb(): Db;
+                            isLoaded(): boolean;
+                            assertLoaded(): void;
                             parseValue(val: any, url?: string): ReferenceImpl<E>;
                     }
                     class ReferenceImpl<E extends Entity> extends Entity implements IReference<E> {
