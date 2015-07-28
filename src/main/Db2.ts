@@ -191,6 +191,13 @@ module Db {
 			return resprom.promise;
 		}
 		
+		equals(other :Entity) :boolean {
+			if (!(other instanceof this.constructor)) return false;
+			if (!this.load.getUrl()) return false;
+			if (!other.load.getUrl()) return false;
+			return this.load.getUrl() == other.load.getUrl();
+		}
+		
 		then() :Thenable<internal.IEventDetails<any>>
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
 		then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
@@ -853,6 +860,18 @@ module Db {
 				super();
 				this._ctor = c;
 			}
+			
+			equals(other :Entity) :boolean {
+				if (!(other instanceof this.constructor)) return false;
+				if (!this.load.getUrl()) return false;
+				if (!other.load.getUrl()) return false;
+				if (this.load.getUrl() == other.load.getUrl()) return true;
+				if (!this.url) return false;
+				var oth = <ReferenceImpl<any>>other;
+				if (!oth.url) return false;
+				return this.url == oth.url;
+			}
+
 			
 			serialize = () => {
 				var url = null;

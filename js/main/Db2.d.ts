@@ -34,6 +34,7 @@ declare module Db {
         load: internal.IEntityEvent<any>;
         serialize: () => any;
         save(): Thenable<boolean>;
+        equals(other: Entity): boolean;
         then(): Thenable<internal.IEventDetails<any>>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => void): Thenable<U>;
@@ -239,6 +240,7 @@ declare module Db {
             url: string;
             value: E;
             constructor(c: new () => E);
+            equals(other: Entity): boolean;
             serialize: () => {
                 _ref: any;
             };

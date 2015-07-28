@@ -812,6 +812,7 @@ describe('Db2 Tests', function () {
     // of A including C empty) but issue a save only on B.
     // TODO write reference with projections
     // TODO write full collections
+    // TODO read and write unmanaged (native) arrays and maps having entities inside?
     // TODO incremental add on collections
     // TODO incremental remove on collections
     // TODO write back-projections
@@ -830,5 +831,16 @@ describe('Db2 Tests', function () {
     // multiplication of quite heavy stuff (like deserialization etc..) could be better to hook on the Firebase once
     // PER EVENT and not PER HANDLER, and unsubscribe when all hadlers have been removed. 
     // TODO externalize firebase?
+    // TODO use metadata (somehow) instead of real entity or collection instances for embeddeds?
+    // The problem is that currently we can't support null on entities and we are obliged to wrap references and
+    // collections, while instead we could create mock instances at the beginning, to give proper static typing and create
+    // some "markers". After this has been done (when is not clear :D) we could find the markers, connect them with
+    // their names and the proper instance. We gain the "nullability", but we loose some syntax, like mainEntity.sub.then() etc.
+    // However, such metadata could be used for deserializing correctly, which now does not happen or can't be done
+    // in a number of cases.
+    // TODO save __entity on the database?
+    // This is another solution to static typing, and can also help for polimorfic data and for native collections 
+    // --- Needed
+    // TODO binding and live update for collections
 });
 //# sourceMappingURL=Db2Tests.js.map

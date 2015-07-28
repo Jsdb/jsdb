@@ -191,6 +191,15 @@ var Db;
             });
             return resprom.promise;
         };
+        Entity.prototype.equals = function (other) {
+            if (!(other instanceof this.constructor))
+                return false;
+            if (!this.load.getUrl())
+                return false;
+            if (!other.load.getUrl())
+                return false;
+            return this.load.getUrl() == other.load.getUrl();
+        };
         Entity.prototype.then = function (onFulfilled, onRejected) {
             //console.log("Called then on " + this.constructor.name);
             var resprom = new ResolvablePromise();
@@ -719,6 +728,22 @@ var Db;
                 };
                 this._ctor = c;
             }
+            ReferenceImpl.prototype.equals = function (other) {
+                if (!(other instanceof this.constructor))
+                    return false;
+                if (!this.load.getUrl())
+                    return false;
+                if (!other.load.getUrl())
+                    return false;
+                if (this.load.getUrl() == other.load.getUrl())
+                    return true;
+                if (!this.url)
+                    return false;
+                var oth = other;
+                if (!oth.url)
+                    return false;
+                return this.url == oth.url;
+            };
             return ReferenceImpl;
         })(Entity);
         internal.ReferenceImpl = ReferenceImpl;
