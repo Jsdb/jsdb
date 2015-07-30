@@ -576,6 +576,9 @@ var Db;
             Event.prototype.hasHandlers = function () {
                 return this.handlers.length > 0;
             };
+            Event.prototype.toJSON = function () {
+                return undefined;
+            };
             return Event;
         })();
         internal.Event = Event;

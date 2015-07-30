@@ -214,6 +214,7 @@ declare module Db {
             off(ctx: any): void;
             static offAll(ctx: any, events: any): void;
             hasHandlers(): boolean;
+            toJSON(): any;
         }
         class EntityEvent<T extends Entity> extends Event<T> implements IEntityEvent<T> {
             myEntity: T;
