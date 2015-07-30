@@ -702,6 +702,10 @@ module Db {
 				return this.handlers.length > 0;
 			}
 			
+			public toJSON() {
+				return undefined;
+			}
+			
 			// TODO rewrite projections
 			/*
 			projectValue(val) {
