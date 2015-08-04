@@ -2,7 +2,7 @@
 
 
 import Firebase = require('firebase');
-import Io = require('socket.io');
+import SocketIOClient = require('socket.io-client');
 import PromiseModule = require('es6-promise');
 
 var Promise = PromiseModule.Promise;
@@ -11,13 +11,33 @@ var Promise = PromiseModule.Promise;
 export = Db;
 
 class Db {
+	/** 
+	 * URL of the database
+	 */
 	baseUrl :string;
-	
+	/**
+	 * Socket.IO instance to call server-side methods, if initialized.
+	 */
+	io :SocketIOClient.Socket = null;
+	/**
+	 * Local cache of entities. The cache key is the URL, so also embedded entities are cached.
+	 */
 	cache :{[index:string]:any} = {};
+	
+	// TODO cache invalidation!
 	
 	constructor(baseUrl :string) {
 		this.baseUrl = baseUrl;
 	}
+	
+	/**
+	 * Initialize connection to the server for server side method execution.
+	 */
+	serverConnection(url :string) {
+		this.io = SocketIOClient(url);
+		// TODO hook some events here
+	}
+	
 	
 	init() {
 		var ks = Object.keys(this);
@@ -65,6 +85,23 @@ class Db {
 		return entity.save();
 	}
 	
+	remove(entity :Db.Entity)
+	remove(url :string)
+	remove(tgt :any) {
+		if (tgt instanceof Db.Entity) {
+			tgt = (<Db.Entity>tgt).load.getUrl();
+		}
+		var resprom = new Db.ResolvablePromise<boolean>();
+		new Firebase(tgt).remove((err) => {
+			if (!err) {
+				resprom.resolve(true);
+			} else {
+				resprom.error(err);
+			}
+		});
+		return resprom.promise;
+	}
+	
 	assignUrl<E extends Db.Entity>(entity :E) {
 		if (entity.load.getUrl()) return;
 		var ks = Object.keys(this);
@@ -95,7 +132,95 @@ class Db {
 		this.reset();
 		new Firebase(this.baseUrl).remove();
 	}
+	
+	/**
+	 * Send to the server a server-side method call. 
+	 * 
+	 * The protocol is very simply this :
+	 * 	- A "method" event is send to th server
+	 *  - The only parameter is an object with the following fields :
+	 *  - "entityUrl" is the url of the entity the method was called on
+	 *  - "method" is the method name
+	 *  - "args" is the arguments of the call
+	 * 
+	 * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+	 * so that the server will operate on database data.
+	 * 
+	 * The server can return data or simply aknowledge the execution. When this happens the
+	 * promise will be fulfilled.
+	 * 
+	 * The server can return an error by returning an object containing the "error" field
+	 * containing a string describing the error. In that case the promise will be failed.  
+	 */
+	callServerMethod(entity :Db.Entity, method :string, args :any[]) :Promise<any> {
+		var resprom = new Db.ResolvablePromise<any>();
+		this.io.emit('method',
+			this.createServerMethodCall(entity,method,args) 
+		,
+		function(resp) {
+			if (resp.error) {
+				resprom.error(resp);
+			} else {
+				resprom.resolve(resp);
+			}
+		});
+		
+		return resprom.promise;
+	}
+	
+	private createServerMethodCall(entity :Db.Entity, method :string, args :any[]):any {
+		var payload = [];
+		for (var i = 0; i < args.length; i++) {
+			var val = args[i];
+			if (val instanceof Db.Entity) {
+				var url = (<Db.Entity>val).load.getUrl();
+				if (url) {
+					payload.push({_ref:url});
+					continue;
+				} else {
+					payload.push(Db.Utils.entitySerialize(val));
+					continue;
+				}
+			}
+			payload.push(val);
+		}
+		
+		return {
+			entityUrl: entity.load.getUrl(),
+			method: method,
+			args: payload
+		}
+	}
+	
+	/**
+	 * Executes a method on server-side. Payload is the only parameter passed to the "method" event
+	 * from the callServerMethod method. 
+	 * 
+	 * This method can return a value, to return on the socket right on, or a Promise to return
+	 * to the socket when resolved. 
+	 */
+	executeServerMethod(payload :any) :any {
+		try {
+			var entity = this.load(payload.entityUrl);
+			if (!entity) return {error: "Can't find entity"};
+			var fn = <Function>entity[payload.method];
+			if (!fn) return {error: "Can't find method"};
+			
+			var args = <any[]>payload.args;
+			for (var i = 0; i < args.length; i++) {
+				var val = args[i];
+				if (val._ref) {
+					args[i] = this.load(val._ref);
+				}
+			}
+		
+			return fn.apply(entity,args);
+		} catch (e) {
+			return {error: e.toString()};
+		}
+	}
 }
+
 
 module Db {
 	
@@ -189,6 +314,10 @@ module Db {
 			});
 			
 			return resprom.promise;
+		}
+		
+		remove() {
+			return this.load.getDb().remove(this);
 		}
 		
 		equals(other :Entity) :boolean {

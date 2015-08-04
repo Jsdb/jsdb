@@ -1,17 +1,62 @@
 /// <reference path="../../typings/tsd.d.ts" />
 export = Db;
 declare class Db {
+    /**
+     * URL of the database
+     */
     baseUrl: string;
+    /**
+     * Socket.IO instance to call server-side methods, if initialized.
+     */
+    io: SocketIOClient.Socket;
+    /**
+     * Local cache of entities. The cache key is the URL, so also embedded entities are cached.
+     */
     cache: {
         [index: string]: any;
     };
     constructor(baseUrl: string);
+    /**
+     * Initialize connection to the server for server side method execution.
+     */
+    serverConnection(url: string): void;
     init(): void;
     load<T>(url: string, ctor?: new () => T): T;
     save<E extends Db.Entity>(entity: E): Thenable<boolean>;
+    remove(entity: Db.Entity): any;
+    remove(url: string): any;
     assignUrl<E extends Db.Entity>(entity: E): void;
     reset(): void;
     erase(): void;
+    /**
+     * Send to the server a server-side method call.
+     *
+     * The protocol is very simply this :
+     * 	- A "method" event is send to th server
+     *  - The only parameter is an object with the following fields :
+     *  - "entityUrl" is the url of the entity the method was called on
+     *  - "method" is the method name
+     *  - "args" is the arguments of the call
+     *
+     * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+     * so that the server will operate on database data.
+     *
+     * The server can return data or simply aknowledge the execution. When this happens the
+     * promise will be fulfilled.
+     *
+     * The server can return an error by returning an object containing the "error" field
+     * containing a string describing the error. In that case the promise will be failed.
+     */
+    callServerMethod(entity: Db.Entity, method: string, args: any[]): Promise<any>;
+    private createServerMethodCall(entity, method, args);
+    /**
+     * Executes a method on server-side. Payload is the only parameter passed to the "method" event
+     * from the callServerMethod method.
+     *
+     * This method can return a value, to return on the socket right on, or a Promise to return
+     * to the socket when resolved.
+     */
+    executeServerMethod(payload: any): any;
 }
 declare module Db {
     function entityRoot<E extends Entity>(c: new () => E): internal.IEntityRoot<E>;
@@ -34,6 +79,7 @@ declare module Db {
         load: internal.IEntityEvent<any>;
         serialize: () => any;
         save(): Thenable<boolean>;
+        remove(): any;
         equals(other: Entity): boolean;
         then(): Thenable<internal.IEventDetails<any>>;
         then<U>(onFulfilled?: (value: internal.IEventDetails<any>) => U | Thenable<U>, onRejected?: (error: any) => U | Thenable<U>): Thenable<U>;

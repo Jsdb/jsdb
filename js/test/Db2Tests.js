@@ -10,14 +10,23 @@ var Db = require('../main/Db2');
 var Firebase = require('firebase');
 var M = require('tsMatchers');
 var baseUrl = "https://swashp.firebaseio.com/test2/";
+var lastLocalCallArgs = null;
 var WithProps = (function (_super) {
     __extends(WithProps, _super);
     function WithProps() {
         _super.apply(this, arguments);
+        this._local = 1;
+        this.str = 'useless';
+        this.num = 0;
+        this.arr = [];
         this.subobj = {
             substr: ''
         };
     }
+    WithProps.prototype.localCall = function () {
+        lastLocalCallArgs = arguments;
+        return 'localCallAck';
+    };
     return WithProps;
 })(Db.Entity);
 var ServerWithProps = (function (_super) {
@@ -404,6 +413,64 @@ describe('Db2 Tests', function () {
                 done();
             });
         });
+    });
+    it('should create correct server side method call payload', function () {
+        var wr1 = defDb.withRefs.load('wr1');
+        var wc1 = defDb.withCols.load('wc1');
+        var pld = defDb['createServerMethodCall'].call(defDb, wr1, 'method', ['a', 1, { generic: 'object' }, new WithProps(), wc1]);
+        M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
+            entityUrl: wr1.load.getUrl(),
+            method: 'method',
+            args: [
+                'a',
+                1,
+                { generic: 'object' },
+                {
+                    arr: [],
+                    num: 0,
+                    str: 'useless',
+                    subobj: {
+                        substr: ''
+                    }
+                },
+                { _ref: wc1.load.getUrl() }
+            ]
+        }));
+    });
+    it('should execute server side method calls', function () {
+        var wc1 = defDb.withCols.load('wc1');
+        var pyl = {
+            entityUrl: baseUrl + "withProps/wp1",
+            method: 'localCall',
+            args: [
+                'a',
+                1,
+                { generic: 'object' },
+                {
+                    arr: [],
+                    num: 0,
+                    str: 'useless',
+                    subobj: {
+                        substr: ''
+                    }
+                },
+                { _ref: wc1.load.getUrl() }
+            ]
+        };
+        var ret = defDb.executeServerMethod(pyl);
+        M.assert('Returned the method return').when(ret).is('localCallAck');
+        M.assert('Call params are right').when(lastLocalCallArgs[0]).is('a');
+        M.assert('Call params are right').when(lastLocalCallArgs[1]).is(1);
+        M.assert('Call params are right').when(lastLocalCallArgs[2]).is(M.objectMatching({ generic: 'object' }));
+        M.assert('Call params are right').when(lastLocalCallArgs[3]).is(M.objectMatching({
+            arr: [],
+            num: 0,
+            str: 'useless',
+            subobj: {
+                substr: ''
+            }
+        }));
+        M.assert('Call params are right').when(lastLocalCallArgs[4]).is(M.instanceOf(WithCollections));
     });
     it('should report each element in list as an add event', function (done) {
         var wc1 = defDb.withCols.load('wc1');

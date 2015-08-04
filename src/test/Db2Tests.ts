@@ -7,13 +7,20 @@ import M = require('tsMatchers');
 
 var baseUrl :string = "https://swashp.firebaseio.com/test2/"
 
+var lastLocalCallArgs :IArguments = null;
+
 class WithProps extends Db.Entity {
-	_local :number;
-	str :string;
-	num :number;
-	arr :number[];
+	_local :number = 1;
+	str :string = 'useless';
+	num :number = 0;
+	arr :number[] = [];
 	subobj = {
 		substr : ''
+	}
+	
+	localCall() {
+		lastLocalCallArgs = arguments;
+		return 'localCallAck';
 	}
 }
 
@@ -405,6 +412,73 @@ describe('Db2 Tests', () => {
 			});
 		});
 
+	});
+	
+	it('should create correct server side method call payload', () => {
+		var wr1 = defDb.withRefs.load('wr1');
+		var wc1 = defDb.withCols.load('wc1');
+		
+		var pld = defDb['createServerMethodCall'].call(defDb, wr1, 'method', ['a', 1, {generic:'object'}, new WithProps(), wc1]);
+		M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
+			entityUrl: wr1.load.getUrl(),
+			method: 'method',
+			args: 
+				[
+					'a',
+					1,
+					{ generic:'object' },
+					{
+						arr: [],
+						num: 0,
+						str: 'useless',
+						subobj: {
+							substr: ''
+						}
+					},
+					{_ref:wc1.load.getUrl()}
+				]
+		}));
+	});
+	
+	it('should execute server side method calls', () => {
+		var wc1 = defDb.withCols.load('wc1');
+		
+		var pyl = {
+			entityUrl : baseUrl + "withProps/wp1",
+			method: 'localCall',
+			args:
+				[
+					'a',
+					1,
+					{ generic:'object' },
+					{
+						arr: [],
+						num: 0,
+						str: 'useless',
+						subobj: {
+							substr: ''
+						}
+					},
+					{_ref:wc1.load.getUrl()}
+				]
+		};
+		
+		var ret = defDb.executeServerMethod(pyl);
+		M.assert('Returned the method return').when(ret).is('localCallAck');
+		M.assert('Call params are right').when(lastLocalCallArgs[0]).is('a');
+		M.assert('Call params are right').when(lastLocalCallArgs[1]).is(1);
+		M.assert('Call params are right').when(lastLocalCallArgs[2]).is(M.objectMatching({ generic:'object' }));
+		M.assert('Call params are right').when(lastLocalCallArgs[3]).is(M.objectMatching(
+			{
+				arr: [],
+				num: 0,
+				str: 'useless',
+				subobj: {
+					substr: ''
+				}
+			}
+		));
+		M.assert('Call params are right').when(lastLocalCallArgs[4]).is(M.instanceOf(WithCollections));
 	});
 	
 	it('should report each element in list as an add event',(done) => {

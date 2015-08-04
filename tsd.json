@@ -14,11 +14,11 @@
     "node/node.d.ts": {
       "commit": "aadd63ecae3feb76ea2d4be80511e266b5c2c4a7"
     },
-    "socket.io/socket.io.d.ts": {
-      "commit": "c2b70ba731a485968fa3e0561a32652f59787015"
-    },
     "es6-promise/es6-promise.d.ts": {
       "commit": "2c96e9e77765b72ce43ab8163f42e504f3e2facb"
+    },
+    "socket.io-client/socket.io-client.d.ts": {
+      "commit": "7c27233ae47768442b9b0a40d7f03fadf593fad2"
     }
   }
 }

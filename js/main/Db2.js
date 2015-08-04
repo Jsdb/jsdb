@@ -6,13 +6,29 @@ var __extends = this.__extends || function (d, b) {
     d.prototype = new __();
 };
 var Firebase = require('firebase');
+var SocketIOClient = require('socket.io-client');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
 var Db = (function () {
+    // TODO cache invalidation!
     function Db(baseUrl) {
+        /**
+         * Socket.IO instance to call server-side methods, if initialized.
+         */
+        this.io = null;
+        /**
+         * Local cache of entities. The cache key is the URL, so also embedded entities are cached.
+         */
         this.cache = {};
         this.baseUrl = baseUrl;
     }
+    /**
+     * Initialize connection to the server for server side method execution.
+     */
+    Db.prototype.serverConnection = function (url) {
+        this.io = SocketIOClient(url);
+        // TODO hook some events here
+    };
     Db.prototype.init = function () {
         var ks = Object.keys(this);
         for (var i = 0; i < ks.length; i++) {
@@ -59,6 +75,21 @@ var Db = (function () {
         }
         return entity.save();
     };
+    Db.prototype.remove = function (tgt) {
+        if (tgt instanceof Db.Entity) {
+            tgt = tgt.load.getUrl();
+        }
+        var resprom = new Db.ResolvablePromise();
+        new Firebase(tgt).remove(function (err) {
+            if (!err) {
+                resprom.resolve(true);
+            }
+            else {
+                resprom.error(err);
+            }
+        });
+        return resprom.promise;
+    };
     Db.prototype.assignUrl = function (entity) {
         if (entity.load.getUrl())
             return;
@@ -87,6 +118,88 @@ var Db = (function () {
     Db.prototype.erase = function () {
         this.reset();
         new Firebase(this.baseUrl).remove();
+    };
+    /**
+     * Send to the server a server-side method call.
+     *
+     * The protocol is very simply this :
+     * 	- A "method" event is send to th server
+     *  - The only parameter is an object with the following fields :
+     *  - "entityUrl" is the url of the entity the method was called on
+     *  - "method" is the method name
+     *  - "args" is the arguments of the call
+     *
+     * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+     * so that the server will operate on database data.
+     *
+     * The server can return data or simply aknowledge the execution. When this happens the
+     * promise will be fulfilled.
+     *
+     * The server can return an error by returning an object containing the "error" field
+     * containing a string describing the error. In that case the promise will be failed.
+     */
+    Db.prototype.callServerMethod = function (entity, method, args) {
+        var resprom = new Db.ResolvablePromise();
+        this.io.emit('method', this.createServerMethodCall(entity, method, args), function (resp) {
+            if (resp.error) {
+                resprom.error(resp);
+            }
+            else {
+                resprom.resolve(resp);
+            }
+        });
+        return resprom.promise;
+    };
+    Db.prototype.createServerMethodCall = function (entity, method, args) {
+        var payload = [];
+        for (var i = 0; i < args.length; i++) {
+            var val = args[i];
+            if (val instanceof Db.Entity) {
+                var url = val.load.getUrl();
+                if (url) {
+                    payload.push({ _ref: url });
+                    continue;
+                }
+                else {
+                    payload.push(Db.Utils.entitySerialize(val));
+                    continue;
+                }
+            }
+            payload.push(val);
+        }
+        return {
+            entityUrl: entity.load.getUrl(),
+            method: method,
+            args: payload
+        };
+    };
+    /**
+     * Executes a method on server-side. Payload is the only parameter passed to the "method" event
+     * from the callServerMethod method.
+     *
+     * This method can return a value, to return on the socket right on, or a Promise to return
+     * to the socket when resolved.
+     */
+    Db.prototype.executeServerMethod = function (payload) {
+        try {
+            var entity = this.load(payload.entityUrl);
+            if (!entity)
+                return { error: "Can't find entity" };
+            var fn = entity[payload.method];
+            if (!fn)
+                return { error: "Can't find method" };
+            var args = payload.args;
+            for (var i = 0; i < args.length; i++) {
+                var val = args[i];
+                if (val._ref) {
+                    args[i] = this.load(val._ref);
+                }
+            }
+            return fn.apply(entity, args);
+        }
+        catch (e) {
+            return { error: e.toString() };
+        }
     };
     return Db;
 })();
@@ -190,6 +303,9 @@ var Db;
                 }
             });
             return resprom.promise;
+        };
+        Entity.prototype.remove = function () {
+            return this.load.getDb().remove(this);
         };
         Entity.prototype.equals = function (other) {
             if (!(other instanceof this.constructor))
