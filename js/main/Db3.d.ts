@@ -18,16 +18,21 @@ declare module Db {
     }
     module Internal {
         function createDb(conf: any): IDb3Static;
+        type nativeArrObj = number | string | boolean | {
+            [index: string]: string | number | boolean;
+        } | {
+            [index: number]: string | number | boolean;
+        } | number[] | string[] | boolean[];
         interface IDb3Static {
             (): IDbOperations;
             <T extends Entity>(c: EntityType<T>): IEntityRoot<T>;
             (meta: MetaDescriptor, entity: Entity): any;
+            <V extends nativeArrObj>(value: V): IObservableEvent<V>;
             <T extends Entity>(entity: T): IEntityOrReferenceEvent<T>;
             <T extends Entity>(map: {
                 [index: string]: T;
-            }): any;
-            <T extends Entity>(list: T[]): any;
-            <V extends number | string | boolean>(value: V): any;
+            }): number;
+            <T extends Entity>(list: T[]): number;
         }
         interface IDb3Initable {
             dbInit?(url: string, db: IDb3Static): any;
@@ -200,6 +205,23 @@ declare module Db {
             assignUrl(): void;
             save(): Promise<any>;
         }
+        interface IObservableEvent<E extends Entity> extends IUrled {
+            updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            live(ctx: Object): void;
+            off(ctx: Object): void;
+            isLoaded(): boolean;
+            assertLoaded(): void;
+        }
+        class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
+            nameOnParent: string;
+            updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
+            live(ctx: Object): void;
+            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
+            parseValue(ds: FirebaseDataSnapshot): void;
+            isLoaded(): boolean;
+            assertLoaded(): void;
+            serialize(): Entity;
+        }
         interface IEntityRoot<E extends Entity> extends IUrled {
             load(id: string): E;
             query(): IQuery<E>;
@@ -265,6 +287,9 @@ declare module Db {
             named(name: string): ReferenceMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
+        class ObservableMetaDescriptor extends MetaDescriptor {
+            createEvent(allMetadata: Metadata): GenericEvent;
+        }
         class Metadata {
             classes: Internal.ClassMetadata[];
             findMeta(param: EntityType<any> | Entity): ClassMetadata;
@@ -289,9 +314,11 @@ declare module Db {
     function embedded(def: EntityType<any> | Discriminator, binding?: Internal.IBinding): PropertyDecorator;
     function reference(def: EntityType<any> | Discriminator, binding?: Internal.IBinding): PropertyDecorator;
     function root(name: string): ClassDecorator;
+    function observable(): PropertyDecorator;
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: any): Db.Internal.ReferenceMetaDescriptor;
+        function observable(): Db.Internal.ObservableMetaDescriptor;
         function root(ctor: EntityType<any>, name: string): void;
     }
 }

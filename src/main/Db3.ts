@@ -70,20 +70,27 @@ module Db {
 			return db;
 		}
 		
+		export type nativeArrObj = 
+			number|string|boolean
+			|{[index:string]:string|number|boolean}
+			|{[index:number]:string|number|boolean}
+			|number[]|string[]|boolean[];
+		
 		export interface IDb3Static {
 			():IDbOperations;
 			
 			<T extends Entity>(c :EntityType<T>) :IEntityRoot<T>;
 			
 			(meta :MetaDescriptor,entity :Entity):any;
+
+			<V extends nativeArrObj>(value :V) :IObservableEvent<V>;
 			
 			<T extends Entity>(entity :T) :IEntityOrReferenceEvent<T>;
 			
-			<T extends Entity>(map :{[index:string]:T}); // IMap<T>
+			<T extends Entity>(map :{[index:string]:T}) :number; // IMap<T>
 			
-			<T extends Entity>(list :T[]); //  IList<T>
+			<T extends Entity>(list :T[]) :number; //  IList<T>
 			
-			<V extends number|string|boolean>(value :V); // IValueEvent<V>
 		}
 		
 		export interface IDb3Initable {
@@ -346,7 +353,7 @@ module Db {
 			
 			setEntity(entity :Entity) {
 				this.entity = entity;
-				if (entity) {
+				if (entity && typeof entity == 'object') {
 					var dbacc = <IDb3Annotated>this.entity;
 					if (!dbacc.__dbevent) dbacc.__dbevent = this;
 				}
@@ -843,6 +850,54 @@ module Db {
 			}
 		}
 		
+		export interface IObservableEvent<E extends Entity> extends IUrled {
+			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+			live(ctx:Object) :void;
+			
+			// Handling methods
+			off(ctx:Object) :void;
+			isLoaded():boolean;
+			assertLoaded():void;
+		}
+		
+		export class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
+			
+			nameOnParent :string = null;
+			
+			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void, discriminator :any = null) :void {
+				var h = new EventHandler(ctx, callback, discriminator);
+				super.on(h);
+			}
+			
+			live(ctx:Object) {
+				this.updated(ctx,()=>{});
+			}
+			
+			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
+				this.loaded = true;
+				super.handleDbEvent(ds,prevName);
+			}
+			
+			parseValue(ds :FirebaseDataSnapshot) {
+				this.setEntity(ds.val());
+				if (this.parent && this.nameOnParent) {
+					this.parent.entity[this.nameOnParent] = this.entity;
+				}
+			}
+			
+			isLoaded() {
+				return this.loaded;
+			}
+			
+			assertLoaded() {
+				if (!this.loaded) throw new Error("Entity at url " + this.getUrl() + " is not loaded");
+			}
+			
+			serialize() {
+				return this.entity;
+			}
+			
+		}
 
 		
 		export interface IEntityRoot<E extends Entity> extends IUrled {
@@ -1126,6 +1181,17 @@ module Db {
 			
 		}
 		
+		export class ObservableMetaDescriptor extends MetaDescriptor {
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new ObservableEvent();
+				ret.url = this.getRemoteName();
+				ret.nameOnParent = this.localName;
+				return ret;
+			}
+			
+		}
+		
 		export class Metadata {
 			classes :Internal.ClassMetadata[] = [];
 			
@@ -1280,6 +1346,14 @@ module Db {
 		}
 	}
 	
+	export function observable() :PropertyDecorator {
+		return function(target: Object, propertyKey: string | symbol) {
+			var ret = meta.observable();
+			addDescriptor(target, propertyKey, ret);
+			installMetaGetter(target, propertyKey.toString(), ret);
+		}
+	}
+	
 	function addDescriptor(target: Object, propertyKey: string | symbol, ret :Internal.MetaDescriptor) {
 		ret.setLocalName(propertyKey.toString());
 		var clmeta = allMetadata.findMeta(<EntityType<any>><any>target.constructor);
@@ -1336,6 +1410,11 @@ module Db {
 		export function reference(def :any) :Db.Internal.ReferenceMetaDescriptor {
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
+			return ret;
+		}
+		
+		export function observable() :Db.Internal.ObservableMetaDescriptor {
+			var ret = new Db.Internal.ObservableMetaDescriptor();
 			return ret;
 		}
 		

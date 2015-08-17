@@ -251,7 +251,7 @@ var Db;
             }
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
-                if (entity) {
+                if (entity && typeof entity == 'object') {
                     var dbacc = this.entity;
                     if (!dbacc.__dbevent)
                         dbacc.__dbevent = this;
@@ -736,6 +736,43 @@ var Db;
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
         Internal.ReferenceEvent = ReferenceEvent;
+        var ObservableEvent = (function (_super) {
+            __extends(ObservableEvent, _super);
+            function ObservableEvent() {
+                _super.apply(this, arguments);
+                this.nameOnParent = null;
+            }
+            ObservableEvent.prototype.updated = function (ctx, callback, discriminator) {
+                if (discriminator === void 0) { discriminator = null; }
+                var h = new EventHandler(ctx, callback, discriminator);
+                _super.prototype.on.call(this, h);
+            };
+            ObservableEvent.prototype.live = function (ctx) {
+                this.updated(ctx, function () { });
+            };
+            ObservableEvent.prototype.handleDbEvent = function (ds, prevName) {
+                this.loaded = true;
+                _super.prototype.handleDbEvent.call(this, ds, prevName);
+            };
+            ObservableEvent.prototype.parseValue = function (ds) {
+                this.setEntity(ds.val());
+                if (this.parent && this.nameOnParent) {
+                    this.parent.entity[this.nameOnParent] = this.entity;
+                }
+            };
+            ObservableEvent.prototype.isLoaded = function () {
+                return this.loaded;
+            };
+            ObservableEvent.prototype.assertLoaded = function () {
+                if (!this.loaded)
+                    throw new Error("Entity at url " + this.getUrl() + " is not loaded");
+            };
+            ObservableEvent.prototype.serialize = function () {
+                return this.entity;
+            };
+            return ObservableEvent;
+        })(SingleDbHandlerEvent);
+        Internal.ObservableEvent = ObservableEvent;
         var EntityRoot = (function () {
             function EntityRoot(state, meta) {
                 this.state = state;
@@ -999,6 +1036,20 @@ var Db;
             return ReferenceMetaDescriptor;
         })(MetaDescriptor);
         Internal.ReferenceMetaDescriptor = ReferenceMetaDescriptor;
+        var ObservableMetaDescriptor = (function (_super) {
+            __extends(ObservableMetaDescriptor, _super);
+            function ObservableMetaDescriptor() {
+                _super.apply(this, arguments);
+            }
+            ObservableMetaDescriptor.prototype.createEvent = function (allMetadata) {
+                var ret = new ObservableEvent();
+                ret.url = this.getRemoteName();
+                ret.nameOnParent = this.localName;
+                return ret;
+            };
+            return ObservableMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.ObservableMetaDescriptor = ObservableMetaDescriptor;
         var Metadata = (function () {
             function Metadata() {
                 this.classes = [];
@@ -1155,6 +1206,14 @@ var Db;
         };
     }
     Db.root = root;
+    function observable() {
+        return function (target, propertyKey) {
+            var ret = meta.observable();
+            addDescriptor(target, propertyKey, ret);
+            installMetaGetter(target, propertyKey.toString(), ret);
+        };
+    }
+    Db.observable = observable;
     function addDescriptor(target, propertyKey, ret) {
         ret.setLocalName(propertyKey.toString());
         var clmeta = allMetadata.findMeta(target.constructor);
@@ -1210,6 +1269,11 @@ var Db;
             return ret;
         }
         meta.reference = reference;
+        function observable() {
+            var ret = new Db.Internal.ObservableMetaDescriptor();
+            return ret;
+        }
+        meta.observable = observable;
         function root(ctor, name) {
             allMetadata.findMeta(ctor).root = name;
         }

@@ -35,6 +35,9 @@ var WithProps = (function () {
         lastLocalCallArgs = arguments;
         return 'localCallAck';
     };
+    __decorate([
+        Db3.observable()
+    ], WithProps.prototype, "num");
     WithProps = __decorate([
         Db3.root('withProps')
     ], WithProps);
@@ -390,7 +393,8 @@ describe('Db3 >', function () {
                 discr: M.instanceOf(SubEntityDiscriminator)
             }));
         });
-        it('should intercept metadata thru getters', function () {
+        it('should intercept simple metadata thru getters', function () {
+            Db3.Internal.clearLastStack();
             var we = new WithSubentity();
             var sub = we.sub;
             var lastEntity = Db3.Internal.getLastEntity();
@@ -400,7 +404,22 @@ describe('Db3 >', function () {
             assert("right path on length=1").when(lastPath[0]).is(M.objectMatching({
                 localName: 'sub'
             }));
+        });
+        it('should intercept observable metadata thru getters', function () {
             Db3.Internal.clearLastStack();
+            var wp = new WithProps();
+            var sub = wp.num;
+            var lastEntity = Db3.Internal.getLastEntity();
+            var lastPath = Db3.Internal.getLastMetaPath();
+            assert("right last entity on length=1").when(lastEntity).is(M.exactly(wp));
+            assert("right path length on length=1").when(lastPath).is(M.withLength(1));
+            assert("right path on length=1").when(lastPath[0]).is(M.objectMatching({
+                localName: 'num'
+            }));
+        });
+        it('should intercept longer metadata thru getters', function () {
+            Db3.Internal.clearLastStack();
+            var we = new WithSubentity();
             we.nested = new WithSubentity();
             var subsub = we.nested.sub;
             var lastEntity = Db3.Internal.getLastEntity();
@@ -531,6 +550,28 @@ describe('Db3 >', function () {
                 else if (times == 1) {
                     times++;
                     M.assert('Second data updated').when(wp1.str).is('String 2 updated');
+                    det.offMe();
+                    done();
+                }
+                else {
+                    M.assert("Got called too many times").when(times).is(M.lessThan(2));
+                }
+            });
+        });
+        it('should update data for observable', function (done) {
+            var wp1 = Db(WithProps).load('wp1');
+            var times = 0;
+            Db(wp1.num).updated(_this, function (det) {
+                if (times == 0) {
+                    times++;
+                    M.assert('First data loaded').when(wp1.num).is(200);
+                    M.assert('Rest of entity not loaded').when(wp1.str).is('useless');
+                    wp1Fb.update({ num: '2' });
+                }
+                else if (times == 1) {
+                    times++;
+                    M.assert('Second data updated').when(wp1.num).is(2);
+                    M.assert('Rest of entity not loaded').when(wp1.str).is('useless');
                     det.offMe();
                     done();
                 }
