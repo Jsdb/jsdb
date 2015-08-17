@@ -1,5 +1,5 @@
 /// <reference path="../../typings/tsd.d.ts" />
-var __extends = this.__extends || function (d, b) {
+var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -358,6 +358,7 @@ var Db;
                     }
                 }
                 else {
+                    // If the timestamp hasn't changed since last push, use the same random number, except incremented by 1.
                     for (i = 13; i >= 0 && IdGenerator.lastRandChars[i] === IdGenerator.BASE - 1; i--) {
                         IdGenerator.lastRandChars[i] = 0;
                     }
@@ -519,8 +520,7 @@ var Db;
             EventHandler.prototype.hook = function (event, fn) {
                 this._cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
-                this._ref.on(event, fn, function (err) {
-                }, this);
+                this._ref.on(event, fn, function (err) { }, this);
             };
             EventHandler.prototype.decomission = function (remove) {
                 // override off, must remove only this instance callbacks, Firebase does not
@@ -582,6 +582,7 @@ var Db;
             Event.prototype.dbInit = function (url, db) {
                 this.url = url;
                 this.db = db;
+                // At this point someone could already have registered some handler
                 for (var i = 0; i < this.handlers.length; i++) {
                     this.init(this.handlers[i]);
                 }
@@ -598,8 +599,7 @@ var Db;
                     this.init(h);
                 }
             };
-            Event.prototype.liveMarkerHandler = function () {
-            };
+            Event.prototype.liveMarkerHandler = function () { };
             Event.prototype.live = function (ctx) {
                 this.on(ctx, this.liveMarkerHandler);
             };
@@ -624,6 +624,16 @@ var Db;
             };
             Event.prototype.init = function (h) {
                 this.hrefIniter(h);
+                // TODO rewrite projections
+                /*
+                if (this.projVal) {
+                    var evd = new EventDetails<T>();
+                    evd.payload = this.projVal;
+                    evd.populating = true;
+                    evd.projected = true;
+                    h.handle(evd);
+                }
+                */
                 for (var i = 0; i < this.events.length; i++) {
                     this.setupEvent(h, this.events[i]);
                 }

@@ -1,5 +1,5 @@
 /// <reference path="../../typings/tsd.d.ts" />
-var __extends = this.__extends || function (d, b) {
+var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -307,10 +307,10 @@ describe('Db2 Tests', function () {
             num: 123
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
-        root.on('value', function () {
-        });
+        root.on('value', function () { });
         opCnter();
     });
+    // Ported
     it('should pre-init an entity', function () {
         var wp1 = defDb.withProps.load('wp1');
         M.assert("Inited entity").when(wp1).is(M.aTruthy);
@@ -318,6 +318,7 @@ describe('Db2 Tests', function () {
         M.assert("Same instance").when(wp2).is(M.exactly(wp1));
         M.assert("Has right url").when(wp1.load.getUrl()).is(baseUrl + 'withProps/wp1');
     });
+    // Ported
     it('should load data', function (done) {
         var wp1 = defDb.withProps.load('wp1');
         wp1.then(function (det) {
@@ -335,6 +336,7 @@ describe('Db2 Tests', function () {
             done();
         });
     });
+    // Ported
     it('should update data', function (done) {
         var wp1 = defDb.withProps.load('wp1');
         var times = 0;
@@ -355,11 +357,13 @@ describe('Db2 Tests', function () {
             }
         });
     });
+    // Ported - useless
     it('should pre-init sub entities', function () {
         var ws1 = defDb.withSubs.load('ws1');
         M.assert('Inited base entity').when(ws1).is(M.aTruthy);
         M.assert('Inited sub entity').when(ws1.sub).is(M.aTruthy);
     });
+    // Ported
     it('should load sub entities with the main one', function (done) {
         var ws1 = defDb.withSubs.load('ws1');
         ws1.then(function (det) {
@@ -368,6 +372,7 @@ describe('Db2 Tests', function () {
             done();
         });
     });
+    // Ported
     it('should load sub entities withOUT the main one', function (done) {
         var ws2 = defDb.withSubs.load('ws2');
         ws2.sub.then(function (det) {
@@ -376,6 +381,7 @@ describe('Db2 Tests', function () {
             done();
         });
     });
+    // Ported
     it('should load sub entites reference with the main one', function (done) {
         var wr1 = defDb.withRefs.load('wr1');
         wr1.then(function (det) {
@@ -384,6 +390,7 @@ describe('Db2 Tests', function () {
             done();
         });
     });
+    // Ported
     it('should load sub entites reference withOUT the main one', function (done) {
         var wr1 = defDb.withRefs.load('wr2');
         wr1.ref.then(function (det) {
@@ -403,6 +410,7 @@ describe('Db2 Tests', function () {
             done();
         });
     });
+    // Ported
     it('should load reference to other entities sub references', function (done) {
         var wr1 = defDb.withRefs.load('wr1');
         wr1.then(function (det) {
@@ -607,6 +615,7 @@ describe('Db2 Tests', function () {
     });
     */
     // Binding
+    // Ported
     it('should bind and keep live on subentity and parent', function (done) {
         var wpl1 = defDb.withPre.load('wpl1');
         wpl1.oth.then(function () {
@@ -622,6 +631,7 @@ describe('Db2 Tests', function () {
         });
     });
     // update live when a reference pointer is changed
+    // Ported
     it('should bind and keep live on reference pointer', function (done) {
         var wpl1 = defDb.withPre.load('wpl1');
         wpl1.oth.then(function () {
@@ -635,6 +645,7 @@ describe('Db2 Tests', function () {
             });
         });
     });
+    // Ported
     it('should bind and keep live on referenced entity', function (done) {
         var wpl1 = defDb.withPre.load('wpl1');
         wpl1.oth.then(function () {
@@ -662,6 +673,7 @@ describe('Db2 Tests', function () {
     // TODO query on collections
     // TODO read projections
     // Serialization, simple
+    // Ported
     it('should serialize basic entity correctly', function () {
         var wp = new WithProps();
         wp._local = 5;
@@ -677,6 +689,7 @@ describe('Db2 Tests', function () {
             subobj: { substr: 'cde' }
         }));
     });
+    // Ported
     it('should serialize correctly sub entities', function () {
         var ws = new WithSubentity();
         ws.str = 'abc';
@@ -689,6 +702,7 @@ describe('Db2 Tests', function () {
             sub: { str: 'cde' }
         }));
     });
+    // Ported
     it('should honour custom serialize', function () {
         var ss = new SubEntity();
         ss.str = 'cde';
@@ -700,6 +714,7 @@ describe('Db2 Tests', function () {
             mystr: 'aaa'
         }));
     });
+    // Useless
     it('should honour given fields in serialization', function () {
         var wp = new WithProps();
         wp.num = 1;
@@ -713,9 +728,11 @@ describe('Db2 Tests', function () {
         }));
     });
     // write data on existing entity
+    // Ported
     it('should update an entity', function (done) {
         var wp1 = defDb.withProps.load('wp1');
-        wp1.then(function () {
+        wp1
+            .then(function () {
             console.log("Saving");
             wp1.num = 1000;
             wp1.str = 'Updated';
@@ -723,7 +740,8 @@ describe('Db2 Tests', function () {
             wp1.subobj.substr = 'Sub updated';
             //return wp1.save();
             wp1.save();
-        }).then(function () {
+        })
+            .then(function () {
             console.log("Checking");
             wp1Fb.once('value', function (ds) {
                 M.assert('Updated correctly').when(ds.val()).is(M.objectMatching({
@@ -737,11 +755,13 @@ describe('Db2 Tests', function () {
         });
         ;
     });
+    // Ported
     it('should assign right url to a new entity mapped on root', function () {
         var wp = new WithProps();
         defDb.assignUrl(wp);
         M.assert("Assigned right url").when(wp.load.getUrl()).is(M.stringContaining(wpFb.toString()));
     });
+    // Ported
     it('should throw error an a new entity not mapped on root', function () {
         var wp = new SubEntity();
         var excp = null;
@@ -754,6 +774,7 @@ describe('Db2 Tests', function () {
         M.assert("Exception thrown").when(excp).is(M.aTruthy);
     });
     // write new entity
+    // Ported
     it('should save a new entity', function (done) {
         var wp = new WithProps();
         wp.str = 'abcd';
@@ -773,6 +794,7 @@ describe('Db2 Tests', function () {
             });
         });
     });
+    // Useless
     it('should trow exception if saving new entity not from db', function () {
         var wp = new WithProps();
         var excp = null;
@@ -785,6 +807,7 @@ describe('Db2 Tests', function () {
         M.assert("Exception thrown").when(excp).is(M.aTruthy);
     });
     // write entity in entity, as full object
+    // Ported
     it('should serialize correctly sub entities', function (done) {
         var ws = new WithSubentity();
         ws.str = 'abc';
@@ -802,6 +825,7 @@ describe('Db2 Tests', function () {
         });
     });
     // write reference
+    // Ported
     it('should write a reference correctly', function (done) {
         var wp1 = defDb.withProps.load('wp1');
         var url = wp1.load.getUrl();

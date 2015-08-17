@@ -1,5 +1,5 @@
 /// <reference path="../../typings/tsd.d.ts" />
-var __extends = this.__extends || function (d, b) {
+var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -199,8 +199,7 @@ describe('Db Tests', function () {
             }
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
-        root.on('value', function () {
-        });
+        root.on('value', function () { });
         u = defDb.load(baseUrl + '/users/u1');
         M.assert('User is not null').when(u).is(M.aTruthy);
         M.assert('User has right url').when(u.url).is(baseUrl + "/users/u1");
@@ -411,11 +410,13 @@ describe('Db Tests', function () {
     // TODO more testing on queries
     // TODO delocalized queries (queries that pertain to this object, but are on a different url, based on current ObjC data
     it('should read a promise', function (done) {
-        u.anagraphics.then(function (d) {
+        u.anagraphics
+            .then(function (d) {
             M.assert('valorized').when(d).is(M.aTruthy);
             M.assert('correct name').when(d.name).is('Simone');
             return "ciao";
-        }).then(function (s) {
+        })
+            .then(function (s) {
             M.assert('chained').when(s).is('ciao');
             done();
         });

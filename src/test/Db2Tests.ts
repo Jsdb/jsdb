@@ -296,6 +296,7 @@ describe('Db2 Tests', () => {
 		opCnter();
 	});
 
+	// Ported
 	it('should pre-init an entity',() => {
 		var wp1 = defDb.withProps.load('wp1');
 		M.assert("Inited entity").when(wp1).is(M.aTruthy);
@@ -305,6 +306,7 @@ describe('Db2 Tests', () => {
 		M.assert("Has right url").when(wp1.load.getUrl()).is(baseUrl + 'withProps/wp1');
 	});
 	
+	// Ported
 	it('should load data',(done) => {
 		var wp1 = defDb.withProps.load('wp1');
 		wp1.then((det) => {
@@ -323,6 +325,7 @@ describe('Db2 Tests', () => {
 		});
 	});
 	
+	// Ported
 	it('should update data',(done) => {
 		var wp1 = defDb.withProps.load('wp1');
 		var times = 0;
@@ -342,6 +345,7 @@ describe('Db2 Tests', () => {
 		});
 	});
 	
+	// Ported - useless
 	it('should pre-init sub entities',() => {
 		var ws1 = defDb.withSubs.load('ws1');
 		
@@ -349,6 +353,7 @@ describe('Db2 Tests', () => {
 		M.assert('Inited sub entity').when(ws1.sub).is(M.aTruthy);
 	});
 	
+	// Ported
 	it('should load sub entities with the main one',(done) => {
 		var ws1 = defDb.withSubs.load('ws1');
 		ws1.then((det) => {
@@ -358,6 +363,7 @@ describe('Db2 Tests', () => {
 		});
 	});
 
+	// Ported
 	it('should load sub entities withOUT the main one',(done) => {
 		var ws2 = defDb.withSubs.load('ws2');
 		ws2.sub.then((det) => {
@@ -367,6 +373,7 @@ describe('Db2 Tests', () => {
 		});
 	});
 	
+	// Ported
 	it('should load sub entites reference with the main one', (done) => {
 		var wr1 = defDb.withRefs.load('wr1');
 		
@@ -378,6 +385,7 @@ describe('Db2 Tests', () => {
 		
 	});
 
+	// Ported
 	it('should load sub entites reference withOUT the main one', (done) => {
 		var wr1 = defDb.withRefs.load('wr2');
 		
@@ -400,6 +408,7 @@ describe('Db2 Tests', () => {
 		
 	});
 	
+	// Ported
 	it('should load reference to other entities sub references', (done) => {
 		var wr1 = defDb.withRefs.load('wr1');
 		
@@ -633,6 +642,7 @@ describe('Db2 Tests', () => {
 	*/
 	
 	// Binding
+	// Ported
 	it('should bind and keep live on subentity and parent', (done) => {
 		var wpl1 = defDb.withPre.load('wpl1');
 		
@@ -650,6 +660,7 @@ describe('Db2 Tests', () => {
 	});
 
 	// update live when a reference pointer is changed
+	// Ported
 	it('should bind and keep live on reference pointer', (done) => {
 		var wpl1 = defDb.withPre.load('wpl1');
 		
@@ -666,6 +677,7 @@ describe('Db2 Tests', () => {
 
 	});
 		
+	// Ported
 	it('should bind and keep live on referenced entity', (done) => {
 		var wpl1 = defDb.withPre.load('wpl1');
 		
@@ -700,6 +712,7 @@ describe('Db2 Tests', () => {
 	// TODO read projections
 	
 	// Serialization, simple
+	// Ported
 	it('should serialize basic entity correctly', () => {
 		var wp = new WithProps();
 		wp._local = 5;
@@ -718,6 +731,7 @@ describe('Db2 Tests', () => {
 		
 	});
 	
+	// Ported
 	it('should serialize correctly sub entities', () => {
 		var ws = new WithSubentity();
 		ws.str = 'abc';
@@ -732,6 +746,7 @@ describe('Db2 Tests', () => {
 		}));
 	});
 	
+	// Ported
 	it('should honour custom serialize', () => {
 		var ss = new SubEntity();
 		ss.str = 'cde';
@@ -744,6 +759,7 @@ describe('Db2 Tests', () => {
 		}));
 	});
 	
+	// Useless
 	it('should honour given fields in serialization', () => {
 		var wp = new WithProps();
 		wp.num = 1;
@@ -759,6 +775,7 @@ describe('Db2 Tests', () => {
 	});
 	
 	// write data on existing entity
+	// Ported
 	it('should update an entity', (done) => {
 		var wp1 = defDb.withProps.load('wp1');
 		wp1
@@ -786,12 +803,14 @@ describe('Db2 Tests', () => {
 		;
 	});
 	
+	// Ported
 	it('should assign right url to a new entity mapped on root', () => {
 		var wp = new WithProps();
 		defDb.assignUrl(wp);
 		M.assert("Assigned right url").when(wp.load.getUrl()).is(M.stringContaining(wpFb.toString()));
 	});
 	
+	// Ported
 	it('should throw error an a new entity not mapped on root', () => {
 		var wp = new SubEntity();
 		var excp = null;
@@ -804,6 +823,7 @@ describe('Db2 Tests', () => {
 	});
 	
 	// write new entity
+	// Ported
 	it('should save a new entity',(done) => {
 		var wp = new WithProps();
 		wp.str = 'abcd';
@@ -825,6 +845,7 @@ describe('Db2 Tests', () => {
 		});
 	});
 	
+	// Useless
 	it('should trow exception if saving new entity not from db', () => {
 		var wp = new WithProps();
 		var excp = null;
@@ -837,6 +858,7 @@ describe('Db2 Tests', () => {
 	});
 	
 	// write entity in entity, as full object
+	// Ported
 	it('should serialize correctly sub entities', (done) => {
 		var ws = new WithSubentity();
 		ws.str = 'abc';
@@ -856,6 +878,7 @@ describe('Db2 Tests', () => {
 	});
 
 	// write reference
+	// Ported
 	it('should write a reference correctly', (done) => {
 		var wp1 = defDb.withProps.load('wp1');
 		var url = wp1.load.getUrl();
