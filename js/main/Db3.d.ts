@@ -303,6 +303,7 @@ declare module Db {
     module Utils {
         function findName(f: Function): string;
         function findHierarchy(o: Entity | EntityType<any>): EntityType<any>[];
+        function isInlineObject(o: any): boolean;
         function isEmpty(obj: any): boolean;
         class IdGenerator {
             static PUSH_CHARS: string;

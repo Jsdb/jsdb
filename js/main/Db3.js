@@ -1143,6 +1143,10 @@ var Db;
             return ret;
         }
         Utils.findHierarchy = findHierarchy;
+        function isInlineObject(o) {
+            return typeof o === 'object' && o.constructor === Object;
+        }
+        Utils.isInlineObject = isInlineObject;
         var hasOwnProperty = Object.prototype.hasOwnProperty;
         function isEmpty(obj) {
             // null and undefined are "empty"

@@ -1276,6 +1276,10 @@ module Db {
 			return ret;
 		}
 		
+		export function isInlineObject(o :any) {
+			return typeof o === 'object' && o.constructor === Object;
+		}
+		
 		var hasOwnProperty = Object.prototype.hasOwnProperty;
 
 		export function isEmpty(obj) {
