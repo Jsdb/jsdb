@@ -42,9 +42,18 @@ class SubEntity {
 
 class SubEntityOth extends SubEntity {
 	otherData = 1;
+	
+	@Db3.embedded(SubEntity)
+	testOther :SubEntity;
+	
 	getSomething() {
 		return "something else";
 	}
+}
+
+class SubEntityYet extends SubEntityOth {
+	@Db3.embedded(SubEntity)
+	testYetOther :SubEntity;
 }
 
 class SubEntityDiscriminator implements Db3.Discriminator {
@@ -370,6 +379,16 @@ describe('Db3 >', () => {
 				remoteName: M.aFalsey,
 				ctor: M.aTruthy,
 				discr: M.instanceOf(SubEntityDiscriminator)
+			}));
+		});
+		
+		it('should deal with subclasses inheriting super classes properties',()=> {
+			var allmeta = Db3.Internal.getAllMetadata();
+			var clmeta = allmeta.findMeta(SubEntityYet);
+
+			assert('it has all the properties').when(clmeta.descriptors).is(M.objectMatching({
+				testOther : M.aTruthy,
+				testYetOther: M.aTruthy
 			}));
 		});
 		

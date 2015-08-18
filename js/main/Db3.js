@@ -987,6 +987,15 @@ var Db;
             ClassMetadata.prototype.rightInstance = function (entity) {
                 return entity && entity instanceof this.ctor;
             };
+            ClassMetadata.prototype.mergeSuper = function (sup) {
+                if (!this.root)
+                    this.root = sup.root;
+                for (var k in sup.descriptors) {
+                    if (this.descriptors[k])
+                        continue;
+                    this.descriptors[k] = sup.descriptors[k];
+                }
+            };
             return ClassMetadata;
         })(MetaDescriptor);
         Internal.ClassMetadata = ClassMetadata;
@@ -1003,11 +1012,12 @@ var Db;
             EmbeddedMetaDescriptor.prototype.createEvent = function (allMetadata) {
                 var ret = new EntityEvent();
                 ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
                 ret.classMeta = allMetadata.findMeta(this.ctor);
                 ret.nameOnParent = this.localName;
                 ret.binding = this.binding;
                 ret.discriminator = this.discr;
-                // TODO maybe we should assert here that there is a metadata for this type
                 return ret;
             };
             EmbeddedMetaDescriptor.prototype.setBinding = function (binding) {
@@ -1028,9 +1038,10 @@ var Db;
             ReferenceMetaDescriptor.prototype.createEvent = function (allMetadata) {
                 var ret = new ReferenceEvent();
                 ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
                 ret.classMeta = allMetadata.findMeta(this.ctor);
                 ret.nameOnParent = this.localName;
-                // TODO maybe we should assert here that there is a metadata for this type
                 return ret;
             };
             return ReferenceMetaDescriptor;
@@ -1070,6 +1081,11 @@ var Db;
                 var md = new Internal.ClassMetadata();
                 md.ctor = ctor;
                 // TODO parse here the manual static metadata
+                var hierarchy = Utils.findHierarchy(ctor);
+                for (var i = 0; i < hierarchy.length; i++) {
+                    var supmeta = this.findMeta(hierarchy[i]);
+                    md.mergeSuper(supmeta);
+                }
                 this.classes.push(md);
                 return md;
             };
@@ -1105,6 +1121,28 @@ var Db;
             return (results && results.length > 1) ? results[1] : null;
         }
         Utils.findName = findName;
+        function findHierarchy(o) {
+            var firstCtor = o;
+            var acproto = o.prototype;
+            if (!acproto) {
+                acproto = Object.getPrototypeOf(o);
+                firstCtor = o.constructor;
+            }
+            if (!acproto)
+                throw new Error("Cannot reconstruct hierarchy following prototype chain of " + o);
+            var ret = [];
+            while (acproto) {
+                var acctor = acproto.constructor;
+                if (acctor === Object)
+                    break;
+                acproto = Object.getPrototypeOf(acproto);
+                if (acctor === firstCtor)
+                    continue;
+                ret.push(acctor);
+            }
+            return ret;
+        }
+        Utils.findHierarchy = findHierarchy;
         var hasOwnProperty = Object.prototype.hasOwnProperty;
         function isEmpty(obj) {
             // null and undefined are "empty"

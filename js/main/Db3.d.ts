@@ -276,6 +276,7 @@ declare module Db {
             getName(): string;
             createInstance(): Entity;
             rightInstance(entity: Entity): boolean;
+            mergeSuper(sup: ClassMetadata): void;
         }
         class EmbeddedMetaDescriptor extends MetaDescriptor {
             binding: IBinding;
@@ -301,6 +302,7 @@ declare module Db {
     }
     module Utils {
         function findName(f: Function): string;
+        function findHierarchy(o: Entity | EntityType<any>): EntityType<any>[];
         function isEmpty(obj: any): boolean;
         class IdGenerator {
             static PUSH_CHARS: string;

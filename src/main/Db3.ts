@@ -1136,6 +1136,14 @@ module Db {
 			rightInstance(entity :Entity) :boolean {
 				return entity && entity instanceof this.ctor;
 			}
+			
+			mergeSuper(sup :ClassMetadata) {
+				if (!this.root) this.root = sup.root;
+				for (var k in sup.descriptors) {
+					if (this.descriptors[k]) continue;
+					this.descriptors[k] = sup.descriptors[k];
+				}
+			}
 		}
 		
 
@@ -1151,11 +1159,12 @@ module Db {
 			createEvent(allMetadata :Metadata) :GenericEvent {
 				var ret = new EntityEvent();
 				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
 				ret.classMeta = allMetadata.findMeta(this.ctor);
 				ret.nameOnParent = this.localName;
 				ret.binding = <BindingImpl>this.binding;
 				ret.discriminator = this.discr;
-				// TODO maybe we should assert here that there is a metadata for this type
 				return ret;
 			}
 			
@@ -1173,9 +1182,10 @@ module Db {
 			createEvent(allMetadata :Metadata) :GenericEvent {
 				var ret = new ReferenceEvent();
 				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
 				ret.classMeta = allMetadata.findMeta(this.ctor);
 				ret.nameOnParent = this.localName;
-				// TODO maybe we should assert here that there is a metadata for this type
 				return ret;
 			}
 			
@@ -1209,6 +1219,11 @@ module Db {
 				var md = new Internal.ClassMetadata();
 				md.ctor = ctor;
 				// TODO parse here the manual static metadata
+				var hierarchy = Utils.findHierarchy(ctor);
+				for (var i = 0; i < hierarchy.length; i++) {
+					var supmeta = this.findMeta(hierarchy[i]);
+					md.mergeSuper(supmeta);
+				}
 				this.classes.push(md);
 				return md;
 			}
@@ -1240,6 +1255,25 @@ module Db {
 			var funcNameRegex = /function (.{1,})\(/;
 			var results  = (funcNameRegex).exec(f["constructor"].toString());
 			return (results && results.length > 1) ? results[1] : null;
+		}
+		
+		export function findHierarchy(o :Entity|EntityType<any>) : EntityType<any>[] {
+			var firstCtor = o;
+			var acproto = (<EntityType<any>>o).prototype;
+			if (!acproto) {
+				acproto = Object.getPrototypeOf(o);
+				firstCtor = o.constructor;
+			}
+			if (!acproto) throw new Error("Cannot reconstruct hierarchy following prototype chain of " + o);
+			var ret :EntityType<any>[] = [];
+			while (acproto) {
+				var acctor = acproto.constructor; 
+				if (acctor === Object) break;
+				acproto = Object.getPrototypeOf(acproto);
+				if (acctor === firstCtor) continue;
+				ret.push(acctor);
+			}
+			return ret;
 		}
 		
 		var hasOwnProperty = Object.prototype.hasOwnProperty;

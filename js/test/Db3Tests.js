@@ -67,8 +67,21 @@ var SubEntityOth = (function (_super) {
     SubEntityOth.prototype.getSomething = function () {
         return "something else";
     };
+    __decorate([
+        Db3.embedded(SubEntity)
+    ], SubEntityOth.prototype, "testOther");
     return SubEntityOth;
 })(SubEntity);
+var SubEntityYet = (function (_super) {
+    __extends(SubEntityYet, _super);
+    function SubEntityYet() {
+        _super.apply(this, arguments);
+    }
+    __decorate([
+        Db3.embedded(SubEntity)
+    ], SubEntityYet.prototype, "testYetOther");
+    return SubEntityYet;
+})(SubEntityOth);
 var SubEntityDiscriminator = (function () {
     function SubEntityDiscriminator() {
     }
@@ -391,6 +404,14 @@ describe('Db3 >', function () {
                 remoteName: M.aFalsey,
                 ctor: M.aTruthy,
                 discr: M.instanceOf(SubEntityDiscriminator)
+            }));
+        });
+        it('should deal with subclasses inheriting super classes properties', function () {
+            var allmeta = Db3.Internal.getAllMetadata();
+            var clmeta = allmeta.findMeta(SubEntityYet);
+            assert('it has all the properties').when(clmeta.descriptors).is(M.objectMatching({
+                testOther: M.aTruthy,
+                testYetOther: M.aTruthy
             }));
         });
         it('should intercept simple metadata thru getters', function () {
