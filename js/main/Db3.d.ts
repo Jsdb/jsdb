@@ -12,10 +12,6 @@ declare module Db {
     interface EntityType<T extends Entity> {
         new (): T;
     }
-    interface Discriminator {
-        discriminate(val: any): EntityType<any>;
-        decorate(entity: Entity, val: any): any;
-    }
     module Internal {
         function createDb(conf: any): IDb3Static;
         type nativeArrObj = number | string | boolean | {
@@ -115,12 +111,15 @@ declare module Db {
             state: DbState;
             parent: GenericEvent;
             private children;
-            classMeta: ClassMetadata;
+            private _classMeta;
+            private _originalClassMeta;
             /**
              * Array of current handlers.
              */
             protected handlers: EventHandler[];
             setEntity(entity: Entity): void;
+            classMeta: ClassMetadata;
+            originalClassMeta: ClassMetadata;
             getUrl(evenIfIncomplete?: boolean): any;
             urlInited(): void;
             on(handler: EventHandler): void;
@@ -163,7 +162,6 @@ declare module Db {
             nameOnParent: string;
             binding: BindingImpl;
             bindingPromise: Promise<BindingState>;
-            discriminator: Discriminator;
             progDiscriminator: number;
             setEntity(entity: Entity): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
@@ -257,12 +255,10 @@ declare module Db {
             localName: string;
             remoteName: string;
             ctor: EntityType<any>;
-            discr: Discriminator;
             classMeta: ClassMetadata;
             getTreeChange(md: Metadata): ClassMetadata;
             getRemoteName(): string;
             setType(def: any): void;
-            getCtorFor(val: any): EntityType<any>;
             named(name: string): MetaDescriptor;
             setLocalName(name: string): void;
             createEvent(allMetadata: Metadata): GenericEvent;
@@ -272,11 +268,16 @@ declare module Db {
                 [index: string]: MetaDescriptor;
             };
             root: string;
+            discriminator: string;
+            superMeta: ClassMetadata;
+            subMeta: ClassMetadata[];
             add(descr: MetaDescriptor): void;
             getName(): string;
             createInstance(): Entity;
             rightInstance(entity: Entity): boolean;
             mergeSuper(sup: ClassMetadata): void;
+            addSubclass(sub: ClassMetadata): void;
+            findForDiscriminator(disc: string): ClassMetadata;
         }
         class EmbeddedMetaDescriptor extends MetaDescriptor {
             binding: IBinding;
@@ -314,15 +315,16 @@ declare module Db {
         }
     }
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
-    function embedded(def: EntityType<any> | Discriminator, binding?: Internal.IBinding): PropertyDecorator;
-    function reference(def: EntityType<any> | Discriminator, binding?: Internal.IBinding): PropertyDecorator;
+    function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
+    function reference(def: EntityType<any>): PropertyDecorator;
     function root(name: string): ClassDecorator;
+    function discriminator(disc: string): ClassDecorator;
     function observable(): PropertyDecorator;
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: any): Db.Internal.ReferenceMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
-        function root(ctor: EntityType<any>, name: string): void;
+        function define(ctor: EntityType<any>, root: string, discriminator: string): void;
     }
 }
 export = Db;

@@ -243,7 +243,8 @@ var Db;
         var GenericEvent = (function () {
             function GenericEvent() {
                 this.children = {};
-                this.classMeta = null;
+                this._classMeta = null;
+                this._originalClassMeta = null;
                 /**
                  * Array of current handlers.
                  */
@@ -256,7 +257,28 @@ var Db;
                     if (!dbacc.__dbevent)
                         dbacc.__dbevent = this;
                 }
+                // TODO clean the children if entity changed? they could be pointing to old instance data
             };
+            Object.defineProperty(GenericEvent.prototype, "classMeta", {
+                get: function () {
+                    return this._classMeta;
+                },
+                set: function (meta) {
+                    if (!this._originalClassMeta)
+                        this._originalClassMeta = meta;
+                    this._classMeta = meta;
+                    // TODO clean the children that are not actual anymore now that the type changed?
+                },
+                enumerable: true,
+                configurable: true
+            });
+            Object.defineProperty(GenericEvent.prototype, "originalClassMeta", {
+                get: function () {
+                    return this._originalClassMeta;
+                },
+                enumerable: true,
+                configurable: true
+            });
             GenericEvent.prototype.getUrl = function (evenIfIncomplete) {
                 if (evenIfIncomplete === void 0) { evenIfIncomplete = false; }
                 if (!this.parent) {
@@ -416,7 +438,6 @@ var Db;
                 this.nameOnParent = null;
                 this.binding = null;
                 this.bindingPromise = null;
-                this.discriminator = null;
                 this.progDiscriminator = 1;
             }
             EntityEvent.prototype.setEntity = function (entity) {
@@ -465,12 +486,16 @@ var Db;
             EntityEvent.prototype.parseValue = function (ds) {
                 var val = ds.val();
                 if (val) {
-                    if (this.discriminator) {
-                        var ctor = this.discriminator.discriminate(val);
-                        if (!ctor)
-                            throw new Error("The discriminator cannot find an entity type for value " + JSON.stringify(val));
-                        this.classMeta = this.state.myMeta.findMeta(ctor);
+                    if (val['_dis']) {
+                        var cm = this.originalClassMeta.findForDiscriminator(val['_dis']);
+                        if (!cm)
+                            throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
+                        this.classMeta = cm;
                     }
+                    else {
+                        this.classMeta = this.originalClassMeta;
+                    }
+                    // TODO disciminator : change here then this.classMeta
                     if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
                         this.setEntity(this.classMeta.createInstance());
                     }
@@ -547,8 +572,9 @@ var Db;
                         ret[k] = val;
                     }
                 }
-                if (this.discriminator)
-                    this.discriminator.decorate(this.entity, ret);
+                if (this.classMeta.discriminator != null) {
+                    ret['_dis'] = this.classMeta.discriminator;
+                }
                 return ret;
             };
             EntityEvent.prototype.assignUrl = function () {
@@ -870,6 +896,25 @@ var Db;
                 var event = this.loadEvent(url, meta);
                 if (event instanceof EntityEvent) {
                     if (!event.entity) {
+                        // Find right meta if url has a discriminator
+                        var dis = null;
+                        var segs = url.split('/');
+                        var lastseg = segs.pop();
+                        if (!lastseg)
+                            lastseg = segs.pop();
+                        var colonpos = lastseg.indexOf('*');
+                        if (colonpos == 0) {
+                            dis = lastseg.substring(1);
+                        }
+                        else if (colonpos > 0) {
+                            dis = lastseg.substring(0, colonpos);
+                        }
+                        if (dis) {
+                            var nmeta = meta.findForDiscriminator(dis);
+                            // TODO issue a warning maybe?
+                            if (nmeta)
+                                meta = nmeta;
+                        }
                         var inst = new meta.ctor();
                         if (inst.dbInit) {
                             inst.dbInit(url, this.db);
@@ -916,7 +961,6 @@ var Db;
                 this.localName = null;
                 this.remoteName = null;
                 this.ctor = null;
-                this.discr = null;
                 this.classMeta = null;
             }
             MetaDescriptor.prototype.getTreeChange = function (md) {
@@ -928,26 +972,7 @@ var Db;
                 return this.localName;
             };
             MetaDescriptor.prototype.setType = function (def) {
-                if (def['discriminate']) {
-                    this.discr = def;
-                    this.ctor = this.discr.discriminate({});
-                }
-                else {
-                    var ti = new def();
-                    if (ti['discriminate']) {
-                        this.discr = ti;
-                        this.ctor = this.discr.discriminate({});
-                    }
-                    else {
-                        this.ctor = def;
-                    }
-                }
-            };
-            MetaDescriptor.prototype.getCtorFor = function (val) {
-                if (this.discr) {
-                    return this.discr.discriminate(val);
-                }
-                return this.ctor;
+                this.ctor = def;
             };
             MetaDescriptor.prototype.named = function (name) {
                 this.remoteName = name;
@@ -973,6 +998,10 @@ var Db;
             function ClassMetadata() {
                 _super.apply(this, arguments);
                 this.descriptors = {};
+                this.root = null;
+                this.discriminator = null;
+                this.superMeta = null;
+                this.subMeta = [];
             }
             ClassMetadata.prototype.add = function (descr) {
                 descr.classMeta = this;
@@ -990,11 +1019,28 @@ var Db;
             ClassMetadata.prototype.mergeSuper = function (sup) {
                 if (!this.root)
                     this.root = sup.root;
+                if (!this.superMeta) {
+                    this.superMeta = sup;
+                    sup.addSubclass(this);
+                }
                 for (var k in sup.descriptors) {
                     if (this.descriptors[k])
                         continue;
                     this.descriptors[k] = sup.descriptors[k];
                 }
+            };
+            ClassMetadata.prototype.addSubclass = function (sub) {
+                this.subMeta.push(sub);
+            };
+            ClassMetadata.prototype.findForDiscriminator = function (disc) {
+                if (this.discriminator == disc)
+                    return this;
+                for (var i = 0; i < this.subMeta.length; i++) {
+                    var ret = this.subMeta[i].findForDiscriminator(disc);
+                    if (ret)
+                        return ret;
+                }
+                return null;
             };
             return ClassMetadata;
         })(MetaDescriptor);
@@ -1017,7 +1063,6 @@ var Db;
                 ret.classMeta = allMetadata.findMeta(this.ctor);
                 ret.nameOnParent = this.localName;
                 ret.binding = this.binding;
-                ret.discriminator = this.discr;
                 return ret;
             };
             EmbeddedMetaDescriptor.prototype.setBinding = function (binding) {
@@ -1234,7 +1279,7 @@ var Db;
         };
     }
     Db.embedded = embedded;
-    function reference(def, binding) {
+    function reference(def) {
         return function (target, propertyKey) {
             var ret = meta.reference(def);
             addDescriptor(target, propertyKey, ret);
@@ -1244,10 +1289,16 @@ var Db;
     Db.reference = reference;
     function root(name) {
         return function (target) {
-            meta.root(target, name);
+            meta.define(target, name, null);
         };
     }
     Db.root = root;
+    function discriminator(disc) {
+        return function (target) {
+            meta.define(target, null, disc);
+        };
+    }
+    Db.discriminator = discriminator;
     function observable() {
         return function (target, propertyKey) {
             var ret = meta.observable();
@@ -1297,29 +1348,35 @@ var Db;
         });
     }
     var meta;
-    (function (meta) {
+    (function (meta_1) {
         function embedded(def, binding) {
             var ret = new Db.Internal.EmbeddedMetaDescriptor();
             ret.setType(def);
             ret.setBinding(binding);
             return ret;
         }
-        meta.embedded = embedded;
+        meta_1.embedded = embedded;
         function reference(def) {
             var ret = new Db.Internal.ReferenceMetaDescriptor();
             ret.setType(def);
             return ret;
         }
-        meta.reference = reference;
+        meta_1.reference = reference;
         function observable() {
             var ret = new Db.Internal.ObservableMetaDescriptor();
             return ret;
         }
-        meta.observable = observable;
-        function root(ctor, name) {
-            allMetadata.findMeta(ctor).root = name;
+        meta_1.observable = observable;
+        function define(ctor, root, discriminator) {
+            var meta = allMetadata.findMeta(ctor);
+            if (root) {
+                meta.root = root;
+            }
+            if (discriminator) {
+                meta.discriminator = discriminator;
+            }
         }
-        meta.root = root;
+        meta_1.define = define;
     })(meta = Db.meta || (Db.meta = {}));
 })(Db || (Db = {}));
 module.exports = Db;

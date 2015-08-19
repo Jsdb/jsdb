@@ -33,6 +33,11 @@ class ServerWithProps extends WithProps {
 	serverStuff :string;
 }
 
+@Db3.discriminator('more')
+class WithMoreProps extends WithProps {
+	moreNum = 1;
+}
+
 class SubEntity {
 	str :string;
 	getSomething() {
@@ -40,6 +45,7 @@ class SubEntity {
 	}
 }
 
+@Db3.discriminator('oth')
 class SubEntityOth extends SubEntity {
 	otherData = 1;
 	
@@ -51,22 +57,10 @@ class SubEntityOth extends SubEntity {
 	}
 }
 
+@Db3.discriminator('yet')
 class SubEntityYet extends SubEntityOth {
 	@Db3.embedded(SubEntity)
 	testYetOther :SubEntity;
-}
-
-class SubEntityDiscriminator implements Db3.Discriminator {
-	discriminate(val :any) :Db3.EntityType<any> {
-		if (val.type == 'oth') return SubEntityOth;
-		return SubEntity;
-	}
-	decorate(entity :Db3.Entity, val :any) {
-		delete val.type
-		if (entity instanceof SubEntityOth) {
-			val.type = 'oth';
-		}
-	}
 }
 
 class ServerSubEntity extends SubEntity {
@@ -74,7 +68,7 @@ class ServerSubEntity extends SubEntity {
 }
 
 
-class OthSubEntity {
+class DifferentSubEntity {
 	_sub :SubEntity;
 	_ref :WithProps;
 	_parent :any;
@@ -83,7 +77,7 @@ class OthSubEntity {
 
 @Db3.root('withSubs')
 class WithSubentity {
-	@Db3.embedded(SubEntityDiscriminator)
+	@Db3.embedded(SubEntity)
 	sub :SubEntity; 
 	
 	@Db3.embedded(WithSubentity)
@@ -115,8 +109,8 @@ class ServerWithRef extends WithRef {
 
 @Db3.root('withPre')
 class WithPreloads {
-	@Db3.embedded(OthSubEntity,Db3.bind('sub','_sub',true).bind('ref','_ref',true).bind('this','_parent',false))
-	oth :OthSubEntity;
+	@Db3.embedded(DifferentSubEntity,Db3.bind('sub','_sub',true).bind('ref','_ref',true).bind('this','_parent',false))
+	oth :DifferentSubEntity;
 	
 	@Db3.embedded(SubEntity)
 	sub :SubEntity;
@@ -156,6 +150,7 @@ describe('Db3 >', () => {
 	var wpFb :Firebase;
 	var wp1Fb :Firebase;
 	var wp2Fb :Firebase;
+	var wp3Fb :Firebase;
 	
 	var wsFb :Firebase;
 	var ws1Fb :Firebase;
@@ -166,6 +161,7 @@ describe('Db3 >', () => {
 	var wrFb :Firebase;
 	var wr1Fb :Firebase;
 	var wr2Fb :Firebase;
+	var wr3Fb :Firebase;
 	
 	var wcFb :Firebase;
 	var wc1Fb :Firebase;
@@ -227,6 +223,19 @@ describe('Db3 >', () => {
 			}
 		}, opCnter);
 		
+		wp3Fb = wpFb.child('more*wp3');
+		opcnt++;
+		wp3Fb.set({
+			str: 'String 3',
+			num: 400,
+			moreNum: 401,
+			arr: [3,4,5],
+			subobj: {
+				substr: 'Sub String'
+			},
+			_dis:'more'
+		}, opCnter);
+		
 		wsFb = new Firebase(baseUrl + '/withSubs');
 		ws1Fb = wsFb.child('ws1');
 		opcnt++;
@@ -260,7 +269,7 @@ describe('Db3 >', () => {
 				str: 'Sub String 3',
 				sub: {
 					str: 'Sub Sub String 3',
-					type: 'oth'
+					_dis: 'oth'
 				}
 			}
 		}, opCnter);
@@ -291,6 +300,18 @@ describe('Db3 >', () => {
 			str: 'String 1',
 			ref: {
 				_ref: wp1Fb.toString() + '/'
+			}
+		}, opCnter);
+
+		wr3Fb = wrFb.child('wr3');
+		opcnt++;
+		wr3Fb.set({
+			str: 'String 3',
+			ref: {
+				_ref: wp3Fb.toString() + '/'
+			},
+			othSubRef : {
+				_ref: ws3Fb.toString() + '/nested/sub/*oth'
 			}
 		}, opCnter);
 		
@@ -377,19 +398,39 @@ describe('Db3 >', () => {
 			assert('the meta is right').when(wpmeta).is(M.objectMatching({
 				localName: 'sub',
 				remoteName: M.aFalsey,
-				ctor: M.aTruthy,
-				discr: M.instanceOf(SubEntityDiscriminator)
+				ctor: M.aTruthy
 			}));
 		});
 		
-		it('should deal with subclasses inheriting super classes properties',()=> {
+		it('should deal with super/subclasses and discriminators',()=> {
 			var allmeta = Db3.Internal.getAllMetadata();
-			var clmeta = allmeta.findMeta(SubEntityYet);
+			var submeta = allmeta.findMeta(SubEntity);
+			var othmeta = allmeta.findMeta(SubEntityOth);
+			var yetmeta = allmeta.findMeta(SubEntityYet);
 
-			assert('it has all the properties').when(clmeta.descriptors).is(M.objectMatching({
+			assert('second one has its the properties').when(yetmeta.descriptors).is(M.objectMatching({
+				testOther : M.aTruthy
+			}));
+			
+			assert('last one has all the properties').when(yetmeta.descriptors).is(M.objectMatching({
 				testOther : M.aTruthy,
 				testYetOther: M.aTruthy
 			}));
+			
+			assert('first one has correct subclass').when(submeta.subMeta).is(M.arrayEquals([othmeta]));
+			assert('second one has correct subclass').when(othmeta.subMeta).is(M.arrayEquals([yetmeta]));
+			assert('second one has correct superclass').when(othmeta.superMeta).is(M.exactly(submeta));
+			assert('third one has correct superclass').when(yetmeta.superMeta).is(M.exactly(othmeta));
+			
+			assert('second one has discriminator value').when(othmeta.discriminator).is('oth');
+			assert('third one has discriminator value').when(yetmeta.discriminator).is('yet');
+			
+			assert('find correct discriminated meta for oth').when(submeta.findForDiscriminator('oth')).is(othmeta);
+			assert('find correct discriminated meta for yet').when(submeta.findForDiscriminator('yet')).is(yetmeta);
+			
+			assert('find correctly itself for oth').when(othmeta.findForDiscriminator('oth')).is(othmeta);
+			
+			assert('correctly dont find on super for oth').when(yetmeta.findForDiscriminator('oth')).is(null);
 		});
 		
 		it('should intercept simple metadata thru getters', () => {
@@ -563,6 +604,11 @@ describe('Db3 >', () => {
 			}, 10);
 		});
 		
+		it('should load polimorphic on rooted',() => {
+			var wp3 = Db(WithProps).load('more*wp3');
+			assert('it\'s right entity type').when(wp3).is(M.instanceOf(WithMoreProps));
+		});
+		
 		it('should update data',(done) => {
 			var wp1 = Db(WithProps).load('wp1');
 			var times = 0;
@@ -666,6 +712,19 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			it('should dereference a polimorphic reference to root', () => {
+				var wr1 = Db(WithRef).load('wr3');
+				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
+				return refevent.dereference(this).then((det) => {
+					M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
+					M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithMoreProps));
+					M.assert("Right event").when(refevent).is(M.objectMatching({
+						nameOnParent: 'ref',
+					}));
+					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/more*wp3/');
+				});
+			});
+			
 			it('should notify of referencing', (done) => {
 				var wr1 = Db(WithRef).load('wr1');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
@@ -728,6 +787,15 @@ describe('Db3 >', () => {
 					M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
 					M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntity));
 					M.assert("Resolved the ref").when(wr1.othSubRef.str).is("Sub String 1");
+				});
+			});
+			
+			it('should load polimorphic reference to other entities sub references', () => {
+				var wr1 = Db(WithRef).load('wr3');
+				
+				return Db(wr1.othSubRef).load(this).then((det) => {
+					M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
+					M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntityOth));
 				});
 			});
 		});
@@ -846,7 +914,7 @@ describe('Db3 >', () => {
 					str:'abc',
 					sub:{
 						str:'cde',
-						type: 'oth'
+						_dis: 'oth'
 					}
 				}));
 			});
@@ -875,6 +943,10 @@ describe('Db3 >', () => {
 					}
 				}));
 			});
+			
+			it('should serialize correctly polimorphic references', () => {
+				throw 'todo';
+			});
 		});
 		
 		describe('Saving new >', ()=> {
@@ -883,6 +955,10 @@ describe('Db3 >', () => {
 				var wp = new WithProps();
 				Db(wp).assignUrl();
 				M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+			});
+			
+			it('should assign right url to a new polimorphic entity mapped on root', () => {
+				throw 'todo';
 			});
 			
 			it('should throw error an a new entity not mapped on root', () => {
@@ -1063,7 +1139,7 @@ describe('Db3 >', () => {
 						sub: {
 							str: 'new sub',
 							otherData:1,
-							type: 'oth'
+							_dis: 'oth'
 						},
 					}));
 				});

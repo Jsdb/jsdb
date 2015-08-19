@@ -34,11 +34,6 @@ module Db {
 		 new(): T;
 	}
 
-	export interface Discriminator {
-		discriminate(val :any):EntityType<any>;
-		decorate(entity :Entity, val :any);
-	}
-	
 	export module Internal {
 		
 		export function createDb(conf:any) :IDb3Static {
@@ -344,7 +339,8 @@ module Db {
 			state :DbState;
 			parent :GenericEvent;
 			private children :{[index:string]:GenericEvent} = {};
-			classMeta :ClassMetadata = null;
+			private _classMeta :ClassMetadata = null;
+			private _originalClassMeta :ClassMetadata = null;
 
 			/**
 			 * Array of current handlers.
@@ -357,6 +353,21 @@ module Db {
 					var dbacc = <IDb3Annotated>this.entity;
 					if (!dbacc.__dbevent) dbacc.__dbevent = this;
 				}
+				// TODO clean the children if entity changed? they could be pointing to old instance data
+			}
+			
+			set classMeta(meta :ClassMetadata) {
+				if (!this._originalClassMeta) this._originalClassMeta = meta;
+				this._classMeta = meta;
+				// TODO clean the children that are not actual anymore now that the type changed?
+			}
+			
+			get classMeta() :ClassMetadata {
+				return this._classMeta;
+			}
+			
+			get originalClassMeta() :ClassMetadata {
+				return this._originalClassMeta;
 			}
 			
 			getUrl(evenIfIncomplete = false) {
@@ -537,7 +548,6 @@ module Db {
 			nameOnParent :string = null;
 			binding :BindingImpl = null;
 			bindingPromise :Promise<BindingState> = null;
-			discriminator :Discriminator = null;
 			
 			progDiscriminator = 1;
 			
@@ -592,11 +602,14 @@ module Db {
 			parseValue(ds :FirebaseDataSnapshot) {
 				var val = ds.val();
 				if (val) {
-					if (this.discriminator) {
-						var ctor = this.discriminator.discriminate(val);
-						if (!ctor) throw new Error("The discriminator cannot find an entity type for value " + JSON.stringify(val));
-						this.classMeta = this.state.myMeta.findMeta(ctor); 
+					if (val['_dis']) {
+						var cm = this.originalClassMeta.findForDiscriminator(val['_dis']);
+						if (!cm) throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
+						this.classMeta = cm;
+					} else {
+						this.classMeta = this.originalClassMeta;
 					}
+					// TODO disciminator : change here then this.classMeta
 					if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
 						this.setEntity(this.classMeta.createInstance());
 					}
@@ -673,7 +686,9 @@ module Db {
 						ret[k] = val;
 					}
 				}
-				if (this.discriminator) this.discriminator.decorate(this.entity, ret);
+				if (this.classMeta.discriminator != null) {
+					ret['_dis'] = this.classMeta.discriminator;
+				}
 				return ret;
 			}
 			
@@ -1016,6 +1031,22 @@ module Db {
 				var event = this.loadEvent(url, meta);
 				if (event instanceof EntityEvent) {
 					if (!event.entity) {
+						// Find right meta if url has a discriminator
+						var dis = null;
+						var segs = url.split('/');
+						var lastseg = segs.pop();
+						if (!lastseg) lastseg = segs.pop();
+						var colonpos = lastseg.indexOf('*');
+						if (colonpos == 0) {
+							dis = lastseg.substring(1);
+						} else if (colonpos > 0) {
+							dis = lastseg.substring(0,colonpos);
+						}
+						if (dis) {
+							var nmeta = meta.findForDiscriminator(dis);
+							// TODO issue a warning maybe?
+							if (nmeta) meta = nmeta;
+						}
 						var inst = <any>new meta.ctor();
 						if (inst.dbInit) {
 							(<IDb3Initable>inst).dbInit(url, this.db);
@@ -1062,7 +1093,6 @@ module Db {
 			localName :string = null;
 			remoteName :string = null;
 			ctor :EntityType<any> = null;
-			discr :Discriminator = null;
 			classMeta :ClassMetadata = null;
 			
 			getTreeChange(md :Metadata) :ClassMetadata {
@@ -1075,25 +1105,7 @@ module Db {
 			}
 			
 			setType(def :any) {
-				if (def['discriminate']) {
-					this.discr = def;
-					this.ctor = this.discr.discriminate({});
-				} else {
-					var ti = new def();
-					if (ti['discriminate']) {
-						this.discr = ti;
-						this.ctor = this.discr.discriminate({});
-					} else {
-						this.ctor = def;
-					}
-				}
-			}
-			
-			getCtorFor(val :any) :EntityType<any> {
-				if (this.discr) {
-					return this.discr.discriminate(val);
-				}
-				return this.ctor;
+				this.ctor = def;
 			}
 			
 			named(name :string) :MetaDescriptor {
@@ -1118,7 +1130,10 @@ module Db {
 		
 		export class ClassMetadata extends MetaDescriptor {
 			descriptors :{[index:string]:MetaDescriptor} = {};
-			root :string;
+			root :string = null;
+			discriminator :string = null;
+			superMeta :ClassMetadata = null;
+			subMeta :ClassMetadata[] = [];
 			
 			add(descr :MetaDescriptor) {
 				descr.classMeta = this;
@@ -1139,10 +1154,27 @@ module Db {
 			
 			mergeSuper(sup :ClassMetadata) {
 				if (!this.root) this.root = sup.root;
+				if (!this.superMeta) {
+					this.superMeta = sup;
+					sup.addSubclass(this);
+				}
 				for (var k in sup.descriptors) {
 					if (this.descriptors[k]) continue;
 					this.descriptors[k] = sup.descriptors[k];
 				}
+			}
+			
+			addSubclass(sub :ClassMetadata) {
+				this.subMeta.push(sub);
+			}
+			
+			findForDiscriminator(disc :string) :ClassMetadata {
+				if (this.discriminator == disc) return this;
+				for (var i = 0; i < this.subMeta.length; i++) {
+					var ret = this.subMeta[i].findForDiscriminator(disc);
+					if (ret) return ret;
+				}
+				return null;
 			}
 		}
 		
@@ -1164,7 +1196,6 @@ module Db {
 				ret.classMeta = allMetadata.findMeta(this.ctor);
 				ret.nameOnParent = this.localName;
 				ret.binding = <BindingImpl>this.binding;
-				ret.discriminator = this.discr;
 				return ret;
 			}
 			
@@ -1362,7 +1393,7 @@ module Db {
 	}
 	
 	// --- Annotations
-	export function embedded(def :EntityType<any>|Discriminator, binding? :Internal.IBinding) :PropertyDecorator {
+	export function embedded(def :EntityType<any>, binding? :Internal.IBinding) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			var ret = meta.embedded(def, binding);
 			addDescriptor(target, propertyKey, ret);
@@ -1370,7 +1401,7 @@ module Db {
 		}
 	}
 	
-	export function reference(def :EntityType<any>|Discriminator, binding? :Internal.IBinding) :PropertyDecorator {
+	export function reference(def :EntityType<any>) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			var ret = meta.reference(def);
 			addDescriptor(target, propertyKey, ret);
@@ -1380,7 +1411,13 @@ module Db {
 	
 	export function root(name :string) :ClassDecorator {
 		return function (target: Function) {
-			meta.root(<EntityType<any>><any>target, name);
+			meta.define(<EntityType<any>><any>target, name, null);
+		}
+	}
+	
+	export function discriminator(disc :string) :ClassDecorator {
+		return function (target: Function) {
+			meta.define(<EntityType<any>><any>target, null, disc);
 		}
 	}
 	
@@ -1456,8 +1493,14 @@ module Db {
 			return ret;
 		}
 		
-		export function root(ctor :EntityType<any>, name :string) {
-			allMetadata.findMeta(ctor).root = name;
+		export function define(ctor :EntityType<any>, root :string, discriminator: string) {
+			var meta = allMetadata.findMeta(ctor);
+			if (root) {
+				meta.root = root;
+			}
+			if (discriminator) {
+				meta.discriminator = discriminator;
+			}
 		}
 	}
 	

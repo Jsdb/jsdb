@@ -50,6 +50,17 @@ var ServerWithProps = (function (_super) {
     }
     return ServerWithProps;
 })(WithProps);
+var WithMoreProps = (function (_super) {
+    __extends(WithMoreProps, _super);
+    function WithMoreProps() {
+        _super.apply(this, arguments);
+        this.moreNum = 1;
+    }
+    WithMoreProps = __decorate([
+        Db3.discriminator('more')
+    ], WithMoreProps);
+    return WithMoreProps;
+})(WithProps);
 var SubEntity = (function () {
     function SubEntity() {
     }
@@ -70,6 +81,9 @@ var SubEntityOth = (function (_super) {
     __decorate([
         Db3.embedded(SubEntity)
     ], SubEntityOth.prototype, "testOther");
+    SubEntityOth = __decorate([
+        Db3.discriminator('oth')
+    ], SubEntityOth);
     return SubEntityOth;
 })(SubEntity);
 var SubEntityYet = (function (_super) {
@@ -80,24 +94,11 @@ var SubEntityYet = (function (_super) {
     __decorate([
         Db3.embedded(SubEntity)
     ], SubEntityYet.prototype, "testYetOther");
+    SubEntityYet = __decorate([
+        Db3.discriminator('yet')
+    ], SubEntityYet);
     return SubEntityYet;
 })(SubEntityOth);
-var SubEntityDiscriminator = (function () {
-    function SubEntityDiscriminator() {
-    }
-    SubEntityDiscriminator.prototype.discriminate = function (val) {
-        if (val.type == 'oth')
-            return SubEntityOth;
-        return SubEntity;
-    };
-    SubEntityDiscriminator.prototype.decorate = function (entity, val) {
-        delete val.type;
-        if (entity instanceof SubEntityOth) {
-            val.type = 'oth';
-        }
-    };
-    return SubEntityDiscriminator;
-})();
 var ServerSubEntity = (function (_super) {
     __extends(ServerSubEntity, _super);
     function ServerSubEntity() {
@@ -105,17 +106,17 @@ var ServerSubEntity = (function (_super) {
     }
     return ServerSubEntity;
 })(SubEntity);
-var OthSubEntity = (function () {
-    function OthSubEntity() {
+var DifferentSubEntity = (function () {
+    function DifferentSubEntity() {
     }
-    return OthSubEntity;
+    return DifferentSubEntity;
 })();
 var WithSubentity = (function () {
     function WithSubentity() {
         this.str = null;
     }
     __decorate([
-        Db3.embedded(SubEntityDiscriminator)
+        Db3.embedded(SubEntity)
     ], WithSubentity.prototype, "sub");
     __decorate([
         Db3.embedded(WithSubentity)
@@ -166,7 +167,7 @@ var WithPreloads = (function () {
     function WithPreloads() {
     }
     __decorate([
-        Db3.embedded(OthSubEntity, Db3.bind('sub', '_sub', true).bind('ref', '_ref', true).bind('this', '_parent', false))
+        Db3.embedded(DifferentSubEntity, Db3.bind('sub', '_sub', true).bind('ref', '_ref', true).bind('this', '_parent', false))
     ], WithPreloads.prototype, "oth");
     __decorate([
         Db3.embedded(SubEntity)
@@ -207,6 +208,7 @@ describe('Db3 >', function () {
     var wpFb;
     var wp1Fb;
     var wp2Fb;
+    var wp3Fb;
     var wsFb;
     var ws1Fb;
     var ws2Fb;
@@ -215,6 +217,7 @@ describe('Db3 >', function () {
     var wrFb;
     var wr1Fb;
     var wr2Fb;
+    var wr3Fb;
     var wcFb;
     var wc1Fb;
     var wc2Fb;
@@ -267,6 +270,18 @@ describe('Db3 >', function () {
                 substr: 'Sub String'
             }
         }, opCnter);
+        wp3Fb = wpFb.child('more*wp3');
+        opcnt++;
+        wp3Fb.set({
+            str: 'String 3',
+            num: 400,
+            moreNum: 401,
+            arr: [3, 4, 5],
+            subobj: {
+                substr: 'Sub String'
+            },
+            _dis: 'more'
+        }, opCnter);
         wsFb = new Firebase(baseUrl + '/withSubs');
         ws1Fb = wsFb.child('ws1');
         opcnt++;
@@ -298,7 +313,7 @@ describe('Db3 >', function () {
                 str: 'Sub String 3',
                 sub: {
                     str: 'Sub Sub String 3',
-                    type: 'oth'
+                    _dis: 'oth'
                 }
             }
         }, opCnter);
@@ -325,6 +340,17 @@ describe('Db3 >', function () {
             str: 'String 1',
             ref: {
                 _ref: wp1Fb.toString() + '/'
+            }
+        }, opCnter);
+        wr3Fb = wrFb.child('wr3');
+        opcnt++;
+        wr3Fb.set({
+            str: 'String 3',
+            ref: {
+                _ref: wp3Fb.toString() + '/'
+            },
+            othSubRef: {
+                _ref: ws3Fb.toString() + '/nested/sub/*oth'
             }
         }, opCnter);
         wcFb = new Firebase(baseUrl + '/withCols');
@@ -402,17 +428,31 @@ describe('Db3 >', function () {
             assert('the meta is right').when(wpmeta).is(M.objectMatching({
                 localName: 'sub',
                 remoteName: M.aFalsey,
-                ctor: M.aTruthy,
-                discr: M.instanceOf(SubEntityDiscriminator)
+                ctor: M.aTruthy
             }));
         });
-        it('should deal with subclasses inheriting super classes properties', function () {
+        it('should deal with super/subclasses and discriminators', function () {
             var allmeta = Db3.Internal.getAllMetadata();
-            var clmeta = allmeta.findMeta(SubEntityYet);
-            assert('it has all the properties').when(clmeta.descriptors).is(M.objectMatching({
+            var submeta = allmeta.findMeta(SubEntity);
+            var othmeta = allmeta.findMeta(SubEntityOth);
+            var yetmeta = allmeta.findMeta(SubEntityYet);
+            assert('second one has its the properties').when(yetmeta.descriptors).is(M.objectMatching({
+                testOther: M.aTruthy
+            }));
+            assert('last one has all the properties').when(yetmeta.descriptors).is(M.objectMatching({
                 testOther: M.aTruthy,
                 testYetOther: M.aTruthy
             }));
+            assert('first one has correct subclass').when(submeta.subMeta).is(M.arrayEquals([othmeta]));
+            assert('second one has correct subclass').when(othmeta.subMeta).is(M.arrayEquals([yetmeta]));
+            assert('second one has correct superclass').when(othmeta.superMeta).is(M.exactly(submeta));
+            assert('third one has correct superclass').when(yetmeta.superMeta).is(M.exactly(othmeta));
+            assert('second one has discriminator value').when(othmeta.discriminator).is('oth');
+            assert('third one has discriminator value').when(yetmeta.discriminator).is('yet');
+            assert('find correct discriminated meta for oth').when(submeta.findForDiscriminator('oth')).is(othmeta);
+            assert('find correct discriminated meta for yet').when(submeta.findForDiscriminator('yet')).is(yetmeta);
+            assert('find correctly itself for oth').when(othmeta.findForDiscriminator('oth')).is(othmeta);
+            assert('correctly dont find on super for oth').when(yetmeta.findForDiscriminator('oth')).is(null);
         });
         it('should intercept simple metadata thru getters', function () {
             Db3.Internal.clearLastStack();
@@ -559,6 +599,10 @@ describe('Db3 >', function () {
                 });
             }, 10);
         });
+        it('should load polimorphic on rooted', function () {
+            var wp3 = Db(WithProps).load('more*wp3');
+            assert('it\'s right entity type').when(wp3).is(M.instanceOf(WithMoreProps));
+        });
         it('should update data', function (done) {
             var wp1 = Db(WithProps).load('wp1');
             var times = 0;
@@ -657,6 +701,18 @@ describe('Db3 >', function () {
                     M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
                 });
             });
+            it('should dereference a polimorphic reference to root', function () {
+                var wr1 = Db(WithRef).load('wr3');
+                var refevent = Db(wr1.ref);
+                return refevent.dereference(_this).then(function (det) {
+                    M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
+                    M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithMoreProps));
+                    M.assert("Right event").when(refevent).is(M.objectMatching({
+                        nameOnParent: 'ref',
+                    }));
+                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/more*wp3/');
+                });
+            });
             it('should notify of referencing', function (done) {
                 var wr1 = Db(WithRef).load('wr1');
                 var refevent = Db(wr1.ref);
@@ -714,6 +770,13 @@ describe('Db3 >', function () {
                     M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
                     M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntity));
                     M.assert("Resolved the ref").when(wr1.othSubRef.str).is("Sub String 1");
+                });
+            });
+            it('should load polimorphic reference to other entities sub references', function () {
+                var wr1 = Db(WithRef).load('wr3');
+                return Db(wr1.othSubRef).load(_this).then(function (det) {
+                    M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
+                    M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntityOth));
                 });
             });
         });
@@ -818,7 +881,7 @@ describe('Db3 >', function () {
                     str: 'abc',
                     sub: {
                         str: 'cde',
-                        type: 'oth'
+                        _dis: 'oth'
                     }
                 }));
             });
@@ -844,12 +907,18 @@ describe('Db3 >', function () {
                     }
                 }));
             });
+            it('should serialize correctly polimorphic references', function () {
+                throw 'todo';
+            });
         });
         describe('Saving new >', function () {
             it('should assign right url to a new entity mapped on root', function () {
                 var wp = new WithProps();
                 Db(wp).assignUrl();
                 M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+            });
+            it('should assign right url to a new polimorphic entity mapped on root', function () {
+                throw 'todo';
             });
             it('should throw error an a new entity not mapped on root', function () {
                 var wp = new SubEntity();
@@ -1021,7 +1090,7 @@ describe('Db3 >', function () {
                         sub: {
                             str: 'new sub',
                             otherData: 1,
-                            type: 'oth'
+                            _dis: 'oth'
                         },
                     }));
                 });
