@@ -304,7 +304,7 @@ declare module Db {
         function clearLastStack(): void;
     }
     module Utils {
-        function findName(f: Function): string;
+        function findName(o: any): string;
         function findHierarchy(o: Entity | EntityType<any>): EntityType<any>[];
         function isInlineObject(o: any): boolean;
         function isEmpty(obj: any): boolean;
@@ -320,7 +320,7 @@ declare module Db {
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
     function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
     function reference(def: EntityType<any>): PropertyDecorator;
-    function root(name: string, override?: string): ClassDecorator;
+    function root(name?: string, override?: string): ClassDecorator;
     function discriminator(disc: string): ClassDecorator;
     function override(override?: string): ClassDecorator;
     function observable(): PropertyDecorator;

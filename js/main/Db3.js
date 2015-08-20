@@ -1188,11 +1188,17 @@ var Db;
     })(Internal = Db.Internal || (Db.Internal = {}));
     var Utils;
     (function (Utils) {
-        function findName(f) {
-            if (!f.constructor)
+        function findName(o) {
+            var firstCtor = o;
+            var acproto = o.prototype;
+            if (!acproto) {
+                acproto = Object.getPrototypeOf(o);
+                firstCtor = o.constructor;
+            }
+            if (!firstCtor)
                 return null;
             var funcNameRegex = /function (.{1,})\(/;
-            var results = (funcNameRegex).exec(f["constructor"].toString());
+            var results = (funcNameRegex).exec(firstCtor.toString());
             return (results && results.length > 1) ? results[1] : null;
         }
         Utils.findName = findName;
@@ -1331,7 +1337,14 @@ var Db;
     Db.reference = reference;
     function root(name, override) {
         return function (target) {
-            meta.define(target, name, null, override);
+            var myname = name;
+            if (!myname) {
+                myname = Utils.findName(target);
+                myname = myname.charAt(0).toLowerCase() + myname.slice(1);
+                if (myname.charAt(myname.length - 1) != 's')
+                    myname += 's';
+            }
+            meta.define(target, myname, null, override);
         };
     }
     Db.root = root;

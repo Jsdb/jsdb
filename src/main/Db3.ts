@@ -1311,10 +1311,16 @@ module Db {
 	}
 	
 	export module Utils {
-		export function findName(f :Function) {
-			if (!f.constructor) return null;
+		export function findName(o :any) {
+			var firstCtor = o;
+			var acproto = (<EntityType<any>>o).prototype;
+			if (!acproto) {
+				acproto = Object.getPrototypeOf(o);
+				firstCtor = o.constructor;
+			}
+			if (!firstCtor) return null;
 			var funcNameRegex = /function (.{1,})\(/;
-			var results  = (funcNameRegex).exec(f["constructor"].toString());
+			var results  = (funcNameRegex).exec(firstCtor.toString());
 			return (results && results.length > 1) ? results[1] : null;
 		}
 		
@@ -1451,9 +1457,15 @@ module Db {
 		}
 	}
 	
-	export function root(name :string, override?:string) :ClassDecorator {
+	export function root(name? :string, override?:string) :ClassDecorator {
 		return function (target: Function) {
-			meta.define(<EntityType<any>><any>target, name, null, override);
+			var myname = name;
+			if (!myname) {
+				myname = Utils.findName(target);
+				myname = myname.charAt(0).toLowerCase() + myname.slice(1);
+				if (myname.charAt(myname.length - 1) != 's') myname += 's';
+			}
+			meta.define(<EntityType<any>><any>target, myname, null, override);
 		}
 	}
 	

@@ -12,7 +12,7 @@ var Db = Db3.configure({baseUrl:baseUrl});
 
 var lastLocalCallArgs :IArguments = null;
 
-@Db3.root('withProps')
+@Db3.root()
 class WithProps {
 	_local :number = 1;
 	str :string = 'useless';

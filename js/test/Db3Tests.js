@@ -39,7 +39,7 @@ var WithProps = (function () {
         Db3.observable()
     ], WithProps.prototype, "num");
     WithProps = __decorate([
-        Db3.root('withProps')
+        Db3.root()
     ], WithProps);
     return WithProps;
 })();
