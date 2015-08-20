@@ -56,8 +56,10 @@ var Db;
                 this.state = state;
             }
             DbOperations.prototype.fork = function (conf) {
-                // TODO merge the configurations
-                return createDb(conf);
+                var nconf = {};
+                Utils.copyObj(this.state.conf, nconf);
+                Utils.copyObj(conf, nconf);
+                return createDb(nconf);
             };
             DbOperations.prototype.load = function (url) {
                 return this.state.load(url);
@@ -487,7 +489,7 @@ var Db;
                 var val = ds.val();
                 if (val) {
                     if (val['_dis']) {
-                        var cm = this.originalClassMeta.findForDiscriminator(val['_dis']);
+                        var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta, val['_dis']);
                         if (!cm)
                             throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
                         this.classMeta = cm;
@@ -587,7 +589,10 @@ var Db;
                     throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
                 var url = er.getUrl();
                 var id = Db.Utils.IdGenerator.next();
-                this.url = url + id + '/';
+                var disc = this.classMeta.discriminator || '';
+                if (disc)
+                    disc += '*';
+                this.url = url + disc + id + '/';
                 this.urlInited();
             };
             EntityEvent.prototype.save = function () {
@@ -745,8 +750,13 @@ var Db;
                 if (!this.pointedEvent)
                     return null;
                 // TODO add projections
+                var url = this.pointedEvent.getUrl();
+                var disc = this.pointedEvent.classMeta.discriminator || '';
+                if (disc)
+                    disc = '*' + disc;
+                url = url + disc;
                 return {
-                    _ref: this.pointedEvent.getUrl()
+                    _ref: url
                 };
             };
             ReferenceEvent.prototype.assignUrl = function () {
@@ -842,6 +852,16 @@ var Db;
                 else {
                     meta = this.myMeta.findMeta(param);
                 }
+                // change the meta based on current overrides
+                if (meta.override != this.conf.override) {
+                    for (var i = meta.subMeta.length - 1; i >= 0; i--) {
+                        var subc = meta.subMeta[i];
+                        if (subc.override == this.conf.override) {
+                            meta = subc;
+                            break;
+                        }
+                    }
+                }
                 return new EntityRoot(this, meta);
             };
             DbState.prototype.getUrl = function () {
@@ -893,24 +913,26 @@ var Db;
                 return event;
             };
             DbState.prototype.loadEventWithInstance = function (url, meta) {
+                var dis = null;
+                var segs = url.split('/');
+                var lastseg = segs.pop();
+                if (!lastseg)
+                    lastseg = segs.pop();
+                var colonpos = lastseg.indexOf('*');
+                if (colonpos == 0) {
+                    dis = lastseg.substring(1);
+                    url = url.substring(0, url.lastIndexOf('/'));
+                }
+                else if (colonpos > 0) {
+                    dis = lastseg.substring(0, colonpos);
+                }
+                // clean the url from discriminator
                 var event = this.loadEvent(url, meta);
                 if (event instanceof EntityEvent) {
                     if (!event.entity) {
                         // Find right meta if url has a discriminator
-                        var dis = null;
-                        var segs = url.split('/');
-                        var lastseg = segs.pop();
-                        if (!lastseg)
-                            lastseg = segs.pop();
-                        var colonpos = lastseg.indexOf('*');
-                        if (colonpos == 0) {
-                            dis = lastseg.substring(1);
-                        }
-                        else if (colonpos > 0) {
-                            dis = lastseg.substring(0, colonpos);
-                        }
                         if (dis) {
-                            var nmeta = meta.findForDiscriminator(dis);
+                            var nmeta = this.myMeta.findDiscriminated(meta, dis);
                             // TODO issue a warning maybe?
                             if (nmeta)
                                 meta = nmeta;
@@ -1000,6 +1022,7 @@ var Db;
                 this.descriptors = {};
                 this.root = null;
                 this.discriminator = null;
+                this.override = null;
                 this.superMeta = null;
                 this.subMeta = [];
             }
@@ -1017,8 +1040,12 @@ var Db;
                 return entity && entity instanceof this.ctor;
             };
             ClassMetadata.prototype.mergeSuper = function (sup) {
-                if (!this.root)
+                if (!this.root) {
                     this.root = sup.root;
+                }
+                else if (sup.root) {
+                    this.discriminator = this.root.replace(/\//, '');
+                }
                 if (!this.superMeta) {
                     this.superMeta = sup;
                     sup.addSubclass(this);
@@ -1134,6 +1161,9 @@ var Db;
                 this.classes.push(md);
                 return md;
             };
+            Metadata.prototype.findDiscriminated = function (base, dis) {
+                return base.findForDiscriminator(dis);
+            };
             return Metadata;
         })();
         Internal.Metadata = Metadata;
@@ -1213,6 +1243,18 @@ var Db;
             return true;
         }
         Utils.isEmpty = isEmpty;
+        function copyObj(from, to) {
+            for (var k in from) {
+                var val = from[k];
+                if (typeof val === 'object') {
+                    var valto = to[k] || {};
+                    copyObj(val, valto);
+                    val = valto;
+                }
+                to[k] = val;
+            }
+        }
+        Utils.copyObj = copyObj;
         var IdGenerator = (function () {
             function IdGenerator() {
             }
@@ -1287,9 +1329,9 @@ var Db;
         };
     }
     Db.reference = reference;
-    function root(name) {
+    function root(name, override) {
         return function (target) {
-            meta.define(target, name, null);
+            meta.define(target, name, null, override);
         };
     }
     Db.root = root;
@@ -1299,6 +1341,13 @@ var Db;
         };
     }
     Db.discriminator = discriminator;
+    function override(override) {
+        if (override === void 0) { override = 'server'; }
+        return function (target) {
+            meta.define(target, null, null, override);
+        };
+    }
+    Db.override = override;
     function observable() {
         return function (target, propertyKey) {
             var ret = meta.observable();
@@ -1367,13 +1416,16 @@ var Db;
             return ret;
         }
         meta_1.observable = observable;
-        function define(ctor, root, discriminator) {
+        function define(ctor, root, discriminator, override) {
             var meta = allMetadata.findMeta(ctor);
             if (root) {
                 meta.root = root;
             }
             if (discriminator) {
                 meta.discriminator = discriminator;
+            }
+            if (override) {
+                meta.override = override;
             }
         }
         meta_1.define = define;

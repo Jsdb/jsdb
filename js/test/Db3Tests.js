@@ -48,6 +48,9 @@ var ServerWithProps = (function (_super) {
     function ServerWithProps() {
         _super.apply(this, arguments);
     }
+    ServerWithProps = __decorate([
+        Db3.override()
+    ], ServerWithProps);
     return ServerWithProps;
 })(WithProps);
 var WithMoreProps = (function (_super) {
@@ -134,6 +137,9 @@ var ServerWithSubentity = (function (_super) {
     __decorate([
         Db3.embedded(ServerSubEntity)
     ], ServerWithSubentity.prototype, "sub");
+    ServerWithSubentity = __decorate([
+        Db3.override()
+    ], ServerWithSubentity);
     return ServerWithSubentity;
 })(WithSubentity);
 var WithRef = (function () {
@@ -161,6 +167,9 @@ var ServerWithRef = (function (_super) {
     __decorate([
         Db3.reference(ServerSubEntity)
     ], ServerWithRef.prototype, "othSubRef");
+    ServerWithRef = __decorate([
+        Db3.override()
+    ], ServerWithRef);
     return ServerWithRef;
 })(WithRef);
 var WithPreloads = (function () {
@@ -907,8 +916,29 @@ describe('Db3 >', function () {
                     }
                 }));
             });
-            it('should serialize correctly polimorphic references', function () {
-                throw 'todo';
+            it('should serialize correctly polimorphic root references', function () {
+                var wr = new WithRef();
+                var wp1 = Db(WithProps).load('more*wp3');
+                wr.ref = wp1;
+                var ee = Db(wr);
+                M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
+                    ref: {
+                        _ref: baseUrl + 'withProps/more*wp3/*more'
+                    }
+                }));
+            });
+            it('should serialize correctly polimorphic sub references', function () {
+                var wr = new WithRef();
+                var ws3 = Db(WithSubentity).load('ws3');
+                return Db(ws3).load(_this).then(function () {
+                    wr.othSubRef = ws3.nested.sub;
+                    var ee = Db(wr);
+                    M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
+                        othSubRef: {
+                            _ref: M.stringContaining('nested/sub/*oth')
+                        }
+                    }));
+                });
             });
         });
         describe('Saving new >', function () {
@@ -916,9 +946,13 @@ describe('Db3 >', function () {
                 var wp = new WithProps();
                 Db(wp).assignUrl();
                 M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+                M.assert("Url doesnt contain discriminator").when(Db(wp).getUrl()).is(M.not(M.stringContaining("*")));
             });
             it('should assign right url to a new polimorphic entity mapped on root', function () {
-                throw 'todo';
+                var wp = new WithMoreProps();
+                Db(wp).assignUrl();
+                M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+                M.assert("Url contains discriminator").when(Db(wp).getUrl()).is(M.stringContaining("more*"));
             });
             it('should throw error an a new entity not mapped on root', function () {
                 var wp = new SubEntity();
@@ -1094,6 +1128,67 @@ describe('Db3 >', function () {
                         },
                     }));
                 });
+            });
+        });
+    });
+    describe('Overrides >', function () {
+        var serDb = Db().fork({ override: 'server' });
+        it('should have proper metadata', function () {
+            var wp1 = Db(WithProps).load('wp1');
+            var ev = Db(wp1);
+            var state = ev.state;
+            var meta = state.myMeta.findMeta(WithProps);
+            var sermeta = state.myMeta.findMeta(ServerWithProps);
+            assert('metadata found').when(meta).is(M.aTruthy);
+            assert('server metadata found').when(sermeta).is(M.aTruthy);
+            assert('they are connected').when(meta.subMeta).is(M.arrayContaining(M.exactly(sermeta)));
+            assert('has override').when(sermeta.override).is('server');
+        });
+        it('should properly load root entity for server', function () {
+            var wp1 = serDb(WithProps).load('wp1');
+            assert('entity root returned right overridden type').when(wp1).is(M.instanceOf(ServerWithProps));
+            return serDb(wp1).load(_this).then(function (det) {
+                M.assert('Right type').when(wp1).is(M.instanceOf(ServerWithProps));
+                M.assert('Data loaded').when(wp1).is(M.objectMatching({
+                    str: 'String 1',
+                    num: 200,
+                    arr: [1, 2, 3],
+                    subobj: {
+                        substr: 'Sub String'
+                    }
+                }));
+            });
+        });
+        it('should load sub entities for server', function () {
+            var ws1 = serDb(WithSubentity).load('ws1');
+            return serDb(ws1).load(_this).then(function (det) {
+                M.assert("Right type").when(ws1.sub).is(M.instanceOf(ServerSubEntity));
+                M.assert("Loaded main").when(ws1.str).is('String 1');
+                M.assert("Loaded subentity").when(ws1.sub.str).is('Sub String 1');
+            });
+        });
+        it('should load sub entites reference withOUT the main one for server', function () {
+            var wr1 = serDb(WithRef).load('wr2');
+            return serDb(wr1.ref).load(_this).then(function (det) {
+                M.assert("Inited the ref").when(wr1.ref).is(M.aTruthy);
+                M.assert("ref right type").when(wr1.ref).is(M.instanceOf(ServerWithProps));
+                M.assert("Loaded the ref").when(wr1.ref).is(M.objectMatching({
+                    str: 'String 1',
+                    num: 200,
+                    arr: [1, 2, 3],
+                    subobj: {
+                        substr: 'Sub String'
+                    }
+                }));
+                M.assert("Didn't load the main one").when(wr1.str).is(M.undefinedValue);
+            });
+        });
+        it('should load reference to other entities sub references for server', function () {
+            var wr1 = serDb(WithRef).load('wr1');
+            return serDb(wr1.othSubRef).load(_this).then(function (det) {
+                M.assert("inited the ref").when(wr1.othSubRef).is(M.aTruthy);
+                M.assert("ref right type").when(wr1.othSubRef).is(M.instanceOf(ServerSubEntity));
+                M.assert("Resolved the ref").when(wr1.othSubRef.str).is("Sub String 1");
             });
         });
     });

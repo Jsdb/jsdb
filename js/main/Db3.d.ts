@@ -269,6 +269,7 @@ declare module Db {
             };
             root: string;
             discriminator: string;
+            override: string;
             superMeta: ClassMetadata;
             subMeta: ClassMetadata[];
             add(descr: MetaDescriptor): void;
@@ -295,6 +296,7 @@ declare module Db {
         class Metadata {
             classes: Internal.ClassMetadata[];
             findMeta(param: EntityType<any> | Entity): ClassMetadata;
+            findDiscriminated(base: ClassMetadata, dis: string): ClassMetadata;
         }
         function getAllMetadata(): Metadata;
         function getLastEntity(): Entity;
@@ -306,6 +308,7 @@ declare module Db {
         function findHierarchy(o: Entity | EntityType<any>): EntityType<any>[];
         function isInlineObject(o: any): boolean;
         function isEmpty(obj: any): boolean;
+        function copyObj(from: Object, to: Object): void;
         class IdGenerator {
             static PUSH_CHARS: string;
             static BASE: number;
@@ -317,14 +320,15 @@ declare module Db {
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
     function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
     function reference(def: EntityType<any>): PropertyDecorator;
-    function root(name: string): ClassDecorator;
+    function root(name: string, override?: string): ClassDecorator;
     function discriminator(disc: string): ClassDecorator;
+    function override(override?: string): ClassDecorator;
     function observable(): PropertyDecorator;
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: any): Db.Internal.ReferenceMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
-        function define(ctor: EntityType<any>, root: string, discriminator: string): void;
+        function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;
     }
 }
 export = Db;

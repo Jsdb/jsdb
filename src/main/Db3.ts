@@ -107,8 +107,10 @@ module Db {
 			}
 			
 			fork(conf :any) :IDb3Static {
-				// TODO merge the configurations
-				return createDb(conf);
+				var nconf = {};
+				Utils.copyObj(this.state.conf, nconf);
+				Utils.copyObj(conf, nconf);
+				return createDb(nconf);
 			}
 			
 			load<T extends Entity>(url :string) :T {
@@ -603,7 +605,7 @@ module Db {
 				var val = ds.val();
 				if (val) {
 					if (val['_dis']) {
-						var cm = this.originalClassMeta.findForDiscriminator(val['_dis']);
+						var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta,val['_dis']);
 						if (!cm) throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
 						this.classMeta = cm;
 					} else {
@@ -699,7 +701,9 @@ module Db {
 				if (!er) throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
 				var url = er.getUrl();
 				var id = Db.Utils.IdGenerator.next();
-				this.url = url + id + '/';
+				var disc = this.classMeta.discriminator || '';
+				if (disc) disc+= '*';
+				this.url = url + disc + id + '/';
 				this.urlInited();
 			}
 			
@@ -849,8 +853,13 @@ module Db {
 			serialize(localsOnly :boolean = false):Object {
 				if (!this.pointedEvent) return null;
 				// TODO add projections
+				var url = this.pointedEvent.getUrl();
+				var disc = this.pointedEvent.classMeta.discriminator || '';
+				if (disc) disc = '*' + disc;
+				url = url + disc;
+				
 				return {
-					_ref: this.pointedEvent.getUrl()
+					_ref: url
 				}
 			}
 			
@@ -974,6 +983,16 @@ module Db {
 				} else {
 					meta = this.myMeta.findMeta(param);
 				}
+				// change the meta based on current overrides
+				if (meta.override != this.conf.override) {
+					for (var i = meta.subMeta.length - 1; i >= 0; i--) {
+						var subc = meta.subMeta[i];
+						if (subc.override == this.conf.override) {
+							meta = subc;
+							break;
+						}
+					}
+				}
 				return new EntityRoot<any>(this, meta);
 			}
 			
@@ -1028,22 +1047,24 @@ module Db {
 			}
 			
 			loadEventWithInstance(url :string, meta? :ClassMetadata) :GenericEvent {
+				var dis = null;
+				var segs = url.split('/');
+				var lastseg = segs.pop();
+				if (!lastseg) lastseg = segs.pop();
+				var colonpos = lastseg.indexOf('*');
+				if (colonpos == 0) {
+					dis = lastseg.substring(1);
+					url = url.substring(0,url.lastIndexOf('/'));
+				} else if (colonpos > 0) {
+					dis = lastseg.substring(0,colonpos);
+				}
+				// clean the url from discriminator
 				var event = this.loadEvent(url, meta);
 				if (event instanceof EntityEvent) {
 					if (!event.entity) {
 						// Find right meta if url has a discriminator
-						var dis = null;
-						var segs = url.split('/');
-						var lastseg = segs.pop();
-						if (!lastseg) lastseg = segs.pop();
-						var colonpos = lastseg.indexOf('*');
-						if (colonpos == 0) {
-							dis = lastseg.substring(1);
-						} else if (colonpos > 0) {
-							dis = lastseg.substring(0,colonpos);
-						}
 						if (dis) {
-							var nmeta = meta.findForDiscriminator(dis);
+							var nmeta = this.myMeta.findDiscriminated(meta,dis);
 							// TODO issue a warning maybe?
 							if (nmeta) meta = nmeta;
 						}
@@ -1132,6 +1153,7 @@ module Db {
 			descriptors :{[index:string]:MetaDescriptor} = {};
 			root :string = null;
 			discriminator :string = null;
+			override :string = null;
 			superMeta :ClassMetadata = null;
 			subMeta :ClassMetadata[] = [];
 			
@@ -1153,7 +1175,11 @@ module Db {
 			}
 			
 			mergeSuper(sup :ClassMetadata) {
-				if (!this.root) this.root = sup.root;
+				if (!this.root) {
+					this.root = sup.root;
+				} else if (sup.root) {
+					this.discriminator = this.root.replace(/\//,'');
+				}
 				if (!this.superMeta) {
 					this.superMeta = sup;
 					sup.addSubclass(this);
@@ -1258,6 +1284,10 @@ module Db {
 				this.classes.push(md);
 				return md;
 			}
+			
+			findDiscriminated(base :ClassMetadata, dis :string) :ClassMetadata {
+				return base.findForDiscriminator(dis);
+			}
 		}
 		
 		export function getAllMetadata() :Metadata {
@@ -1331,6 +1361,18 @@ module Db {
 			}
 			
 			return true;
+		}
+		
+		export function copyObj(from :Object, to :Object) {
+			for (var k in from) {
+				var val = from[k];
+				if (typeof val === 'object') {
+					var valto = to[k] || {};
+					copyObj(val, valto);
+					val = valto;
+				}
+				to[k] = val;
+			}
 		}
 		
 		export class IdGenerator {
@@ -1409,15 +1451,21 @@ module Db {
 		}
 	}
 	
-	export function root(name :string) :ClassDecorator {
+	export function root(name :string, override?:string) :ClassDecorator {
 		return function (target: Function) {
-			meta.define(<EntityType<any>><any>target, name, null);
+			meta.define(<EntityType<any>><any>target, name, null, override);
 		}
 	}
 	
 	export function discriminator(disc :string) :ClassDecorator {
 		return function (target: Function) {
 			meta.define(<EntityType<any>><any>target, null, disc);
+		}
+	}
+	
+	export function override(override :string = 'server') :ClassDecorator {
+		return function (target: Function) {
+			meta.define(<EntityType<any>><any>target, null, null, override);
 		}
 	}
 	
@@ -1493,13 +1541,16 @@ module Db {
 			return ret;
 		}
 		
-		export function define(ctor :EntityType<any>, root :string, discriminator: string) {
+		export function define(ctor :EntityType<any>, root? :string, discriminator? :string, override? :string) {
 			var meta = allMetadata.findMeta(ctor);
 			if (root) {
 				meta.root = root;
 			}
 			if (discriminator) {
 				meta.discriminator = discriminator;
+			}
+			if (override) {
+				meta.override = override;
 			}
 		}
 	}
