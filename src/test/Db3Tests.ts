@@ -306,7 +306,9 @@ describe('Db3 >', () => {
 		wr2Fb.set({
 			str: 'String 1',
 			ref: {
-				_ref: wp1Fb.toString() + '/'
+				_ref: wp1Fb.toString() + '/',
+				str: 'String 1',
+				num: 200
 			}
 		}, opCnter);
 
@@ -717,6 +719,17 @@ describe('Db3 >', () => {
 						nameOnParent: 'ref',
 					}));
 					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+				});
+			});
+			
+			it.only('should dereference a reference with projections', () => {
+				var wr1 = Db(WithRef).load('wr2');
+				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
+				return refevent.dereference(this).then((det) => {
+					M.assert("Applied projections").when(wr1.ref).is(M.objectMatching({
+						str: 'String 1',
+						num: 200
+					}));
 				});
 			});
 			

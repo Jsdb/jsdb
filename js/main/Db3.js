@@ -462,7 +462,9 @@ var Db;
                 _super.prototype.handleDbEvent.call(this, ds, prevName);
             };
             EntityEvent.prototype.handleProjection = function (ds) {
-                // TODO
+                if (this.loaded)
+                    return;
+                _super.prototype.handleDbEvent.call(this, ds, null);
             };
             EntityEvent.prototype.init = function (h) {
                 if (this.dbhandler == null) {
@@ -720,15 +722,13 @@ var Db;
                 this.loaded = true;
                 _super.prototype.handleDbEvent.call(this, ds, prevName);
             };
-            ReferenceEvent.prototype.handleProjection = function (ds) {
-                // TODO
-            };
             ReferenceEvent.prototype.parseValue = function (ds) {
                 var val = ds.val();
                 if (val && val._ref) {
                     if (this.pointedEvent == null || this.pointedEvent.getUrl() != val._ref) {
                         this.prevPointedEvent = this.pointedEvent;
                         this.pointedEvent = this.state.loadEventWithInstance(val._ref, this.classMeta);
+                        this.pointedEvent.handleProjection(ds);
                         this.setEntity(this.pointedEvent.entity);
                     }
                 }

@@ -196,7 +196,6 @@ declare module Db {
             dereference(ctx: Object): Promise<EventDetails<E>>;
             referenced(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
-            handleProjection(ds: FirebaseDataSnapshot): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             isLoaded(): boolean;
             assertLoaded(): void;

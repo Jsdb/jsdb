@@ -576,7 +576,8 @@ module Db {
 			}
 			
 			handleProjection(ds :FirebaseDataSnapshot) {
-				// TODO
+				if (this.loaded) return;
+				super.handleDbEvent(ds, null);
 			}
 			
 			init(h :EventHandler) {
@@ -823,16 +824,13 @@ module Db {
 				super.handleDbEvent(ds,prevName);
 			}
 			
-			handleProjection(ds :FirebaseDataSnapshot) {
-				// TODO
-			}
-			
 			parseValue(ds :FirebaseDataSnapshot) {
 				var val = ds.val();
 				if (val && val._ref) {
 					if (this.pointedEvent == null || this.pointedEvent.getUrl() != val._ref) {
 						this.prevPointedEvent = this.pointedEvent;
 						this.pointedEvent = <EntityEvent<E>>this.state.loadEventWithInstance(val._ref, this.classMeta);
+						this.pointedEvent.handleProjection(ds);
 						this.setEntity(this.pointedEvent.entity);
 					}
 				} else {

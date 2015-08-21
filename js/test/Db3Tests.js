@@ -353,7 +353,9 @@ describe('Db3 >', function () {
         wr2Fb.set({
             str: 'String 1',
             ref: {
-                _ref: wp1Fb.toString() + '/'
+                _ref: wp1Fb.toString() + '/',
+                str: 'String 1',
+                num: 200
             }
         }, opCnter);
         wr3Fb = wrFb.child('wr3');
@@ -714,6 +716,16 @@ describe('Db3 >', function () {
                         nameOnParent: 'ref',
                     }));
                     M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+                });
+            });
+            it.only('should dereference a reference with projections', function () {
+                var wr1 = Db(WithRef).load('wr2');
+                var refevent = Db(wr1.ref);
+                return refevent.dereference(_this).then(function (det) {
+                    M.assert("Applied projections").when(wr1.ref).is(M.objectMatching({
+                        str: 'String 1',
+                        num: 200
+                    }));
                 });
             });
             it('should dereference a polimorphic reference to root', function () {
