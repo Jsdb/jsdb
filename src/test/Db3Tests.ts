@@ -121,7 +121,7 @@ class WithPreloads {
 	@Db3.embedded(SubEntity)
 	sub :SubEntity;
 	
-	@Db3.reference(WithProps)
+	@Db3.reference(WithProps, ['num','str'])
 	ref :WithProps;
 }
 
@@ -884,6 +884,22 @@ describe('Db3 >', () => {
 				}));
 			});
 			
+			it('should serialize basic entity respecting given field names', () => {
+				var wp = new WithProps();
+				wp._local = 5;
+				wp.num = 1;
+				wp.str = 'abc';
+				wp.arr = [1];
+				wp.subobj.substr = 'cde';
+				wp.ignored = 'ciao';
+				
+				var ee = <Db3.Internal.GenericEvent><any>Db(wp);
+				M.assert("Serialization is correct").when(ee.serialize(false,['num','str'])).is(M.objectMatchingStrictly({
+					num:1,
+					str:'abc'
+				}));
+			});
+			
 			it('should serialize correctly sub entities', () => {
 				var ws = new WithSubentity();
 				ws.str = 'abc';
@@ -949,6 +965,21 @@ describe('Db3 >', () => {
 				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
 					ref: {
 						_ref: baseUrl + 'withProps/wp1/'
+					}
+				}));
+			});
+			
+			it('should serialize correctly reference projections', () => {
+				var wpr = new WithPreloads();
+				var wp1 = Db(WithProps).load('wp1');
+				wpr.ref = wp1;
+				
+				var ee = <Db3.Internal.GenericEvent><any>Db(wpr);
+				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
+					ref: {
+						_ref: baseUrl + 'withProps/wp1/',
+						str: 'String 1',
+						num: 200
 					}
 				}));
 			});

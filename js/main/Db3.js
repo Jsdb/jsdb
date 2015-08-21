@@ -369,7 +369,7 @@ var Db;
             GenericEvent.prototype.getTraversed = function () {
                 return null;
             };
-            GenericEvent.prototype.serialize = function (localsOnly) {
+            GenericEvent.prototype.serialize = function (localsOnly, fields) {
                 if (localsOnly === void 0) { localsOnly = false; }
                 throw new Error("Please override serialize in subclasses of GenericEvent");
             };
@@ -552,7 +552,7 @@ var Db;
             EntityEvent.prototype.getReferencedUrl = function () {
                 throw new Error("Embedded entities don't have a referenced url");
             };
-            EntityEvent.prototype.serialize = function (localsOnly) {
+            EntityEvent.prototype.serialize = function (localsOnly, fields) {
                 if (localsOnly === void 0) { localsOnly = false; }
                 if (!this.entity)
                     return null;
@@ -561,6 +561,8 @@ var Db;
                 }
                 var ret = {};
                 for (var k in this.entity) {
+                    if (fields && fields.indexOf(k) < 0)
+                        continue;
                     var val = this.entity[k];
                     if (typeof val === 'function')
                         continue;
@@ -660,6 +662,7 @@ var Db;
                 _super.apply(this, arguments);
                 this.classMeta = null;
                 this.nameOnParent = null;
+                this.project = null;
                 this.pointedEvent = null;
                 this.prevPointedEvent = null;
                 this.progDiscriminator = 1;
@@ -755,15 +758,20 @@ var Db;
                 if (localsOnly === void 0) { localsOnly = false; }
                 if (!this.pointedEvent)
                     return null;
-                // TODO add projections
+                var obj = null;
+                if (this.project) {
+                    obj = this.pointedEvent.serialize(false, this.project);
+                }
+                else {
+                    obj = {};
+                }
                 var url = this.pointedEvent.getUrl();
                 var disc = this.pointedEvent.classMeta.discriminator || '';
                 if (disc)
                     disc = '*' + disc;
                 url = url + disc;
-                return {
-                    _ref: url
-                };
+                obj._ref = url;
+                return obj;
             };
             ReferenceEvent.prototype.assignUrl = function () {
                 if (!this.pointedEvent)
@@ -1144,6 +1152,7 @@ var Db;
                 // TODO maybe we should assert here that there is a metadata for this type
                 ret.classMeta = allMetadata.findMeta(this.ctor);
                 ret.nameOnParent = this.localName;
+                ret.project = this.project;
                 return ret;
             };
             return ReferenceMetaDescriptor;
@@ -1371,9 +1380,9 @@ var Db;
         };
     }
     Db.embedded = embedded;
-    function reference(def) {
+    function reference(def, project) {
         return function (target, propertyKey) {
-            var ret = meta.reference(def);
+            var ret = meta.reference(def, project);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
         };
@@ -1469,9 +1478,10 @@ var Db;
             return ret;
         }
         meta_1.embedded = embedded;
-        function reference(def) {
+        function reference(def, project) {
             var ret = new Db.Internal.ReferenceMetaDescriptor();
             ret.setType(def);
+            ret.project = project;
             return ret;
         }
         meta_1.reference = reference;

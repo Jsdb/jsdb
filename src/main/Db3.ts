@@ -463,7 +463,7 @@ module Db {
 				return null;
 			}
 			
-			serialize(localsOnly:boolean = false) :Object {
+			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
 				throw new Error("Please override serialize in subclasses of GenericEvent");
 			}
 			
@@ -672,13 +672,14 @@ module Db {
 				throw new Error("Embedded entities don't have a referenced url");
 			}
 			
-			serialize(localsOnly :boolean = false):Object {
+			serialize(localsOnly :boolean = false, fields? :string[]):Object {
 				if (!this.entity) return null;
 				if (typeof this.entity['serialize'] === 'function') {
 					return this.entity['serialize'].apply(this.entity,[this]);
 				}
 				var ret = {};
 				for (var k in this.entity) {
+					if (fields && fields.indexOf(k) < 0) continue;
 					var val = this.entity[k];
 					if (typeof val === 'function') continue;
 
@@ -764,6 +765,7 @@ module Db {
 		export class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
 			classMeta :ClassMetadata = null;
 			nameOnParent :string = null;
+			project :string[] = null;
 			
 			pointedEvent :EntityEvent<E> = null;
 			prevPointedEvent :EntityEvent<E> = null;
@@ -859,15 +861,19 @@ module Db {
 			
 			serialize(localsOnly :boolean = false):Object {
 				if (!this.pointedEvent) return null;
-				// TODO add projections
+				var obj = null;
+				if (this.project) {
+					obj = this.pointedEvent.serialize(false, this.project);
+				} else {
+					obj = {};
+				}
 				var url = this.pointedEvent.getUrl();
 				var disc = this.pointedEvent.classMeta.discriminator || '';
 				if (disc) disc = '*' + disc;
 				url = url + disc;
 				
-				return {
-					_ref: url
-				}
+				obj._ref = url
+				return obj;
 			}
 			
 			assignUrl() {
@@ -1262,6 +1268,8 @@ module Db {
 		}
 		
 		export class ReferenceMetaDescriptor extends MetaDescriptor {
+			project :string[];
+			
 			named(name :string) :ReferenceMetaDescriptor {
 				super.named(name);
 				return this;
@@ -1274,6 +1282,7 @@ module Db {
 				// TODO maybe we should assert here that there is a metadata for this type
 				ret.classMeta = allMetadata.findMeta(this.ctor);
 				ret.nameOnParent = this.localName;
+				ret.project = this.project;
 				return ret;
 			}
 			
@@ -1491,9 +1500,9 @@ module Db {
 		}
 	}
 	
-	export function reference(def :EntityType<any>) :PropertyDecorator {
+	export function reference(def :EntityType<any>, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
-			var ret = meta.reference(def);
+			var ret = meta.reference(def, project);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
 		}
@@ -1591,9 +1600,10 @@ module Db {
 			return ret;
 		}
 		
-		export function reference(def :any) :Db.Internal.ReferenceMetaDescriptor {
+		export function reference(def :any, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
+			ret.project = project;
 			return ret;
 		}
 		

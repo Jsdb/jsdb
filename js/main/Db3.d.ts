@@ -132,7 +132,7 @@ declare module Db {
             parseValue(ds: FirebaseDataSnapshot): void;
             isTraversingTree(): boolean;
             getTraversed(): GenericEvent;
-            serialize(localsOnly?: boolean): Object;
+            serialize(localsOnly?: boolean, fields?: string[]): Object;
             isLocal(): boolean;
         }
         interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
@@ -178,13 +178,14 @@ declare module Db {
             dereference(ctx: Object): Promise<EventDetails<E>>;
             referenced(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             getReferencedUrl(): string;
-            serialize(localsOnly?: boolean): Object;
+            serialize(localsOnly?: boolean, fields?: string[]): Object;
             assignUrl(): void;
             save(): Promise<any>;
         }
         class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
             classMeta: ClassMetadata;
             nameOnParent: string;
+            project: string[];
             pointedEvent: EntityEvent<E>;
             prevPointedEvent: EntityEvent<E>;
             progDiscriminator: number;
@@ -297,6 +298,7 @@ declare module Db {
             setBinding(binding: IBinding): void;
         }
         class ReferenceMetaDescriptor extends MetaDescriptor {
+            project: string[];
             named(name: string): ReferenceMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
@@ -332,7 +334,7 @@ declare module Db {
     }
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
     function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
-    function reference(def: EntityType<any>): PropertyDecorator;
+    function reference(def: EntityType<any>, project?: string[]): PropertyDecorator;
     function root(name?: string, override?: string): ClassDecorator;
     function discriminator(disc: string): ClassDecorator;
     function override(override?: string): ClassDecorator;
@@ -340,7 +342,7 @@ declare module Db {
     function ignore(): PropertyDecorator;
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
-        function reference(def: any): Db.Internal.ReferenceMetaDescriptor;
+        function reference(def: any, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
         function ignore(): Db.Internal.IgnoreMetaDescriptor;
         function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;
