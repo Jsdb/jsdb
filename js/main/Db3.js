@@ -373,6 +373,9 @@ var Db;
                 if (localsOnly === void 0) { localsOnly = false; }
                 throw new Error("Please override serialize in subclasses of GenericEvent");
             };
+            GenericEvent.prototype.isLocal = function () {
+                return false;
+            };
             return GenericEvent;
         })();
         Internal.GenericEvent = GenericEvent;
@@ -564,9 +567,12 @@ var Db;
                     var evt = this.findCreateChildFor(k);
                     if (evt) {
                         // TODO some events (like ignore or observable) should be called even if on locals only
-                        if (localsOnly)
+                        if (localsOnly && !evt.isLocal())
                             continue;
-                        ret[k] = evt.serialize();
+                        val = evt.serialize();
+                        if (val !== undefined) {
+                            ret[k] = val;
+                        }
                     }
                     else {
                         if (k.charAt(0) == '_')
@@ -772,6 +778,27 @@ var Db;
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
         Internal.ReferenceEvent = ReferenceEvent;
+        var IgnoreEvent = (function (_super) {
+            __extends(IgnoreEvent, _super);
+            function IgnoreEvent() {
+                _super.apply(this, arguments);
+                this.nameOnParent = null;
+            }
+            IgnoreEvent.prototype.setEntity = function () {
+                // can't set entity, will refuse it, it's unmutable
+            };
+            IgnoreEvent.prototype.parseValue = function (ds) {
+                this.val = ds.val();
+            };
+            IgnoreEvent.prototype.serialize = function () {
+                return this.val;
+            };
+            IgnoreEvent.prototype.isLocal = function () {
+                return true;
+            };
+            return IgnoreEvent;
+        })(GenericEvent);
+        Internal.IgnoreEvent = IgnoreEvent;
         var ObservableEvent = (function (_super) {
             __extends(ObservableEvent, _super);
             function ObservableEvent() {
@@ -805,6 +832,9 @@ var Db;
             };
             ObservableEvent.prototype.serialize = function () {
                 return this.entity;
+            };
+            ObservableEvent.prototype.isLocal = function () {
+                return true;
             };
             return ObservableEvent;
         })(SingleDbHandlerEvent);
@@ -1133,6 +1163,20 @@ var Db;
             return ObservableMetaDescriptor;
         })(MetaDescriptor);
         Internal.ObservableMetaDescriptor = ObservableMetaDescriptor;
+        var IgnoreMetaDescriptor = (function (_super) {
+            __extends(IgnoreMetaDescriptor, _super);
+            function IgnoreMetaDescriptor() {
+                _super.apply(this, arguments);
+            }
+            IgnoreMetaDescriptor.prototype.createEvent = function (allMetadata) {
+                var ret = new IgnoreEvent();
+                ret.url = this.getRemoteName();
+                ret.nameOnParent = this.localName;
+                return ret;
+            };
+            return IgnoreMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.IgnoreMetaDescriptor = IgnoreMetaDescriptor;
         var Metadata = (function () {
             function Metadata() {
                 this.classes = [];
@@ -1369,6 +1413,13 @@ var Db;
         };
     }
     Db.observable = observable;
+    function ignore() {
+        return function (target, propertyKey) {
+            var ret = meta.ignore();
+            addDescriptor(target, propertyKey, ret);
+        };
+    }
+    Db.ignore = ignore;
     function addDescriptor(target, propertyKey, ret) {
         ret.setLocalName(propertyKey.toString());
         var clmeta = allMetadata.findMeta(target.constructor);
@@ -1429,6 +1480,11 @@ var Db;
             return ret;
         }
         meta_1.observable = observable;
+        function ignore() {
+            var ret = new Db.Internal.IgnoreMetaDescriptor();
+            return ret;
+        }
+        meta_1.ignore = ignore;
         function define(ctor, root, discriminator, override) {
             var meta = allMetadata.findMeta(ctor);
             if (root) {

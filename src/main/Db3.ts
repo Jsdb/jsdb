@@ -466,6 +466,10 @@ module Db {
 			serialize(localsOnly:boolean = false) :Object {
 				throw new Error("Please override serialize in subclasses of GenericEvent");
 			}
+			
+			isLocal() :boolean {
+				return false;
+			}
 		}
 		
 		export interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
@@ -681,8 +685,11 @@ module Db {
 					var evt = this.findCreateChildFor(k);
 					if (evt) {
 						// TODO some events (like ignore or observable) should be called even if on locals only
-						if (localsOnly) continue;
-						ret[k] = evt.serialize();
+						if (localsOnly && !evt.isLocal()) continue;
+						val = evt.serialize();
+						if (val !== undefined) {
+							ret[k] = val;
+						}
 					} else {
 						if (k.charAt(0) == '_') continue;
 						ret[k] = val;
@@ -884,6 +891,27 @@ module Db {
 			assertLoaded():void;
 		}
 		
+		export class IgnoreEvent<E extends Entity> extends GenericEvent {
+			nameOnParent :string = null;
+			val :any;
+			
+			setEntity() {
+				// can't set entity, will refuse it, it's unmutable
+			}
+			
+			parseValue(ds :FirebaseDataSnapshot) {
+				this.val = ds.val();
+			}
+			
+			serialize() {
+				return this.val;
+			}
+			
+			isLocal() :boolean {
+				return true;
+			}
+		}
+		
 		export class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
 			
 			nameOnParent :string = null;
@@ -920,7 +948,10 @@ module Db {
 			serialize() {
 				return this.entity;
 			}
-			
+
+			isLocal() :boolean {
+				return true;
+			}
 		}
 
 		
@@ -1259,6 +1290,17 @@ module Db {
 			
 		}
 		
+		export class IgnoreMetaDescriptor extends MetaDescriptor {
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new IgnoreEvent();
+				ret.url = this.getRemoteName();
+				ret.nameOnParent = this.localName;
+				return ret;
+			}
+			
+		}
+		
 		export class Metadata {
 			classes :Internal.ClassMetadata[] = [];
 			
@@ -1489,6 +1531,13 @@ module Db {
 		}
 	}
 	
+	export function ignore() :PropertyDecorator {
+		return function(target: Object, propertyKey: string | symbol) {
+			var ret = meta.ignore();
+			addDescriptor(target, propertyKey, ret);
+		}
+	}
+	
 	function addDescriptor(target: Object, propertyKey: string | symbol, ret :Internal.MetaDescriptor) {
 		ret.setLocalName(propertyKey.toString());
 		var clmeta = allMetadata.findMeta(<EntityType<any>><any>target.constructor);
@@ -1550,6 +1599,11 @@ module Db {
 		
 		export function observable() :Db.Internal.ObservableMetaDescriptor {
 			var ret = new Db.Internal.ObservableMetaDescriptor();
+			return ret;
+		}
+		
+		export function ignore() :Db.Internal.IgnoreMetaDescriptor {
+			var ret = new Db.Internal.IgnoreMetaDescriptor();
 			return ret;
 		}
 		

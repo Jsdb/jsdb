@@ -133,6 +133,7 @@ declare module Db {
             isTraversingTree(): boolean;
             getTraversed(): GenericEvent;
             serialize(localsOnly?: boolean): Object;
+            isLocal(): boolean;
         }
         interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
             load(ctx: Object): Promise<EventDetails<E>>;
@@ -210,6 +211,14 @@ declare module Db {
             isLoaded(): boolean;
             assertLoaded(): void;
         }
+        class IgnoreEvent<E extends Entity> extends GenericEvent {
+            nameOnParent: string;
+            val: any;
+            setEntity(): void;
+            parseValue(ds: FirebaseDataSnapshot): void;
+            serialize(): any;
+            isLocal(): boolean;
+        }
         class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
             nameOnParent: string;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
@@ -219,6 +228,7 @@ declare module Db {
             isLoaded(): boolean;
             assertLoaded(): void;
             serialize(): Entity;
+            isLocal(): boolean;
         }
         interface IEntityRoot<E extends Entity> extends IUrled {
             load(id: string): E;
@@ -293,6 +303,9 @@ declare module Db {
         class ObservableMetaDescriptor extends MetaDescriptor {
             createEvent(allMetadata: Metadata): GenericEvent;
         }
+        class IgnoreMetaDescriptor extends MetaDescriptor {
+            createEvent(allMetadata: Metadata): GenericEvent;
+        }
         class Metadata {
             classes: Internal.ClassMetadata[];
             findMeta(param: EntityType<any> | Entity): ClassMetadata;
@@ -324,10 +337,12 @@ declare module Db {
     function discriminator(disc: string): ClassDecorator;
     function override(override?: string): ClassDecorator;
     function observable(): PropertyDecorator;
+    function ignore(): PropertyDecorator;
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: any): Db.Internal.ReferenceMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
+        function ignore(): Db.Internal.IgnoreMetaDescriptor;
         function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;
     }
 }

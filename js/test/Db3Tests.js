@@ -30,6 +30,7 @@ var WithProps = (function () {
         this.subobj = {
             substr: ''
         };
+        this.ignored = 'ignored';
     }
     WithProps.prototype.localCall = function () {
         lastLocalCallArgs = arguments;
@@ -38,6 +39,9 @@ var WithProps = (function () {
     __decorate([
         Db3.observable()
     ], WithProps.prototype, "num");
+    __decorate([
+        Db3.ignore()
+    ], WithProps.prototype, "ignored");
     WithProps = __decorate([
         Db3.root()
     ], WithProps);
@@ -267,7 +271,8 @@ describe('Db3 >', function () {
             arr: [1, 2, 3],
             subobj: {
                 substr: 'Sub String'
-            }
+            },
+            ignored: 'never seen'
         }, opCnter);
         wp2Fb = wpFb.child('wp2');
         opcnt++;
@@ -573,7 +578,8 @@ describe('Db3 >', function () {
                     arr: [1, 2, 3],
                     subobj: {
                         substr: 'Sub String'
-                    }
+                    },
+                    ignored: 'ignored'
                 }));
                 return 1;
             })
@@ -848,6 +854,7 @@ describe('Db3 >', function () {
                 wp.str = 'abc';
                 wp.arr = [1];
                 wp.subobj.substr = 'cde';
+                wp.ignored = 'ciao';
                 var ee = Db(wp);
                 M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatchingStrictly({
                     num: 1,
@@ -972,6 +979,7 @@ describe('Db3 >', function () {
                 wp.num = 555;
                 wp.arr = [89, 72];
                 wp.subobj.substr = 'eeee';
+                wp.ignored = 'ciao';
                 return Db(wp).save()
                     .then(function () {
                     return new Promise(function (ok) {
@@ -984,7 +992,8 @@ describe('Db3 >', function () {
                         str: 'abcd',
                         num: 555,
                         arr: [89, 72],
-                        subobj: { substr: 'eeee' }
+                        subobj: { substr: 'eeee' },
+                        ignored: M.undefinedValue
                     }));
                 });
             });
@@ -1038,6 +1047,7 @@ describe('Db3 >', function () {
                     wp1.str = 'Updated';
                     wp1.arr = [7, 8, 9];
                     wp1.subobj.substr = 'Sub updated';
+                    wp1.ignored = 'should not';
                     //return wp1.save();
                     return Db(wp1).save();
                 })
@@ -1051,7 +1061,8 @@ describe('Db3 >', function () {
                         num: 1000,
                         str: 'Updated',
                         arr: [7, 8, 9],
-                        subobj: { substr: 'Sub updated' }
+                        subobj: { substr: 'Sub updated' },
+                        ignored: 'never seen'
                     }));
                 });
             });

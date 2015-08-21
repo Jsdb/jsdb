@@ -23,6 +23,9 @@ class WithProps {
 		substr : ''
 	}
 	
+	@Db3.ignore()
+	ignored :string = 'ignored';
+	
 	localCall() {
 		lastLocalCallArgs = arguments;
 		return 'localCallAck';
@@ -212,7 +215,8 @@ describe('Db3 >', () => {
 			arr: [1,2,3],
 			subobj: {
 				substr: 'Sub String'
-			}
+			},
+			ignored: 'never seen'
 		}, opCnter);
 		
 		wp2Fb = wpFb.child('wp2');
@@ -570,7 +574,8 @@ describe('Db3 >', () => {
 					arr: [1,2,3],
 					subobj: {
 						substr: 'Sub String'
-					}
+					},
+					ignored: 'ignored'
 				}));
 				return 1;
 			})
@@ -868,6 +873,7 @@ describe('Db3 >', () => {
 				wp.str = 'abc';
 				wp.arr = [1];
 				wp.subobj.substr = 'cde';
+				wp.ignored = 'ciao';
 				
 				var ee = <Db3.Internal.GenericEvent><any>Db(wp);
 				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatchingStrictly({
@@ -1010,6 +1016,7 @@ describe('Db3 >', () => {
 				wp.num = 555;
 				wp.arr = [89,72];
 				wp.subobj.substr = 'eeee';
+				wp.ignored = 'ciao';
 				return Db(wp).save()
 				.then(() => {
 					return new Promise((ok)=> {
@@ -1022,7 +1029,8 @@ describe('Db3 >', () => {
 						str: 'abcd',
 						num: 555,
 						arr: [89,72],
-						subobj:{substr:'eeee'}
+						subobj:{substr:'eeee'},
+						ignored: M.undefinedValue
 					}));
 				});
 			});
@@ -1081,6 +1089,7 @@ describe('Db3 >', () => {
 					wp1.str = 'Updated';
 					wp1.arr = [7,8,9];
 					wp1.subobj.substr = 'Sub updated';
+					wp1.ignored = 'should not';
 					//return wp1.save();
 					return Db(wp1).save();
 				})
@@ -1094,7 +1103,8 @@ describe('Db3 >', () => {
 						num : 1000,
 						str: 'Updated',
 						arr: [7,8,9],
-						subobj: { substr : 'Sub updated' }
+						subobj: { substr : 'Sub updated' },
+						ignored: 'never seen'
 					}));
 				});
 			});
