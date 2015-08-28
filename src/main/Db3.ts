@@ -3,6 +3,21 @@ import PromiseModule = require('es6-promise');
 
 var Promise = PromiseModule.Promise;
 
+interface WeakMap<K, V> {
+	clear(): void;
+	delete(key: K): boolean;
+	get(key: K): V;
+	has(key: K): boolean;
+	set(key: K, value?: V): WeakMap<K, V>;
+}
+
+interface WeakMapConstructor {
+	new (): WeakMap<any, any>;
+	new <K, V>(): WeakMap<K, V>;
+	prototype: WeakMap<any, any>;
+}
+declare var WeakMap: WeakMapConstructor;
+
 
 var defaultDb :Db.Internal.IDb3Static = null;
 
@@ -79,21 +94,25 @@ module Db {
 			(meta :MetaDescriptor,entity :Entity):any;
 
 			<V extends nativeArrObj>(value :V) :IObservableEvent<V>;
+
+			// TODO maybe differentiate map and set/list interfaces
+			<T extends Entity>(map :{[index:string]:T}) :IMapEvent<T>
+
+			<T extends Entity>(list :T[]) :IListSetEvent<T>;
 			
 			<T extends Entity>(entity :T) :IEntityOrReferenceEvent<T>;
 			
-			<T extends Entity>(map :{[index:string]:T}) :number; // IMap<T>
-			
-			<T extends Entity>(list :T[]) :number; //  IList<T>
 			
 		}
 		
 		export interface IDb3Initable {
 			dbInit?(url :string, db :IDb3Static);
 		}
+		/*
 		export interface IDb3Annotated {
 			__dbevent :GenericEvent;
 		}
+		*/
 		
 		export interface IDbOperations {
 			fork(conf :any) :IDb3Static;
@@ -200,22 +219,6 @@ module Db {
 								tgt[this.bindings[k]] = updet.payload;
 							});
 						})(k);
-
-						/*
-						if (val instanceof Entity) {
-							(<Entity>val).load.live(tgt);
-						}
-						// References needs more attention, because they get here already resolved and need a second copy
-						if (parent[k] instanceof ReferenceImpl) {
-							// Wrap in closure for K
-							((k:string) => {
-								var ref = <ReferenceImpl<any>>parent[k];
-								ref.load.on(tgt,(det)=> {
-									tgt[this.bindings[k]] = ref.value;
-								});
-							})(k);
-						}
-						*/
 					} else {
 						tgt[this.bindings[k]]= val;
 					}
@@ -223,20 +226,34 @@ module Db {
 			}
 		}
 		
+		export interface SortingData {
+			field :string;
+			desc?: boolean;
+		}
+		
 		export interface IUrled {
 			getUrl(evenIfIncomplete?:boolean) :string;
 		}
 		
+		export enum EventType {
+			UNDEFINED,
+			UPDATE,
+			REMOVED,
+			ADDED,
+			LIST_END
+		}
+		
 		export class EventDetails<T> {
+			type :EventType = EventType.UNDEFINED; 
 			payload :T = null;
 			populating = false;
 			projected = false;
-			listEnd = false;
 			originalEvent :string = null;
 			originalUrl :string = null;
 			originalKey :string = null;
 			precedingKey :string = null;
 			private handler :EventHandler = null;
+			private offed = false;
 			
 			setHandler(handler :EventHandler) {
 				this.handler = handler;
@@ -244,14 +261,19 @@ module Db {
 			
 			offMe() {
 				this.handler.offMe();
+				this.offed = true;
+			}
+			
+			wasOffed() :boolean {
+				return this.offed;
 			}
 			
 			clone() :EventDetails<T> {
 				var ret = new EventDetails<T>();
+				ret.type = this.type;
 				ret.payload = this.payload;
 				ret.populating = this.populating;
 				ret.projected = this.projected;
-				ret.listEnd = this.listEnd;
 				ret.originalEvent = this.originalEvent;
 				ret.originalUrl = this.originalUrl;
 				ret.originalKey = this.originalKey;
@@ -315,11 +337,12 @@ module Db {
 		
 		export class DbEventHandler extends EventHandler {
 			ref :FirebaseQuery;
-			private cbs :{event:string; fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void}[] = [];
+			protected cbs :{event:string; fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void}[] = [];
 
 			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void) {
+				this.cbs.push({event:event, fn:fn});
 				// TODO do something on cancelCallback? It's here only because of method signature
-				this.cbs.push({event:event, fn:this.ref.on(event, fn, (err) => {})});
+				this.ref.on(event, fn, (err) => {});
 			}
 			
 			decomission(remove :boolean):boolean {
@@ -327,7 +350,6 @@ module Db {
 				if (remove) {
 					for (var i = 0; i < this.cbs.length; i++) {
 						var cb = this.cbs[i];
-						//console.log(this.myprog + " : Listen off " + this._ref.toString() + " " + cb.event, cb.fn);
 						this.ref.off(cb.event, cb.fn);
 					}
 				}
@@ -352,8 +374,14 @@ module Db {
 			setEntity(entity :Entity) {
 				this.entity = entity;
 				if (entity && typeof entity == 'object') {
+					this.state.entEvent.set(this.entity, this);
+					/*
 					var dbacc = <IDb3Annotated>this.entity;
-					if (!dbacc.__dbevent) dbacc.__dbevent = this;
+					if (!dbacc.__dbevent) {
+						Object.defineProperty(dbacc, '__dbevent', {readable:true, writable:true, enumerable:false});
+						dbacc.__dbevent = this;
+					}
+					*/
 				}
 				// TODO clean the children if entity changed? they could be pointing to old instance data
 			}
@@ -372,7 +400,7 @@ module Db {
 				return this._originalClassMeta;
 			}
 			
-			getUrl(evenIfIncomplete = false) {
+			getUrl(evenIfIncomplete = false):string {
 				if (!this.parent) {
 					if (this.url) return this.url;
 					if (!evenIfIncomplete) return null;
@@ -389,8 +417,10 @@ module Db {
 					this.init(this.handlers[i]);
 				}
 				for (var k in this.children) {
+					if (k == 'constructor') continue;
 					this.children[k].urlInited();
 				}
+				this.saveChildrenInCache();
 			}
 			
 			on(handler:EventHandler) {
@@ -416,6 +446,10 @@ module Db {
 				this.handlers = this.handlers.filter(ch => ch !== h);
 			}
 			
+			offAll() {
+				this.handlers = this.handlers.filter(h => !h.decomission(true));
+			}
+			
 			protected init(h :EventHandler) {
 				throw new Error("Implement init in GenericEvent subclasses");
 			}
@@ -435,7 +469,7 @@ module Db {
 				}
 				if (!meta) return null;
 				var ret = this.children[meta.localName];
-				if (ret && !force) return ret;
+				//if (ret && !force) return ret;
 				if (ret && this.entity) {
 					ret.setEntity(this.entity[meta.localName]);
 					return ret;
@@ -446,9 +480,20 @@ module Db {
 				if (this.entity) {
 					ret.setEntity(this.entity[meta.localName]);
 				}
-				// TODO save the newly created event on the state cache
 				this.children[meta.localName] = ret;
+				this.saveChildrenInCache();
 				return ret;
+			}
+			
+			saveChildrenInCache(key? :string) {
+				if (!this.getUrl()) return;
+				if (key) {
+					this.state.storeInCache(this.children[key]);
+				} else {
+					for (var k in this.children) {
+						this.state.storeInCache(this.children[k]);
+					}
+				}
 			}
 			
 			parseValue(ds :FirebaseDataSnapshot) {
@@ -490,7 +535,6 @@ module Db {
 			assertLoaded():void;
 			assignUrl():void;
 			save():Promise<any>;
-			
 		}
 		
 		export class SingleDbHandlerEvent<E> extends GenericEvent {
@@ -538,12 +582,16 @@ module Db {
 			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
 				this.parseValue(ds);
 				var evd = new EventDetails<E>();
+				evd.type = EventType.UPDATE;
+				if (this.entity == null) {
+					evd.type = EventType.REMOVED;
+				}
 				evd.payload = <E>this.entity;
 				evd.originalEvent = 'value';
 				evd.originalUrl = ds.ref().toString();
 				evd.originalKey = ds.key();
 				evd.precedingKey = prevName;
-				evd.populating = !this.loaded;
+				evd.projected = !this.loaded;
 				this.lastDetail = evd;
 				this.broadcast(this.lastDetail);
 			}
@@ -621,6 +669,7 @@ module Db {
 						this.setEntity(this.classMeta.createInstance());
 					}
 					for (var k in val) {
+						if (k == 'constructor') continue;
 						var descr = this.classMeta.descriptors[k];
 						// travel sub entities 
 						if (descr) {
@@ -732,6 +781,7 @@ module Db {
 					var proms :Promise<any>[] = [];
 					// forward to sub events
 					for (var k in this.entity) {
+						if (k == 'constructor') continue;
 						var se = this.findCreateChildFor(k);
 						if (se && se['save']) {
 							proms.push((<IEntityOrReferenceEvent<any>><any>se).save());
@@ -785,16 +835,28 @@ module Db {
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				return this.dereference(ctx).then((ed) => {
+					ed.offMe();
 					if (this.pointedEvent) return this.pointedEvent.load(ctx).then((ed)=>ed);
 					return ed;
 				});
 			}
 			
+			private makeCascadingCallback(ed :EventDetails<E>, cb :(ed:EventDetails<E>)=>void) {
+				return (subed:EventDetails<E>) => {
+					cb(subed);
+					if (subed.wasOffed()) {
+						ed.offMe();
+					}
+				};
+			}
+			
 			updated(ctx:Object, callback :(ed:EventDetails<E>)=>void, discriminator :any = null) :void {
+				var precb = null;
 				this.referenced(ctx, (ed) => {
-					if (this.prevPointedEvent) this.prevPointedEvent.off(ctx, callback);
+					if (this.prevPointedEvent && precb) this.prevPointedEvent.off(ctx, precb); //, callback);
 					if (this.pointedEvent) {
-						this.pointedEvent.updated(ctx, callback);
+						precb = this.makeCascadingCallback(ed, callback);
+						this.pointedEvent.updated(ctx, precb, callback);
 					} else {
 						callback(ed);
 					}
@@ -883,6 +945,543 @@ module Db {
 				if (!this.pointedEvent) throw new Error("The reference is null, can't save it");
 				return this.pointedEvent.save();
 			}
+		}
+		
+		export interface IReadableCollection<E extends Entity> {
+			load(ctx:Object) :Promise<any>;
+			dereference(ctx:Object) :Promise<any>;
+			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+			live(ctx:Object) :void;
+			
+			// Collection events
+			added(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+			removed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+			changed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+			moved(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+		}
+		
+		export interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+			// Collection specific methods
+			remove(key :string|number|Entity) :Promise<any>;
+			fetch(ctx:Object, key :string|number|E) :Promise<EventDetails<E>>;
+			with(key :string|number|Entity) :IEntityOrReferenceEvent<E>;
+			
+			// Handling methods
+			off(ctx:Object) :void;
+			isLoaded():boolean;
+			assertLoaded():void;
+			save():Promise<any>;
+		}
+		
+		export interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
+			add(key :string|number|Entity, value :E) :Promise<any>;
+		}
+
+		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
+			add(value :E) :Promise<any>;
+			pop() :Promise<EventDetails<E>>;
+			unshift(value :E):Promise<any>;
+			shift() :Promise<EventDetails<E>>;
+		}
+		
+		export class CollectionDbEventHandler extends DbEventHandler {
+			dbEvents :string[] = null;
+			istracking = false;
+			ispopulating = false;
+			
+			hookAll(fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?:string) => void) {
+				for (var i = 0; i < this.dbEvents.length; i++) {
+					this.hook(this.dbEvents[i], fn);
+				}
+			}
+			
+			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string,event?:string) => void) {
+				super.hook(event, (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => fn(dataSnapshot, prevChildName || '', event));
+			}
+			
+			unhook(event :string) {
+				for (var i = 0; i < this.cbs.length; i++) {
+					var cb = this.cbs[i];
+					if (cb.event != event) continue;
+					this.ref.off(cb.event, cb.fn);
+				}
+			}
+			
+		}
+
+		export class MapEvent<E extends Entity> extends GenericEvent implements IMapEvent<E> {
+			isReference :boolean = false;
+			nameOnParent :string = null;
+			project :string[] = null;
+			binding :BindingImpl = null;
+			sorting :SortingData = null;
+			
+			realField :any = null;
+			loaded :boolean = false;
+			
+			setEntity(entity :Entity) {
+				var preEntity = this.entity || {};
+				super.setEntity(entity);
+				this.realField = entity;
+				this.entity = preEntity;
+			}
+			
+			added(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void {
+				var h = new CollectionDbEventHandler(ctx, callback);
+				h.dbEvents = ['child_added','value'];
+				h.ispopulating = true;
+				super.on(h);
+			}
+			
+			removed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void {
+				var h = new CollectionDbEventHandler(ctx, callback);
+				h.dbEvents = ['child_removed'];
+				super.on(h);
+			}
+			
+			changed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void {
+				var h = new CollectionDbEventHandler(ctx, callback);
+				h.dbEvents = ['child_changed'];
+				super.on(h);
+			}
+			
+			moved(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void {
+				var h = new CollectionDbEventHandler(ctx, callback);
+				h.dbEvents = ['child_moved'];
+				super.on(h);
+			}
+			
+			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void, discriminator?:any) :void {
+				var h = new CollectionDbEventHandler(ctx, callback, discriminator);
+				h.dbEvents = ['child_added','child_removed','child_changed','child_moved','value'];
+				h.ispopulating = true;
+				h.istracking = true;
+				super.on(h);
+			}
+			
+			live(ctx :Object) {
+				this.updated(ctx, ()=>{});
+			}
+			
+			load(ctx:Object,deref = true) :Promise<any> {
+				return new Promise<EventDetails<E>>((resolve,error) => {
+					var allProms :Promise<any>[] = [];
+					this.updated(ctx, (det) => {
+						if (det.type == EventType.LIST_END) {
+							det.offMe();
+							if (allProms.length) {
+								Promise.all(allProms).then(() => {
+									resolve(null);
+								});
+							} else {
+								resolve(null);
+							}
+						}
+						if (det.type != EventType.ADDED) return;
+						if (this.isReference && deref) {
+							var evt = <ReferenceEvent<E>>this.findCreateChildFor(det.originalKey);
+							allProms.push(evt.load(ctx).then(()=>{}));
+						}
+					})
+				});
+			}
+			
+			dereference(ctx:Object) :Promise<any> {
+				if (!this.isReference) return this.load(ctx);
+				return this.load(ctx,false);
+			}
+			
+			init(h :EventHandler) {
+				var sh = <CollectionDbEventHandler>h;
+				sh.ref = new Firebase(this.getUrl());
+				if (this.sorting) {
+					sh.ref = sh.ref.orderByChild(this.sorting.field);
+				}
+				sh.event = this;
+				sh.hookAll((ds,prev,event) => this.handleDbEvent(sh,event,ds,prev));
+			}
+			
+			findCreateChildFor(key :String, force? :boolean):GenericEvent
+			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent
+			findCreateChildFor(param :any, force = false):GenericEvent {
+				var meta:MetaDescriptor = null;
+				if (!(param instanceof MetaDescriptor)) {
+					if (this.isReference) {
+						var refmeta = Db.meta.reference(this.classMeta.ctor, this.project);
+						refmeta.localName = param;
+						param = refmeta;
+					} else {
+						var embmeta = Db.meta.embedded(this.classMeta.ctor, this.binding);
+						embmeta.localName = param;
+						param = embmeta;
+					}
+				}
+				return super.findCreateChildFor(param, force);
+			}
+
+			
+			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :FirebaseDataSnapshot, prevKey :string) {
+				console.log("Got event " + event, " prev " + prevKey + " key " + ds.key(), ds.val());
+				var det = new EventDetails<E>();
+				det.originalEvent = event;
+				det.originalKey = ds.key();
+				det.originalUrl = ds.ref().toString();
+				det.precedingKey = prevKey;
+				det.populating = handler.ispopulating; 
+				if (event == 'value') {
+					handler.unhook('value');
+					if (handler.ispopulating) {
+						this.loaded = true;
+					}
+					handler.ispopulating = false;
+					det.type = EventType.LIST_END;
+					handler.handle(det);
+					return;
+				}
+				
+				var subev = this.findCreateChildFor(ds.key());
+				var val :E = null;
+				subev.parseValue(ds);
+				val = <E>subev.entity;
+				if (event == 'child_removed') {
+					det.type = EventType.REMOVED;
+				} else if (event == 'child_added') {
+					det.type = EventType.ADDED;
+				} else {
+					det.type = EventType.UPDATE;
+				}
+				det.payload = val;
+				
+				if (handler.istracking) {
+					this.addToInternal(event,ds,val,det);
+				}
+				
+				handler.handle(det);
+			}
+			
+			add(key :string|number|Entity, value? :Entity) :Promise<any> {
+				var k :string = null;
+				var v = value;
+				if (!v) {
+					v = key;
+					k = this.createKeyFor(v);
+				} else {
+					k = this.normalizeKey(key);
+				}
+				var evt = this.findCreateChildFor(k);
+				evt.setEntity(v);
+				return new Promise<any>((ok,err) => {
+					var fb = new Firebase(evt.getUrl());
+					fb.set(evt.serialize(false), (fberr) => {
+						if (fberr) {
+							err(fberr);
+						} else {
+							ok(null);
+						}
+					});
+				});
+				// Can't use save because reference event save does not save the reference
+				//return (<IEntityOrReferenceEvent<E>><any>evt).save();
+			}
+			
+			createKeyFor(value :Entity) :string {
+				return Utils.IdGenerator.next();
+			}
+			
+			normalizeKey(key :string|number|Entity) :string {
+				if (typeof key === 'string') {
+					key = <string>key;
+				} else if (typeof key === 'number') {
+					key = key + '';
+				} else {
+					var enturl = this.state.createEvent(key).getUrl();
+					if (!enturl) throw new Error("The entity used as a key in a map must be already saved elsewhere");
+					var entroot = this.state.entityRootFromUrl(enturl);
+					enturl = enturl.substr(entroot.getUrl().length);
+					key = enturl.replace(/\//g,'');
+				}
+				return <string>key;
+			}
+			
+			addToInternal(event :string, ds :FirebaseDataSnapshot, val :Entity, det :EventDetails<E>) {
+				if (event == 'child_removed') {
+					delete this.realField[ds.key()];
+				} else {
+					this.realField[ds.key()] = val;
+				}
+				if (this.parent && this.parent.entity) {
+					this.parent.entity[this.nameOnParent] = this.realField;
+				}
+			}
+
+			remove(keyOrValue :string|number|Entity) :Promise<any> {
+				var key = this.normalizeKey(keyOrValue);
+				return new Promise<any>((ok,err) => {
+					var fb = new Firebase(this.getUrl() + key +'/');
+					fb.remove((fberr) => {
+						if (fberr) {
+							err(fberr);
+						} else {
+							ok(null);
+						}
+					});
+				});
+			}
+			
+			fetch(ctx:Object, key :string|number|Entity) :Promise<EventDetails<E>> {
+				var k = this.normalizeKey(key);
+				var evt = this.findCreateChildFor(k);
+				return (<IEntityOrReferenceEvent<E>><any>evt).load(ctx);
+			}
+			
+			with(key :string|number|Entity) :IEntityOrReferenceEvent<E> {
+				var k = this.normalizeKey(key);
+				return <IEntityOrReferenceEvent<E>><any>this.findCreateChildFor(k);
+			}
+			
+			isLoaded() {
+				return this.loaded;
+			}
+			
+			assertLoaded() {
+				if (!this.loaded) throw new Error("Collection at url " + this.getUrl() + " is not loaded");
+			}
+			
+			save() :Promise<any> {
+				if (!this.isLoaded) {
+					console.log('not saving cause not loaded');
+					// TODO maybe we should save children that were loaded anyway
+					return;
+				}
+				return new Promise<any>((ok,err) => {
+					var fb = new Firebase(this.getUrl());
+					var obj = this.serialize();
+					fb.set(obj, (fberr) => {
+						if (fberr) {
+							err(fberr);
+						} else {
+							ok(null);
+						}
+					});
+				});
+			}
+			
+			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				var obj = {};
+				var preEntity = this.entity;
+				this.entity = this.realField;
+				try {
+					var ks = Object.keys(this.realField);
+					for (var i = 0; i < ks.length; i++) {
+						var k = ks[i];
+						obj[k] = this.findCreateChildFor(k).serialize();
+					}
+					return obj;
+				} finally {
+					this.entity = preEntity;
+				}
+			}
+		}
+		
+		export class EventedArray<E> {
+			// TODO for the list, we NEED to store the key and a weak, supporting more keys per instance
+			// the reason is that a list can contain more than once the same referenced instance
+			// so, we have to use the key of the datasnapshot as it's the only way of identifing a specific
+			// instance in the list.
+			
+			// But still, even if i have keys, i can't really locate them, i need a parallel list
+			// of ordered keys, but then it would not be in sync with client side modifications of
+			// the array, which we have to forbid. 
+			
+			arrayValue :E[] = [];
+			constructor(
+				public collection :MapEvent<E>
+			) {
+				
+			}
+
+			private findPositionFor(ent :E|string) :number {
+				var e = <E>ent;
+				if (typeof ent === 'string') {
+					e = this.collection.realField[ent];
+				}
+				return this.arrayValue.indexOf(e);
+			}
+			
+			private findPositionAfter(prev :E|string) :number {
+				if (!prev) return 0;
+				var pos = this.findPositionFor(prev);
+				if (pos == -1) return this.arrayValue.length;
+				return pos+1;
+			}
+  			
+			
+			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
+				var curpos = this.findPositionFor(val);
+				if (event == 'child_removed') {
+					delete this.collection.realField[ds.key()];
+					if (curpos > -1) this.arrayValue.splice(curpos,1);
+					return;
+				}
+				this.collection.realField[ds.key()] = val;
+
+				var newpos = this.findPositionAfter(det.precedingKey);
+				
+				console.log("cur " + curpos + " newpos " + newpos);
+				
+				if (curpos == newpos) {
+					this.arrayValue[curpos] = val;
+					return;
+				} else {
+					if (curpos > -1) this.arrayValue.splice(curpos,1);
+					this.arrayValue.splice(newpos, 0, val);
+				}
+			}
+			
+			prepareSerializeSet() {
+				if (this.arrayValue) {
+					// Add all elements found in the array to the map
+					var fndkeys = {};
+					for (var i = 0; i < this.arrayValue.length; i++) {
+						var e = this.arrayValue[i];
+						if (!e) continue;
+						var k = this.collection.createKeyFor(e);
+						this.collection.realField[k] = e;
+						fndkeys[k] = true;
+					}
+					// Remove all those that are not there anymore
+					var ks = Object.keys(this.collection.realField);
+					for (var i = 0; i < ks.length; i++) {
+						if (!fndkeys[ks[i]]) delete this.collection.realField[ks[i]];
+					}
+				}
+			}
+			
+			prepareSerializeList() {
+				if (this.arrayValue) {
+					// Find keys in positions
+					var keys :string[] = [];
+					var ks = Object.keys(this.collection.realField);
+					for (var i = 0; i < ks.length; i++) {
+						var k = ks[i];
+						var rfe = this.collection.realField[k];
+						var pos = this.findPositionFor(rfe);
+						if (pos == -1) {
+							delete this.collection.realField[ks[i]];
+						} else {
+							keys[pos] = k;
+						}
+					}
+					
+					for (var i = 0; i < this.arrayValue.length; i++) {
+						var e = this.arrayValue[i];
+						if (!e) continue;
+						if (!keys[i]) { 
+							this.collection.realField[this.collection.createKeyFor(e)] = e;
+						}
+					}
+				}
+			}
+		}
+		
+		export class ArrayCollectionEvent<E extends Entity> extends MapEvent<E> {
+			protected evarray = new EventedArray<E>(this);
+
+			setEntity(entity :Entity) {
+				var preReal = this.realField || {};
+				super.setEntity(entity);
+				this.realField = preReal;
+				this.evarray.arrayValue = <E[]>entity;
+			}
+
+			
+			add(value? :Entity) :Promise<any> {
+				if (arguments.length > 1) throw new Error("Cannot add to set or list specifying a key, add only the entity");
+				var v = value;
+				var k = this.createKeyFor(v);
+				return super.add(k,v);
+			}
+
+			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
+				this.evarray.addToInternal(event, ds, val, det);
+				if (this.parent && this.parent.entity) {
+					this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
+				}
+			}
+			
+		}
+		
+		export class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+			createKeyFor(value :Entity) :string {
+				if (this.isReference) return Utils.IdGenerator.next();
+				var enturl = this.state.createEvent(value).getUrl();
+				if (!enturl)  return Utils.IdGenerator.next();
+				if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
+					throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+				}
+				enturl = enturl.substr(this.getUrl().length);
+				enturl = enturl.replace(/\//g,'');
+				return enturl;
+			}
+			
+			normalizeKey(key :string|number|Entity) :string {
+				if (typeof key === 'string') {
+					key = <string>key;
+				} else if (typeof key === 'number') {
+					key = key + '';
+				}
+				return <string>key.toString();
+			}
+			
+			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				this.evarray.prepareSerializeList();
+				return super.serialize(localsOnly, fields);
+			}
+		}
+		
+		export class SetEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+			
+			createKeyFor(value :Entity) :string {
+				// get the url
+				var enturl = this.state.createEvent(value).getUrl();
+				if (this.isReference) {
+					// if it is a reference, use path from the root path
+					if (!enturl) throw new Error("Cannot add to a set a reference that has not been loaded or not yet been saved");
+					var entroot = this.state.entityRootFromUrl(enturl);
+					enturl = enturl.substr(entroot.getUrl().length);
+				} else {
+					// if it's an embedded, check if it has a url and substract my url to obtain id
+					if (enturl) {
+						if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
+							throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+						}
+						enturl = enturl.substr(this.getUrl().length);
+					} else {
+						// if no url, generate a new random id
+						return Utils.IdGenerator.next();
+					}
+				}
+				// Remove slashes from the resulting url
+				enturl = enturl.replace(/\//g,'');
+				return enturl;
+			}
+			
+			normalizeKey(key :string|number|Entity) :string {
+				if (typeof key === 'string') {
+					key = <string>key;
+				} else if (typeof key === 'number') {
+					key = key + '';
+				} else {
+					return this.createKeyFor(<Entity>key);
+				}
+				return <string>key;
+			}
+			
+			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				this.evarray.prepareSerializeSet();
+				return super.serialize(localsOnly, fields);
+			}
+			
 		}
 		
 		export interface IObservableEvent<E extends Entity> extends IUrled {
@@ -996,6 +1595,7 @@ module Db {
 			conf :any;
 			myMeta = allMetadata;
 			db :IDb3Static;
+			entEvent = new Utils.WeakWrap<GenericEvent>();
 			
 			configure(conf :any) {
 				this.conf = conf;
@@ -1005,8 +1605,15 @@ module Db {
 			}
 			
 			reset() {
+				// Automatic off for all handlers?
+				for (var k in this.cache) {
+					var val = this.cache[k];
+					if (val instanceof GenericEvent) {
+						(<GenericEvent>val).offAll();
+					}
+				}
+				// Clean the cache
 				this.cache = {};
-				// TODO automatic off for all handlers?
 			}
 			
 			entityRoot(ctor :EntityType<any>) :IEntityRoot<any>
@@ -1031,12 +1638,23 @@ module Db {
 				return new EntityRoot<any>(this, meta);
 			}
 			
+			entityRootFromUrl(url :string) :IEntityRoot<any> {
+				// Check if the given url pertains to me
+				if (url.indexOf(this.getUrl()) != 0) return null;
+				// Make the url relative
+				var relurl = url.substring(this.getUrl().length);
+				var meta = this.myMeta.findRooted(relurl);
+				if (!meta) throw new Error("No entity root found for url " + url);
+				return this.entityRoot(meta); 
+			}
+			
 			getUrl() :string {
 				return this.conf['baseUrl'];
 			}
 			
-			createEvent(e :Entity, stack :MetaDescriptor[]) :GenericEvent {
-				var roote = (<IDb3Annotated>e).__dbevent;
+			createEvent(e :Entity, stack :MetaDescriptor[] = []) :GenericEvent {
+				//var roote = (<IDb3Annotated>e).__dbevent;
+				var roote = this.entEvent.get(e);
 				if (!roote) {
 					var clmeta = this.myMeta.findMeta(e);
 					var nre = new EntityEvent();
@@ -1044,7 +1662,8 @@ module Db {
 					nre.setEntity(e);
 					nre.classMeta = clmeta;
 					roote = nre;
-					(<IDb3Annotated>e).__dbevent = roote;
+					//(<IDb3Annotated>e).__dbevent = roote;
+					this.entEvent.set(e, roote);
 				}
 				// Follow each call stack
 				var acp = roote;
@@ -1081,6 +1700,16 @@ module Db {
 				return event;
 			}
 			
+			storeInCache(evt :GenericEvent) {
+				var url = evt.getUrl();
+				if (!url) return;
+				var pre = this.cache[url];
+				if (pre && pre !== evt) {
+					throw new Error('Storing in cache two different events for the same key ' + url);
+				}
+				this.cache[url] = evt;
+			}
+			
 			loadEventWithInstance(url :string, meta? :ClassMetadata) :GenericEvent {
 				var dis = null;
 				var segs = url.split('/');
@@ -1107,7 +1736,10 @@ module Db {
 						if (inst.dbInit) {
 							(<IDb3Initable>inst).dbInit(url, this.db);
 						}
+						/*
+						Object.defineProperty(inst, '__dbevent', {readable:true, writable:true, enumerable:false});
 						(<IDb3Annotated>inst).__dbevent = event;
+						*/
 						event.setEntity(inst);
 					}
 				}
@@ -1220,6 +1852,7 @@ module Db {
 					sup.addSubclass(this);
 				}
 				for (var k in sup.descriptors) {
+					if (k == 'constructor') continue;
 					if (this.descriptors[k]) continue;
 					this.descriptors[k] = sup.descriptors[k];
 				}
@@ -1286,6 +1919,78 @@ module Db {
 			
 		}
 		
+		export class MapMetaDescriptor extends MetaDescriptor {
+			isReference = false;
+			sorting :Internal.SortingData = null;
+			
+			
+			named(name :string) :MapMetaDescriptor {
+				super.named(name);
+				return this;
+			}
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new MapEvent();
+				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
+				ret.classMeta = allMetadata.findMeta(this.ctor);
+				ret.nameOnParent = this.localName;
+				ret.isReference = this.isReference;
+				ret.sorting = this.sorting;
+				return ret;
+			}
+			
+		}
+		
+		export class SetMetaDescriptor extends MetaDescriptor {
+			isReference = false;
+			sorting :Internal.SortingData = null;
+			
+			
+			named(name :string) :SetMetaDescriptor {
+				super.named(name);
+				return this;
+			}
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new SetEvent();
+				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
+				ret.classMeta = allMetadata.findMeta(this.ctor);
+				ret.nameOnParent = this.localName;
+				ret.isReference = this.isReference;
+				ret.sorting = this.sorting;
+				return ret;
+			}
+			
+		}
+
+		export class ListMetaDescriptor extends MetaDescriptor {
+			isReference = false;
+			sorting :Internal.SortingData = null;
+			
+			
+			named(name :string) :SetMetaDescriptor {
+				super.named(name);
+				return this;
+			}
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new ListEvent();
+				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
+				ret.classMeta = allMetadata.findMeta(this.ctor);
+				ret.nameOnParent = this.localName;
+				ret.isReference = this.isReference;
+				ret.sorting = this.sorting;
+				return ret;
+			}
+			
+		}
+		
 		export class ObservableMetaDescriptor extends MetaDescriptor {
 			
 			createEvent(allMetadata :Metadata) :GenericEvent {
@@ -1332,6 +2037,15 @@ module Db {
 				}
 				this.classes.push(md);
 				return md;
+			}
+			
+			findRooted(relurl :string) :ClassMetadata {
+				for (var i = 0; i < this.classes.length; i++) {
+					var acc = this.classes[i];
+					var acr = acc.root;
+					if (relurl.indexOf(acr) == 0) return acc;
+				}
+				return null;
 			}
 			
 			findDiscriminated(base :ClassMetadata, dis :string) :ClassMetadata {
@@ -1420,6 +2134,7 @@ module Db {
 		
 		export function copyObj(from :Object, to :Object) {
 			for (var k in from) {
+				if (k == 'constructor') continue;
 				var val = from[k];
 				if (typeof val === 'object') {
 					var valto = to[k] || {};
@@ -1480,6 +2195,44 @@ module Db {
 				return id;
 			}
 		}
+		
+		
+		
+		export class WeakWrap<V> {
+			private wm :WeakMap<any,V> = null;
+			private id :string;
+			
+			constructor() {
+				if (typeof WeakMap !== 'undefined') {
+					this.wm = new WeakMap<any,V>();
+				} else {
+					this.id = IdGenerator.next();
+				}
+			}
+			
+			private getOrMake(k :Object) {
+				if (!k.hasOwnProperty('__weaks')) { 
+					Object.defineProperty(k, '__weaks', {readable:true, writable:true, enumerable:false,value:{}});
+				}
+				return k['__weaks'];
+			}
+			
+			get(k:any) :V {
+				if (this.wm) return this.wm.get(k);
+				var obj = this.getOrMake(k);
+				return obj[this.id];
+			}
+			
+			set(k:any, val :V) {
+				if (this.wm) {
+					this.wm.set(k,val);
+					return;
+				}
+				var obj = this.getOrMake(k);
+				obj[this.id] = val;
+			}
+			
+		}
 
 	}
 	
@@ -1487,6 +2240,13 @@ module Db {
 		var ret = new Internal.BindingImpl();
 		ret.bind(localName, targetName,live);
 		return ret;
+	}
+	
+	export function sortBy(field :string, desc = false) : Internal.SortingData {
+		return {
+			field: field,
+			desc :desc
+		};
 	}
 	
 	// --- Annotations
@@ -1501,6 +2261,30 @@ module Db {
 	export function reference(def :EntityType<any>, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			var ret = meta.reference(def, project);
+			addDescriptor(target, propertyKey, ret);
+			installMetaGetter(target, propertyKey.toString(), ret);
+		}
+	}
+	
+	export function map(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+		return function(target: Object, propertyKey: string | symbol) {
+			var ret = meta.map(valueType, reference, sorting);
+			addDescriptor(target, propertyKey, ret);
+			installMetaGetter(target, propertyKey.toString(), ret);
+		}
+	}
+	
+	export function set(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+		return function(target: Object, propertyKey: string | symbol) {
+			var ret = meta.set(valueType, reference, sorting);
+			addDescriptor(target, propertyKey, ret);
+			installMetaGetter(target, propertyKey.toString(), ret);
+		}
+	}
+
+	export function list(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+		return function(target: Object, propertyKey: string | symbol) {
+			var ret = meta.list(valueType, reference, sorting);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
 		}
@@ -1566,10 +2350,12 @@ module Db {
 			enumerable: true,
 			set: function(v) {
 				this[nkey] = v;
+				/*
 				var mye = (<Internal.IDb3Annotated>this).__dbevent;
 				if (mye) {
 					mye.findCreateChildFor(propertyKey, true);
 				}
+				*/
 			},
 			get: function() {
 				if (lastExpect && this !== lastExpect) {
@@ -1605,6 +2391,30 @@ module Db {
 			return ret;
 		}
 		
+		export function map(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.MapMetaDescriptor {
+			var ret = new Db.Internal.MapMetaDescriptor();
+			ret.setType(valuetype);
+			ret.isReference = reference;
+			ret.sorting = sorting;
+			return ret;
+		}
+		
+		export function set(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.SetMetaDescriptor {
+			var ret = new Db.Internal.SetMetaDescriptor();
+			ret.setType(valuetype);
+			ret.isReference = reference;
+			ret.sorting = sorting;
+			return ret;
+		}
+		
+		export function list(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.ListMetaDescriptor {
+			var ret = new Db.Internal.ListMetaDescriptor();
+			ret.setType(valuetype);
+			ret.isReference = reference;
+			ret.sorting = sorting;
+			return ret;
+		}
+		
 		export function observable() :Db.Internal.ObservableMetaDescriptor {
 			var ret = new Db.Internal.ObservableMetaDescriptor();
 			return ret;
@@ -1632,3 +2442,6 @@ module Db {
 }
 
 export = Db;
+
+
+

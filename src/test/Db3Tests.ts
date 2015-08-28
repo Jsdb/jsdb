@@ -125,6 +125,36 @@ class WithPreloads {
 	ref :WithProps;
 }
 
+@Db3.root('withMap')
+class WithMap {
+	@Db3.map(SubEntity, false)
+	embedMap :{[index:string]:SubEntity} = {};
+	
+	@Db3.map(WithProps, true)
+	refMap :{[index:string]:WithProps} = {};
+}
+
+@Db3.root('withSet')
+class WithSet {
+	@Db3.set(SubEntity, false)
+	embedSet :SubEntity[] = [];
+	
+	@Db3.set(WithProps, true)
+	refSet :WithProps[] = [];
+	
+	@Db3.set(SubEntity, false, Db3.sortBy('str'))
+	sortedSet :SubEntity[] = [];
+	
+}
+
+@Db3.root('withList')
+class WithList {
+	@Db3.list(SubEntity, false)
+	embedList :SubEntity[] = [];
+	
+	@Db3.list(WithProps, true)
+	refList :WithProps[] = [];
+}
 
 /*
 class WithCollections extends Db.Entity {
@@ -157,6 +187,7 @@ describe('Db3 >', () => {
 	var wp1Fb :Firebase;
 	var wp2Fb :Firebase;
 	var wp3Fb :Firebase;
+	var wp4Fb :Firebase;
 	
 	var wsFb :Firebase;
 	var ws1Fb :Firebase;
@@ -179,6 +210,21 @@ describe('Db3 >', () => {
 	
 	var whFb :Firebase;
 	var wh1Fb :Firebase;
+
+	var wmFb :Firebase;
+	var wm1Fb :Firebase;
+	var wm2Fb :Firebase;
+	var wm3Fb :Firebase;
+
+	var wstFb :Firebase;
+	var wst1Fb :Firebase;
+	var wst2Fb :Firebase;
+	var wst3Fb :Firebase;
+
+	var wltFb :Firebase;
+	var wlt1Fb :Firebase;
+	var wlt2Fb :Firebase;
+	var wlt3Fb :Firebase;
 	
 	var rooton;
 	var progr = 0;
@@ -241,6 +287,17 @@ describe('Db3 >', () => {
 				substr: 'Sub String'
 			},
 			_dis:'more'
+		}, opCnter);
+		
+		wp4Fb = wpFb.child('wp4');
+		opcnt++;
+		wp4Fb.set({
+			str: 'String 4',
+			num: 500,
+			arr: [4,5,6],
+			subobj: {
+				substr: 'Sub String'
+			}
 		}, opCnter);
 		
 		wsFb = new Firebase(baseUrl + '/withSubs');
@@ -387,6 +444,105 @@ describe('Db3 >', () => {
 		opcnt++;
 		wh1Fb.set({
 			num: 123
+		}, opCnter);
+		
+		wmFb = new Firebase(baseUrl + '/withMap');
+		wm1Fb = wmFb.child('wm1');
+		opcnt++;
+		wm1Fb.set({
+			embedMap: {
+				a : { str: 'aChild'},
+				b : { str: 'bChild'},
+				c : { 
+					str: 'cChild',
+					_dis: 'oth'
+				}
+			}
+		}, opCnter);
+		
+		wm2Fb = wmFb.child('wm2');
+		opcnt++;
+		wm2Fb.set({
+			refMap: {
+				a : { _ref: baseUrl + 'withProps/wp1'},
+				b : { _ref: baseUrl + 'withProps/wp2'},
+				c : { _ref: baseUrl + 'withProps/more*wp3'}
+			}
+		}, opCnter);
+
+		wstFb = new Firebase(baseUrl + '/withSet');
+		wst1Fb = wstFb.child('ws1');
+		opcnt++;
+		wst1Fb.set({
+			embedSet: {
+				'00a' : { str: '3 a'},
+				'00b' : { str: '2 b'},
+				'00c' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			},
+			sortedSet: {
+				'00a' : { str: '3 a'},
+				'00b' : { str: '2 b'},
+				'00c' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			}
+		}, opCnter);
+		
+		wst2Fb = wstFb.child('ws2');
+		opcnt++;
+		wst2Fb.set({
+			refSet: {
+				'wp1' : { _ref: baseUrl + 'withProps/wp1'},
+				'wp2' : { _ref: baseUrl + 'withProps/wp2'},
+				'more*wp3' : { _ref: baseUrl + 'withProps/more*wp3'}
+			}
+		}, opCnter);
+
+		wst3Fb = wstFb.child('ws3');
+		opcnt++;
+		wst3Fb.set({
+			refSet: {
+				'wp2' : { _ref: baseUrl + 'withProps/wp2'},
+				'wp4' : { _ref: baseUrl + 'withProps/wp4'},
+			}
+		}, opCnter);
+		
+		
+		
+		wltFb = new Firebase(baseUrl + '/withList');
+		wlt1Fb = wltFb.child('wl1');
+		opcnt++;
+		wlt1Fb.set({
+			embedList: {
+				'0PMg765te9nNvKoP08Ndpa' : { str: '3 a'},
+				'0PMg765te9nNvKoP08Ndpb' : { str: '2 b'},
+				'0PMg765te9nNvKoP08Ndpc' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			},
+			sortedList: {
+				'0PMg765te9nNvKoP08Ndpa' : { str: '3 a'},
+				'0PMg765te9nNvKoP08Ndpb' : { str: '2 b'},
+				'0PMg765te9nNvKoP08Ndpc' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			}
+		}, opCnter);
+		
+		wlt2Fb = wltFb.child('wl2');
+		opcnt++;
+		wlt2Fb.set({
+			refList: {
+				'0PMg765te9nNvKoP08Ndpa' : { _ref: baseUrl + 'withProps/wp1'},
+				'0PMg765te9nNvKoP08Ndpb' : { _ref: baseUrl + 'withProps/wp2'},
+				'0PMg765te9nNvKoP08Ndpc' : { _ref: baseUrl + 'withProps/more*wp3'}
+			}
 		}, opCnter);
 		
 		// Keep reference alive in ram, faster tests and less side effects
@@ -722,7 +878,7 @@ describe('Db3 >', () => {
 				});
 			});
 			
-			it.only('should dereference a reference with projections', () => {
+			it('should dereference a reference with projections', () => {
 				var wr1 = Db(WithRef).load('wr2');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
 				return refevent.dereference(this).then((det) => {
@@ -985,16 +1141,18 @@ describe('Db3 >', () => {
 			it('should serialize correctly reference projections', () => {
 				var wpr = new WithPreloads();
 				var wp1 = Db(WithProps).load('wp1');
-				wpr.ref = wp1;
-				
-				var ee = <Db3.Internal.GenericEvent><any>Db(wpr);
-				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
-					ref: {
-						_ref: baseUrl + 'withProps/wp1/',
-						str: 'String 1',
-						num: 200
-					}
-				}));
+				return Db(wp1).load(this).then(() => {
+					wpr.ref = wp1;
+					
+					var ee = <Db3.Internal.GenericEvent><any>Db(wpr);
+					M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
+						ref: {
+							_ref: baseUrl + 'withProps/wp1/',
+							str: 'String 1',
+							num: 200
+						}
+					}));
+				});
 			});
 			
 			it('should serialize correctly polimorphic root references', () => {
@@ -1304,6 +1462,580 @@ describe('Db3 >', () => {
 				M.assert("Resolved the ref").when(wr1.othSubRef.str).is("Sub String 1");
 			});
 	
+		});
+	});
+	
+	describe('Collections >', ()=>{
+		describe('Map >', ()=>{
+			it('should notify simple adds for each element',(done)=>{
+				var wm1 = Db(WithMap).load('wm1');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				Db(wm1.embedMap).added(this, (det) => {
+					if (det.type != Db3.Internal.EventType.LIST_END) {
+						recvs.push(det);
+						return;
+					}
+					assert("received 3 events").when(recvs).is(M.withLength(3));
+					assert("event 0 is right").when(recvs[0]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: M.aFalsey,
+						originalKey: 'a',
+						payload: {
+							str: 'aChild'
+						}
+					}));
+					assert("event 1 is right").when(recvs[1]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: 'a',
+						originalKey: 'b',
+						payload: {
+							str: 'bChild'
+						}
+					}));
+					assert("event 2 is right").when(recvs[2]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: 'b',
+						originalKey: 'c',
+						payload: M.either(M.instanceOf(SubEntityOth)).and(M.objectMatching({
+							str: 'cChild'
+						}))
+					}));
+					assert("end event is right").when(det).is(M.objectMatching({
+						type: Db3.Internal.EventType.LIST_END,
+						populating: true,
+					}));
+					
+					assert("field is still empty").when(wm1.embedMap).is(M.objectMatchingStrictly({}));
+					
+					det.offMe();
+					done();
+				});
+			});
+
+			it('should notify simple adds for each element on references',(done)=>{
+				var wm1 = Db(WithMap).load('wm2');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				Db(wm1.refMap).added(this, (det) => {
+					if (det.type != Db3.Internal.EventType.LIST_END) {
+						recvs.push(det);
+						return;
+					}
+					assert("received 3 events").when(recvs).is(M.withLength(3));
+					assert("event 0 is right").when(recvs[0]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: M.aFalsey,
+						originalKey: 'a',
+						payload: M.instanceOf(WithProps)
+					}));
+					assert("event 1 is right").when(recvs[1]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: 'a',
+						originalKey: 'b',
+						payload: M.instanceOf(WithProps)
+					}));
+					assert("event 2 is right").when(recvs[2]).is(M.objectMatching({
+						type: Db3.Internal.EventType.ADDED,
+						populating: true,
+						precedingKey: 'b',
+						originalKey: 'c',
+						payload: M.instanceOf(WithMoreProps)
+					}));
+					assert("end event is right").when(det).is(M.objectMatching({
+						type: Db3.Internal.EventType.LIST_END,
+						populating: true,
+					}));
+					
+					assert("field is still empty").when(wm1.refMap).is(M.objectMatchingStrictly({}));
+					
+					det.offMe();
+					done();
+				});
+			});
+
+			it('should notify elements removal',(done)=>{
+				var wm1 = Db(WithMap).load('wm1');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				Db(wm1.embedMap).removed(this, (det) => {
+					recvs.push(det);
+					det.offMe();
+				});
+				
+				setTimeout(() => {
+					wm1Fb.child('embedMap/b').remove();
+					assert("received one event").when(recvs).is(M.withLength(1));
+					assert("event was right").when(recvs[0]).is(M.objectMatching({
+						type: Db3.Internal.EventType.REMOVED,
+						populating: false,
+						originalKey: 'b',
+						payload: {
+							str: 'bChild'
+						}
+					}));
+					done();
+				}, 1000);
+			});
+
+			it('should notify elements modification',(done)=>{
+				var wm1 = Db(WithMap).load('wm1');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				Db(wm1.embedMap).changed(this, (det) => {
+					recvs.push(det);
+					det.offMe();
+				});
+				
+				setTimeout(() => {
+					wm1Fb.child('embedMap/b/str').set('modified');
+					assert("received one event").when(recvs).is(M.withLength(1));
+					assert("event was right").when(recvs[0]).is(M.objectMatching({
+						type: Db3.Internal.EventType.UPDATE,
+						populating: false,
+						originalKey: 'b',
+						payload: {
+							str: 'modified'
+						}
+					}));
+					done();
+				}, 1000);
+			});
+			
+			it('should keep the field in sync when using update',(done)=>{
+				var wm1 = Db(WithMap).load('wm1');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				Db(wm1.embedMap).updated(this, (det) => {
+					if (det.type != Db3.Internal.EventType.LIST_END) {
+						recvs.push(det);
+						return;
+					}
+					assert("received 3 events").when(recvs).is(M.withLength(3));
+					
+					assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
+						a: { str: 'aChild' },
+						b: { str: 'bChild' },
+						c: { str: 'cChild' }
+					}));
+					
+					det.offMe();
+					done();
+				});
+			});
+			
+			it('should load all the collection with load',()=>{
+				var wm1 = Db(WithMap).load('wm1');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				return Db(wm1.embedMap).load(this).then(() => {
+					assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
+						a: { str: 'aChild' },
+						b: { str: 'bChild' },
+						c: { str: 'cChild' }
+					}));
+				});
+			});
+			
+			it('should load all the collection resolving references with load',()=>{
+				var wm1 = Db(WithMap).load('wm2');
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				return Db(wm1.refMap).load(this).then(() => {
+					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
+						a : {
+							str: 'String 1',
+							num: 200,
+							arr: [1,2,3],
+							subobj: {
+								substr: 'Sub String'
+							},
+							ignored: 'ignored'
+						},
+						b: {
+							str: 'String 2',
+							num: 300,
+							arr: [2,3,4],
+							subobj: {
+								substr: 'Sub String'
+							}
+						},
+						c:{
+							str: 'String 3',
+							num: 400,
+							moreNum: 401,
+							arr: [3,4,5],
+							subobj: {
+								substr: 'Sub String'
+							},
+							_dis:'more'
+						}
+					}));
+				});
+			});
+				
+			it('should load all the collection only dereferencing references',()=>{
+				var wm1 = Db(WithMap).load('wm2');
+				var evt = <Db3.Internal.GenericEvent><any>Db(wm1);
+				var state = evt.state;
+				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				return Db(wm1.refMap).dereference(this).then(() => {
+					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
+						a : {
+							str: 'useless',
+							num: 0,
+							arr: [],
+							subobj: {
+								substr: ''
+							}
+						},
+						b: {
+							str: 'useless',
+							num: 0,
+							arr: [],
+							subobj: {
+								substr: ''
+							}
+						},
+						c:{
+							str: 'useless',
+							num: 0,
+							arr: [],
+							subobj: {
+								substr: ''
+							}
+						}
+					}));
+				});
+			});
+			
+			it('should add embedded to the map', () => {
+				var wm1 = Db(WithMap).load('wm1');
+				var sub = new SubEntityOth();
+				sub.str = 'added';
+				return Db(wm1.embedMap).add('d', sub).then(() => {
+					return new Promise((ok) => {
+						wm1Fb.child('embedMap').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert('has added the element').when(ds.val()).is(M.objectMatching({
+						d: {
+							str: 'added',
+							_dis: 'oth'
+						}
+					}));
+				});
+			});
+			
+			it('should add reference to the map', () => {
+				var wm1 = Db(WithMap).load('wm2');
+				var wp1 = Db(WithProps).load('wp1');
+				return Db(wm1.refMap).add('d', wp1).then(() => {
+					return new Promise((ok) => {
+						wm2Fb.child('refMap').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert('has added the element').when(ds.val()).is(M.objectMatching({
+						d: {
+							_ref: Db(wp1).getUrl()
+						}
+					}));
+				});
+			});
+			
+			it('should remove a key from the map', () => {
+				var wm1 = Db(WithMap).load('wm1');
+				return Db(wm1.embedMap).remove('b').then(() => {
+					return new Promise((ok) => {
+						wm1Fb.child('embedMap').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert('has removed the element').when(ds.val()).is(M.objectMatchingStrictly({
+						a: M.aTruthy,
+						c: M.aTruthy
+					}));
+				});
+			});
+			
+			it ('should fetch an embed with a specific key', () => {
+				var wm1 = Db(WithMap).load('wm1');
+				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
+					assert("event is right").when(det).is(M.objectMatching({
+						type: Db3.Internal.EventType.UPDATE,
+						populating: false,
+						originalKey: 'b',
+						payload: {
+							str: 'bChild'
+						}
+					}));
+				});
+			});
+			
+			it ('should fetch a ref with a specific key', () => {
+				var wm1 = Db(WithMap).load('wm2');
+				return Db(wm1.refMap).fetch(this,'b').then((det) => {
+					assert("event is right").when(det).is(M.objectMatching({
+						type: Db3.Internal.EventType.UPDATE,
+						populating: false,
+						// Note : the reference is dereferenced AND loaded, so the key is not the one in the map
+						originalKey: 'wp2',
+						payload: {
+							str: 'String 2',
+							num: 300,
+							arr: [2,3,4],
+							subobj: {
+								substr: 'Sub String'
+							}
+						}
+					}));
+				});
+			});
+			
+			it('should save a new entity with a manually built map', () => {
+				var nwm = new WithMap();
+				var sub = new SubEntity();
+				sub.str = 'Im new';
+				nwm.embedMap['a'] = sub;
+				
+				return Db(nwm).save()
+				.then(() => {
+					var url = Db(nwm).getUrl();
+					return new Promise((ok) => {
+						new Firebase(url).once('value',ok);
+					});
+				})
+				.then((ds :FirebaseDataSnapshot) => {
+					assert('saved map looks right').when(ds.val()).is(M.objectMatching({
+						embedMap : {
+							a: {
+								str: 'Im new'
+							}
+						}
+					}));
+				});
+			});
+			
+			// TODO entity as key
+			
+		});
+		
+		describe('Set >', ()=>{
+			it('should load embed set in array', () => {
+				var ws1 = Db(WithSet).load('ws1');
+				return Db(ws1.embedSet).load(this).then(() => {
+					assert('right length').when(ws1.embedSet).is(M.withLength(3));
+					assert('right type 0').when(ws1.embedSet[0]).is(M.instanceOf(SubEntity));
+					assert('right value 0').when(ws1.embedSet[0]).is(M.objectMatching({
+						str: '3 a'
+					}));
+					assert('right type 1').when(ws1.embedSet[1]).is(M.instanceOf(SubEntity));
+					assert('right value 1').when(ws1.embedSet[1]).is(M.objectMatching({
+						str: '2 b'
+					}));
+					assert('right type 2').when(ws1.embedSet[2]).is(M.instanceOf(SubEntity));
+					assert('right value 2').when(ws1.embedSet[2]).is(M.objectMatching({
+						str: '1 c'
+					}));
+				});
+			});
+
+			it('should load ref set in array', () => {
+				var ws1 = Db(WithSet).load('ws2');
+				return Db(ws1.refSet).load(this).then(() => {
+					assert('right length').when(ws1.refSet).is(M.withLength(3));
+					assert('right type 0').when(ws1.refSet[0]).is(M.instanceOf(WithProps));
+					assert('right type 1').when(ws1.refSet[1]).is(M.instanceOf(WithProps));
+					assert('right type 2').when(ws1.refSet[2]).is(M.instanceOf(WithProps));
+				});
+			});
+			
+			it('should add new element to the embed set', ()=>{
+				var ws1 = Db(WithSet).load('ws1');
+				var ns = new SubEntity();
+				ns.str = 'added';
+				return Db(ws1.embedSet).add(ns).then(() => {
+					return new Promise((ok)=>{
+						wst1Fb.child('embedSet').on('value',ok);
+					});
+				}).then((ds:FirebaseDataSnapshot)=> {
+					var val = ds.val();
+					delete val['00a'];
+					delete val['00b'];
+					delete val['00c'];
+					var k :string = null;
+					var kval = null;
+					var cnt = 0;
+					for (k in val) {
+						cnt++;
+						kval = val[k];
+					}
+					assert('added one element').when(cnt).is(1);
+					assert('serialized correctly').when(kval).is(M.objectMatchingStrictly({
+						str: 'added'
+					}));
+				});
+			});
+			
+			it('should add new element to the ref set', ()=>{
+				var ws1 = Db(WithSet).load('ws2');
+				var wp4 = Db(WithProps).load('wp4');
+				return Db(ws1.refSet).add(wp4).then(() => {
+					return new Promise((ok)=>{
+						wst2Fb.child('refSet').on('value',ok);
+					});
+				}).then((ds:FirebaseDataSnapshot)=> {
+					var val = ds.val();
+					assert('added one element').when(val['wp4']).is(M.objectMatchingStrictly({
+						_ref: baseUrl + 'withProps/wp4/'
+					}));
+				});
+			});
+			
+			it('should honour not adding already exiting element to embed set', () => {
+				var ws1 = Db(WithSet).load('ws1');
+				return Db(ws1.embedSet).load(this).then(() => {
+					return Db(ws1.embedSet).add(ws1.embedSet[0]);
+				}).then(() => {
+					assert('set is the same in ram').when(ws1.embedSet).is(M.withLength(3));
+					return new Promise((ok)=>{
+						wst1Fb.child('embedSet').on('value',ok);
+					});
+				}).then((ds:FirebaseDataSnapshot)=> {
+					var val = ds.val();
+					var cnt = 0;
+					for (var k in val) {
+						cnt++;
+					}
+					assert('set is the same').when(cnt).is(3);
+				});
+			});
+			
+			it('should honour not adding already exiting element to ref set', () => {
+				var ws1 = Db(WithSet).load('ws2');
+				var wp1 = Db(WithProps).load('wp1'); 
+				return Db(ws1.refSet).load(this).then(() => {
+					return Db(ws1.refSet).add(wp1);
+				}).then(() => {
+					assert('set is the same in ram').when(ws1.refSet).is(M.withLength(3));
+					return new Promise((ok)=>{
+						wst2Fb.child('refSet').on('value',ok);
+					});
+				}).then((ds:FirebaseDataSnapshot)=> {
+					var val = ds.val();
+					var cnt = 0;
+					for (var k in val) {
+						cnt++;
+					}
+					assert('set is the same').when(cnt).is(3);
+				});
+			});
+			
+			it('should keep the ordering', ()=> {
+				var ws1 = Db(WithSet).load('ws1');
+				return Db(ws1.sortedSet).load(this).then(() => {
+					assert('element 0 is right').when(ws1.sortedSet[0].str).is('1 c');
+					assert('element 1 is right').when(ws1.sortedSet[1].str).is('2 b');
+					assert('element 2 is right').when(ws1.sortedSet[2].str).is('3 a');
+				});
+			});
+			
+			it('should properly update the array on last element', ()=> {
+				var ws3 = Db(WithSet).load('ws3');
+				return Db(ws3.refSet).load(this).then(()=>{
+					Db(ws3.refSet).live(this);
+					return new Promise((ok)=>{
+						wst3Fb.child('refSet/wp5').set({_ref: baseUrl + 'withProps/wp5/'},ok);
+					});
+				}).then(()=>{
+					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
+					assert('element is right').when(Db(ws3.refSet[2]).getUrl()).is(baseUrl + 'withProps/wp5/');
+					Db(ws3.refSet).off(this);
+				});
+			});
+			
+			it('should properly update the array on first element', ()=> {
+				var ws3 = Db(WithSet).load('ws3');
+				return Db(ws3.refSet).load(this).then(()=>{
+					Db(ws3.refSet).live(this);
+					return new Promise((ok)=>{
+						wst3Fb.child('refSet/wp1').set({_ref: baseUrl + 'withProps/wp1/'},ok);
+					});
+				}).then(()=>{
+					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
+					assert('element is right').when(Db(ws3.refSet[0]).getUrl()).is(baseUrl + 'withProps/wp1/');
+					Db(ws3.refSet).off(this);
+				});
+			});
+			
+			it('should properly update the array in the middle', ()=> {
+				var ws3 = Db(WithSet).load('ws3');
+				return Db(ws3.refSet).load(this).then(()=>{
+					Db(ws3.refSet).live(this);
+					return new Promise((ok)=>{
+						wst3Fb.child('refSet/wp3').set({_ref: baseUrl + 'withProps/wp3/'},ok);
+					});
+				}).then(()=>{
+					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
+					assert('element is right').when(Db(ws3.refSet[1]).getUrl()).is(baseUrl + 'withProps/wp3/');
+					Db(ws3.refSet).off(this);
+				});
+			});
+			
+			it('should persist a new entity with an embedded set', ()=>{
+				var ws = new WithSet();
+				var sub1 = new SubEntity();
+				sub1.str = 'sub1';
+				ws.embedSet.push(sub1);
+
+				var sub2 = new SubEntity();
+				sub2.str = 'sub2';
+				ws.embedSet.push(sub2);
+				
+				return Db(ws).save().then(()=>{
+					return new Promise((ok)=>{
+						new Firebase(Db(ws).getUrl()).once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					var val = ds.val();
+					var embedSet = val['embedSet'];
+					assert('set saved').when(embedSet).is(M.aTruthy);
+					var ks = Object.keys(embedSet);
+					assert('two keys').when(ks).is(M.withLength(2));
+					ks = ks.sort();
+					var vals = [];
+					for (var i = 0; i < ks.length; i++) {
+						vals.push(embedSet[ks[i]]);
+					}
+					assert('right sub 1').when(vals[0]).is(M.objectMatching({
+						str: 'sub1'
+					}));
+					assert('right sub 2').when(vals[1]).is(M.objectMatching({
+						str: 'sub2'
+					}));
+				});
+			});
+		});
+		
+		describe.only('List >', ()=> {
+			it('should permit same reference more than once', ()=>{
+				var wl2 = Db(WithList).load('wl2');
+				var wp1 = Db(WithProps).load('wp1'); 
+				return Db(wl2.refList).load(this).then(() => {
+					Db(wl2.refList).live(this);
+					return Db(wl2.refList).add(wp1);
+				}).then(() => {
+					assert('set has grown in ram').when(wl2.refList).is(M.withLength(4));
+					Db(wl2.refList).off(this);
+					return new Promise((ok)=>{
+						wlt2Fb.child('refList').on('value',ok);
+					});
+				}).then((ds:FirebaseDataSnapshot)=> {
+					var val = ds.val();
+					var cnt = 0;
+					for (var k in val) {
+						cnt++;
+					}
+					assert('list is grown').when(cnt).is(4);
+				});
+			});
 		});
 	});
 

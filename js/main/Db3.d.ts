@@ -24,17 +24,14 @@ declare module Db {
             <T extends Entity>(c: EntityType<T>): IEntityRoot<T>;
             (meta: MetaDescriptor, entity: Entity): any;
             <V extends nativeArrObj>(value: V): IObservableEvent<V>;
-            <T extends Entity>(entity: T): IEntityOrReferenceEvent<T>;
             <T extends Entity>(map: {
                 [index: string]: T;
-            }): number;
-            <T extends Entity>(list: T[]): number;
+            }): IMapEvent<T>;
+            <T extends Entity>(list: T[]): IListSetEvent<T>;
+            <T extends Entity>(entity: T): IEntityOrReferenceEvent<T>;
         }
         interface IDb3Initable {
             dbInit?(url: string, db: IDb3Static): any;
-        }
-        interface IDb3Annotated {
-            __dbevent: GenericEvent;
         }
         interface IDbOperations {
             fork(conf: any): IDb3Static;
@@ -67,21 +64,34 @@ declare module Db {
             startLoads(metadata: ClassMetadata, state: DbState, parent: Entity): Promise<BindingState>;
             resolve(tgt: Entity, result: BindingState): void;
         }
+        interface SortingData {
+            field: string;
+            desc?: boolean;
+        }
         interface IUrled {
             getUrl(evenIfIncomplete?: boolean): string;
         }
+        enum EventType {
+            UNDEFINED = 0,
+            UPDATE = 1,
+            REMOVED = 2,
+            ADDED = 3,
+            LIST_END = 4,
+        }
         class EventDetails<T> {
+            type: EventType;
             payload: T;
             populating: boolean;
             projected: boolean;
-            listEnd: boolean;
             originalEvent: string;
             originalUrl: string;
             originalKey: string;
             precedingKey: string;
             private handler;
+            private offed;
             setHandler(handler: EventHandler): void;
             offMe(): void;
+            wasOffed(): boolean;
             clone(): EventDetails<T>;
         }
         class EventHandler {
@@ -101,7 +111,10 @@ declare module Db {
         }
         class DbEventHandler extends EventHandler {
             ref: FirebaseQuery;
-            private cbs;
+            protected cbs: {
+                event: string;
+                fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void;
+            }[];
             hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void): void;
             decomission(remove: boolean): boolean;
         }
@@ -120,15 +133,17 @@ declare module Db {
             setEntity(entity: Entity): void;
             classMeta: ClassMetadata;
             originalClassMeta: ClassMetadata;
-            getUrl(evenIfIncomplete?: boolean): any;
+            getUrl(evenIfIncomplete?: boolean): string;
             urlInited(): void;
             on(handler: EventHandler): void;
             off(ctx: Object, callback?: (ed: EventDetails<any>) => void): void;
             offHandler(h: EventHandler): void;
+            offAll(): void;
             protected init(h: EventHandler): void;
             protected broadcast(ed: EventDetails<any>): void;
             findCreateChildFor(key: String, force?: boolean): GenericEvent;
             findCreateChildFor(meta: MetaDescriptor, force?: boolean): GenericEvent;
+            saveChildrenInCache(key?: string): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             isTraversingTree(): boolean;
             getTraversed(): GenericEvent;
@@ -191,6 +206,7 @@ declare module Db {
             progDiscriminator: number;
             setEntity(entity: Entity): void;
             load(ctx: Object): Promise<EventDetails<E>>;
+            private makeCascadingCallback(ed, cb);
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             live(ctx: Object): void;
             dereference(ctx: Object): Promise<EventDetails<E>>;
@@ -203,6 +219,101 @@ declare module Db {
             serialize(localsOnly?: boolean): Object;
             assignUrl(): void;
             save(): Promise<any>;
+        }
+        interface IReadableCollection<E extends Entity> {
+            load(ctx: Object): Promise<any>;
+            dereference(ctx: Object): Promise<any>;
+            updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            live(ctx: Object): void;
+            added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+        }
+        interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+            remove(key: string | number | Entity): Promise<any>;
+            fetch(ctx: Object, key: string | number | E): Promise<EventDetails<E>>;
+            with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
+            off(ctx: Object): void;
+            isLoaded(): boolean;
+            assertLoaded(): void;
+            save(): Promise<any>;
+        }
+        interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
+            add(key: string | number | Entity, value: E): Promise<any>;
+        }
+        interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
+            add(value: E): Promise<any>;
+            pop(): Promise<EventDetails<E>>;
+            unshift(value: E): Promise<any>;
+            shift(): Promise<EventDetails<E>>;
+        }
+        class CollectionDbEventHandler extends DbEventHandler {
+            dbEvents: string[];
+            istracking: boolean;
+            ispopulating: boolean;
+            hookAll(fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?: string) => void): void;
+            hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?: string) => void): void;
+            unhook(event: string): void;
+        }
+        class MapEvent<E extends Entity> extends GenericEvent implements IMapEvent<E> {
+            isReference: boolean;
+            nameOnParent: string;
+            project: string[];
+            binding: BindingImpl;
+            sorting: SortingData;
+            realField: any;
+            loaded: boolean;
+            setEntity(entity: Entity): void;
+            added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
+            live(ctx: Object): void;
+            load(ctx: Object, deref?: boolean): Promise<any>;
+            dereference(ctx: Object): Promise<any>;
+            init(h: EventHandler): void;
+            findCreateChildFor(key: String, force?: boolean): GenericEvent;
+            findCreateChildFor(meta: MetaDescriptor, force?: boolean): GenericEvent;
+            handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: FirebaseDataSnapshot, prevKey: string): void;
+            add(key: string | number | Entity, value?: Entity): Promise<any>;
+            createKeyFor(value: Entity): string;
+            normalizeKey(key: string | number | Entity): string;
+            addToInternal(event: string, ds: FirebaseDataSnapshot, val: Entity, det: EventDetails<E>): void;
+            remove(keyOrValue: string | number | Entity): Promise<any>;
+            fetch(ctx: Object, key: string | number | Entity): Promise<EventDetails<E>>;
+            with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
+            isLoaded(): boolean;
+            assertLoaded(): void;
+            save(): Promise<any>;
+            serialize(localsOnly?: boolean, fields?: string[]): Object;
+        }
+        class EventedArray<E> {
+            collection: MapEvent<E>;
+            arrayValue: E[];
+            constructor(collection: MapEvent<E>);
+            private findPositionFor(ent);
+            private findPositionAfter(prev);
+            addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
+            prepareSerializeSet(): void;
+            prepareSerializeList(): void;
+        }
+        class ArrayCollectionEvent<E extends Entity> extends MapEvent<E> {
+            protected evarray: EventedArray<E>;
+            setEntity(entity: Entity): void;
+            add(value?: Entity): Promise<any>;
+            addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
+        }
+        class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+            createKeyFor(value: Entity): string;
+            normalizeKey(key: string | number | Entity): string;
+            serialize(localsOnly?: boolean, fields?: string[]): Object;
+        }
+        class SetEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+            createKeyFor(value: Entity): string;
+            normalizeKey(key: string | number | Entity): string;
+            serialize(localsOnly?: boolean, fields?: string[]): Object;
         }
         interface IObservableEvent<E extends Entity> extends IUrled {
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
@@ -251,13 +362,16 @@ declare module Db {
             conf: any;
             myMeta: Metadata;
             db: IDb3Static;
+            entEvent: Utils.WeakWrap<GenericEvent>;
             configure(conf: any): void;
             reset(): void;
             entityRoot(ctor: EntityType<any>): IEntityRoot<any>;
             entityRoot(meta: ClassMetadata): IEntityRoot<any>;
+            entityRootFromUrl(url: string): IEntityRoot<any>;
             getUrl(): string;
-            createEvent(e: Entity, stack: MetaDescriptor[]): GenericEvent;
+            createEvent(e: Entity, stack?: MetaDescriptor[]): GenericEvent;
             loadEvent(url: string, meta?: ClassMetadata): GenericEvent;
+            storeInCache(evt: GenericEvent): void;
             loadEventWithInstance(url: string, meta?: ClassMetadata): GenericEvent;
             load<T>(url: string, meta?: ClassMetadata): T;
         }
@@ -301,6 +415,24 @@ declare module Db {
             named(name: string): ReferenceMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
+        class MapMetaDescriptor extends MetaDescriptor {
+            isReference: boolean;
+            sorting: Internal.SortingData;
+            named(name: string): MapMetaDescriptor;
+            createEvent(allMetadata: Metadata): GenericEvent;
+        }
+        class SetMetaDescriptor extends MetaDescriptor {
+            isReference: boolean;
+            sorting: Internal.SortingData;
+            named(name: string): SetMetaDescriptor;
+            createEvent(allMetadata: Metadata): GenericEvent;
+        }
+        class ListMetaDescriptor extends MetaDescriptor {
+            isReference: boolean;
+            sorting: Internal.SortingData;
+            named(name: string): SetMetaDescriptor;
+            createEvent(allMetadata: Metadata): GenericEvent;
+        }
         class ObservableMetaDescriptor extends MetaDescriptor {
             createEvent(allMetadata: Metadata): GenericEvent;
         }
@@ -310,6 +442,7 @@ declare module Db {
         class Metadata {
             classes: Internal.ClassMetadata[];
             findMeta(param: EntityType<any> | Entity): ClassMetadata;
+            findRooted(relurl: string): ClassMetadata;
             findDiscriminated(base: ClassMetadata, dis: string): ClassMetadata;
         }
         function getAllMetadata(): Metadata;
@@ -330,10 +463,22 @@ declare module Db {
             static lastRandChars: any[];
             static next(): string;
         }
+        class WeakWrap<V> {
+            private wm;
+            private id;
+            constructor();
+            private getOrMake(k);
+            get(k: any): V;
+            set(k: any, val: V): void;
+        }
     }
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
+    function sortBy(field: string, desc?: boolean): Internal.SortingData;
     function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
     function reference(def: EntityType<any>, project?: string[]): PropertyDecorator;
+    function map(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+    function set(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+    function list(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
     function root(name?: string, override?: string): ClassDecorator;
     function discriminator(disc: string): ClassDecorator;
     function override(override?: string): ClassDecorator;
@@ -342,6 +487,9 @@ declare module Db {
     module meta {
         function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: any, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
+        function map(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.MapMetaDescriptor;
+        function set(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.SetMetaDescriptor;
+        function list(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.ListMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
         function ignore(): Db.Internal.IgnoreMetaDescriptor;
         function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;

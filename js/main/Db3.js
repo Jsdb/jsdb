@@ -138,30 +138,43 @@ var Db;
             return BindingImpl;
         })();
         Internal.BindingImpl = BindingImpl;
+        (function (EventType) {
+            EventType[EventType["UNDEFINED"] = 0] = "UNDEFINED";
+            EventType[EventType["UPDATE"] = 1] = "UPDATE";
+            EventType[EventType["REMOVED"] = 2] = "REMOVED";
+            EventType[EventType["ADDED"] = 3] = "ADDED";
+            EventType[EventType["LIST_END"] = 4] = "LIST_END";
+        })(Internal.EventType || (Internal.EventType = {}));
+        var EventType = Internal.EventType;
         var EventDetails = (function () {
             function EventDetails() {
+                this.type = EventType.UNDEFINED;
                 this.payload = null;
                 this.populating = false;
                 this.projected = false;
-                this.listEnd = false;
                 this.originalEvent = null;
                 this.originalUrl = null;
                 this.originalKey = null;
                 this.precedingKey = null;
                 this.handler = null;
+                this.offed = false;
             }
             EventDetails.prototype.setHandler = function (handler) {
                 this.handler = handler;
             };
             EventDetails.prototype.offMe = function () {
                 this.handler.offMe();
+                this.offed = true;
+            };
+            EventDetails.prototype.wasOffed = function () {
+                return this.offed;
             };
             EventDetails.prototype.clone = function () {
                 var ret = new EventDetails();
+                ret.type = this.type;
                 ret.payload = this.payload;
                 ret.populating = this.populating;
                 ret.projected = this.projected;
-                ret.listEnd = this.listEnd;
                 ret.originalEvent = this.originalEvent;
                 ret.originalUrl = this.originalUrl;
                 ret.originalKey = this.originalKey;
@@ -225,15 +238,15 @@ var Db;
                 this.cbs = [];
             }
             DbEventHandler.prototype.hook = function (event, fn) {
+                this.cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
-                this.cbs.push({ event: event, fn: this.ref.on(event, fn, function (err) { }) });
+                this.ref.on(event, fn, function (err) { });
             };
             DbEventHandler.prototype.decomission = function (remove) {
                 // override off, must remove only this instance callbacks, Firebase does not
                 if (remove) {
                     for (var i = 0; i < this.cbs.length; i++) {
                         var cb = this.cbs[i];
-                        //console.log(this.myprog + " : Listen off " + this._ref.toString() + " " + cb.event, cb.fn);
                         this.ref.off(cb.event, cb.fn);
                     }
                 }
@@ -255,9 +268,7 @@ var Db;
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 if (entity && typeof entity == 'object') {
-                    var dbacc = this.entity;
-                    if (!dbacc.__dbevent)
-                        dbacc.__dbevent = this;
+                    this.state.entEvent.set(this.entity, this);
                 }
                 // TODO clean the children if entity changed? they could be pointing to old instance data
             };
@@ -302,8 +313,11 @@ var Db;
                     this.init(this.handlers[i]);
                 }
                 for (var k in this.children) {
+                    if (k == 'constructor')
+                        continue;
                     this.children[k].urlInited();
                 }
+                this.saveChildrenInCache();
             };
             GenericEvent.prototype.on = function (handler) {
                 this.handlers = this.handlers.filter(function (h) { return !h.decomission(h.equals(handler)); });
@@ -326,6 +340,9 @@ var Db;
                 h.decomission(true);
                 this.handlers = this.handlers.filter(function (ch) { return ch !== h; });
             };
+            GenericEvent.prototype.offAll = function () {
+                this.handlers = this.handlers.filter(function (h) { return !h.decomission(true); });
+            };
             GenericEvent.prototype.init = function (h) {
                 throw new Error("Implement init in GenericEvent subclasses");
             };
@@ -344,8 +361,7 @@ var Db;
                 if (!meta)
                     return null;
                 var ret = this.children[meta.localName];
-                if (ret && !force)
-                    return ret;
+                //if (ret && !force) return ret;
                 if (ret && this.entity) {
                     ret.setEntity(this.entity[meta.localName]);
                     return ret;
@@ -356,9 +372,21 @@ var Db;
                 if (this.entity) {
                     ret.setEntity(this.entity[meta.localName]);
                 }
-                // TODO save the newly created event on the state cache
                 this.children[meta.localName] = ret;
+                this.saveChildrenInCache();
                 return ret;
+            };
+            GenericEvent.prototype.saveChildrenInCache = function (key) {
+                if (!this.getUrl())
+                    return;
+                if (key) {
+                    this.state.storeInCache(this.children[key]);
+                }
+                else {
+                    for (var k in this.children) {
+                        this.state.storeInCache(this.children[k]);
+                    }
+                }
             };
             GenericEvent.prototype.parseValue = function (ds) {
                 throw new Error("Please override parseValue in subclasses of GenericEvent");
@@ -424,12 +452,16 @@ var Db;
             SingleDbHandlerEvent.prototype.handleDbEvent = function (ds, prevName) {
                 this.parseValue(ds);
                 var evd = new EventDetails();
+                evd.type = EventType.UPDATE;
+                if (this.entity == null) {
+                    evd.type = EventType.REMOVED;
+                }
                 evd.payload = this.entity;
                 evd.originalEvent = 'value';
                 evd.originalUrl = ds.ref().toString();
                 evd.originalKey = ds.key();
                 evd.precedingKey = prevName;
-                evd.populating = !this.loaded;
+                evd.projected = !this.loaded;
                 this.lastDetail = evd;
                 this.broadcast(this.lastDetail);
             };
@@ -507,6 +539,8 @@ var Db;
                         this.setEntity(this.classMeta.createInstance());
                     }
                     for (var k in val) {
+                        if (k == 'constructor')
+                            continue;
                         var descr = this.classMeta.descriptors[k];
                         // travel sub entities 
                         if (descr) {
@@ -624,6 +658,8 @@ var Db;
                     var proms = [];
                     // forward to sub events
                     for (var k in this.entity) {
+                        if (k == 'constructor')
+                            continue;
                         var se = this.findCreateChildFor(k);
                         if (se && se['save']) {
                             proms.push(se.save());
@@ -682,19 +718,30 @@ var Db;
             ReferenceEvent.prototype.load = function (ctx) {
                 var _this = this;
                 return this.dereference(ctx).then(function (ed) {
+                    ed.offMe();
                     if (_this.pointedEvent)
                         return _this.pointedEvent.load(ctx).then(function (ed) { return ed; });
                     return ed;
                 });
             };
+            ReferenceEvent.prototype.makeCascadingCallback = function (ed, cb) {
+                return function (subed) {
+                    cb(subed);
+                    if (subed.wasOffed()) {
+                        ed.offMe();
+                    }
+                };
+            };
             ReferenceEvent.prototype.updated = function (ctx, callback, discriminator) {
                 var _this = this;
                 if (discriminator === void 0) { discriminator = null; }
+                var precb = null;
                 this.referenced(ctx, function (ed) {
-                    if (_this.prevPointedEvent)
-                        _this.prevPointedEvent.off(ctx, callback);
+                    if (_this.prevPointedEvent && precb)
+                        _this.prevPointedEvent.off(ctx, precb); //, callback);
                     if (_this.pointedEvent) {
-                        _this.pointedEvent.updated(ctx, callback);
+                        precb = _this.makeCascadingCallback(ed, callback);
+                        _this.pointedEvent.updated(ctx, precb, callback);
                     }
                     else {
                         callback(ed);
@@ -786,6 +833,517 @@ var Db;
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
         Internal.ReferenceEvent = ReferenceEvent;
+        var CollectionDbEventHandler = (function (_super) {
+            __extends(CollectionDbEventHandler, _super);
+            function CollectionDbEventHandler() {
+                _super.apply(this, arguments);
+                this.dbEvents = null;
+                this.istracking = false;
+                this.ispopulating = false;
+            }
+            CollectionDbEventHandler.prototype.hookAll = function (fn) {
+                for (var i = 0; i < this.dbEvents.length; i++) {
+                    this.hook(this.dbEvents[i], fn);
+                }
+            };
+            CollectionDbEventHandler.prototype.hook = function (event, fn) {
+                _super.prototype.hook.call(this, event, function (dataSnapshot, prevChildName) { return fn(dataSnapshot, prevChildName || '', event); });
+            };
+            CollectionDbEventHandler.prototype.unhook = function (event) {
+                for (var i = 0; i < this.cbs.length; i++) {
+                    var cb = this.cbs[i];
+                    if (cb.event != event)
+                        continue;
+                    this.ref.off(cb.event, cb.fn);
+                }
+            };
+            return CollectionDbEventHandler;
+        })(DbEventHandler);
+        Internal.CollectionDbEventHandler = CollectionDbEventHandler;
+        var MapEvent = (function (_super) {
+            __extends(MapEvent, _super);
+            function MapEvent() {
+                _super.apply(this, arguments);
+                this.isReference = false;
+                this.nameOnParent = null;
+                this.project = null;
+                this.binding = null;
+                this.sorting = null;
+                this.realField = null;
+                this.loaded = false;
+            }
+            MapEvent.prototype.setEntity = function (entity) {
+                var preEntity = this.entity || {};
+                _super.prototype.setEntity.call(this, entity);
+                this.realField = entity;
+                this.entity = preEntity;
+            };
+            MapEvent.prototype.added = function (ctx, callback) {
+                var h = new CollectionDbEventHandler(ctx, callback);
+                h.dbEvents = ['child_added', 'value'];
+                h.ispopulating = true;
+                _super.prototype.on.call(this, h);
+            };
+            MapEvent.prototype.removed = function (ctx, callback) {
+                var h = new CollectionDbEventHandler(ctx, callback);
+                h.dbEvents = ['child_removed'];
+                _super.prototype.on.call(this, h);
+            };
+            MapEvent.prototype.changed = function (ctx, callback) {
+                var h = new CollectionDbEventHandler(ctx, callback);
+                h.dbEvents = ['child_changed'];
+                _super.prototype.on.call(this, h);
+            };
+            MapEvent.prototype.moved = function (ctx, callback) {
+                var h = new CollectionDbEventHandler(ctx, callback);
+                h.dbEvents = ['child_moved'];
+                _super.prototype.on.call(this, h);
+            };
+            MapEvent.prototype.updated = function (ctx, callback, discriminator) {
+                var h = new CollectionDbEventHandler(ctx, callback, discriminator);
+                h.dbEvents = ['child_added', 'child_removed', 'child_changed', 'child_moved', 'value'];
+                h.ispopulating = true;
+                h.istracking = true;
+                _super.prototype.on.call(this, h);
+            };
+            MapEvent.prototype.live = function (ctx) {
+                this.updated(ctx, function () { });
+            };
+            MapEvent.prototype.load = function (ctx, deref) {
+                var _this = this;
+                if (deref === void 0) { deref = true; }
+                return new Promise(function (resolve, error) {
+                    var allProms = [];
+                    _this.updated(ctx, function (det) {
+                        if (det.type == EventType.LIST_END) {
+                            det.offMe();
+                            if (allProms.length) {
+                                Promise.all(allProms).then(function () {
+                                    resolve(null);
+                                });
+                            }
+                            else {
+                                resolve(null);
+                            }
+                        }
+                        if (det.type != EventType.ADDED)
+                            return;
+                        if (_this.isReference && deref) {
+                            var evt = _this.findCreateChildFor(det.originalKey);
+                            allProms.push(evt.load(ctx).then(function () { }));
+                        }
+                    });
+                });
+            };
+            MapEvent.prototype.dereference = function (ctx) {
+                if (!this.isReference)
+                    return this.load(ctx);
+                return this.load(ctx, false);
+            };
+            MapEvent.prototype.init = function (h) {
+                var _this = this;
+                var sh = h;
+                sh.ref = new Firebase(this.getUrl());
+                if (this.sorting) {
+                    sh.ref = sh.ref.orderByChild(this.sorting.field);
+                }
+                sh.event = this;
+                sh.hookAll(function (ds, prev, event) { return _this.handleDbEvent(sh, event, ds, prev); });
+            };
+            MapEvent.prototype.findCreateChildFor = function (param, force) {
+                if (force === void 0) { force = false; }
+                var meta = null;
+                if (!(param instanceof MetaDescriptor)) {
+                    if (this.isReference) {
+                        var refmeta = Db.meta.reference(this.classMeta.ctor, this.project);
+                        refmeta.localName = param;
+                        param = refmeta;
+                    }
+                    else {
+                        var embmeta = Db.meta.embedded(this.classMeta.ctor, this.binding);
+                        embmeta.localName = param;
+                        param = embmeta;
+                    }
+                }
+                return _super.prototype.findCreateChildFor.call(this, param, force);
+            };
+            MapEvent.prototype.handleDbEvent = function (handler, event, ds, prevKey) {
+                console.log("Got event " + event, " prev " + prevKey + " key " + ds.key(), ds.val());
+                var det = new EventDetails();
+                det.originalEvent = event;
+                det.originalKey = ds.key();
+                det.originalUrl = ds.ref().toString();
+                det.precedingKey = prevKey;
+                det.populating = handler.ispopulating;
+                if (event == 'value') {
+                    handler.unhook('value');
+                    if (handler.ispopulating) {
+                        this.loaded = true;
+                    }
+                    handler.ispopulating = false;
+                    det.type = EventType.LIST_END;
+                    handler.handle(det);
+                    return;
+                }
+                var subev = this.findCreateChildFor(ds.key());
+                var val = null;
+                subev.parseValue(ds);
+                val = subev.entity;
+                if (event == 'child_removed') {
+                    det.type = EventType.REMOVED;
+                }
+                else if (event == 'child_added') {
+                    det.type = EventType.ADDED;
+                }
+                else {
+                    det.type = EventType.UPDATE;
+                }
+                det.payload = val;
+                if (handler.istracking) {
+                    this.addToInternal(event, ds, val, det);
+                }
+                handler.handle(det);
+            };
+            MapEvent.prototype.add = function (key, value) {
+                var k = null;
+                var v = value;
+                if (!v) {
+                    v = key;
+                    k = this.createKeyFor(v);
+                }
+                else {
+                    k = this.normalizeKey(key);
+                }
+                var evt = this.findCreateChildFor(k);
+                evt.setEntity(v);
+                return new Promise(function (ok, err) {
+                    var fb = new Firebase(evt.getUrl());
+                    fb.set(evt.serialize(false), function (fberr) {
+                        if (fberr) {
+                            err(fberr);
+                        }
+                        else {
+                            ok(null);
+                        }
+                    });
+                });
+                // Can't use save because reference event save does not save the reference
+                //return (<IEntityOrReferenceEvent<E>><any>evt).save();
+            };
+            MapEvent.prototype.createKeyFor = function (value) {
+                return Utils.IdGenerator.next();
+            };
+            MapEvent.prototype.normalizeKey = function (key) {
+                if (typeof key === 'string') {
+                    key = key;
+                }
+                else if (typeof key === 'number') {
+                    key = key + '';
+                }
+                else {
+                    var enturl = this.state.createEvent(key).getUrl();
+                    if (!enturl)
+                        throw new Error("The entity used as a key in a map must be already saved elsewhere");
+                    var entroot = this.state.entityRootFromUrl(enturl);
+                    enturl = enturl.substr(entroot.getUrl().length);
+                    key = enturl.replace(/\//g, '');
+                }
+                return key;
+            };
+            MapEvent.prototype.addToInternal = function (event, ds, val, det) {
+                if (event == 'child_removed') {
+                    delete this.realField[ds.key()];
+                }
+                else {
+                    this.realField[ds.key()] = val;
+                }
+                if (this.parent && this.parent.entity) {
+                    this.parent.entity[this.nameOnParent] = this.realField;
+                }
+            };
+            MapEvent.prototype.remove = function (keyOrValue) {
+                var _this = this;
+                var key = this.normalizeKey(keyOrValue);
+                return new Promise(function (ok, err) {
+                    var fb = new Firebase(_this.getUrl() + key + '/');
+                    fb.remove(function (fberr) {
+                        if (fberr) {
+                            err(fberr);
+                        }
+                        else {
+                            ok(null);
+                        }
+                    });
+                });
+            };
+            MapEvent.prototype.fetch = function (ctx, key) {
+                var k = this.normalizeKey(key);
+                var evt = this.findCreateChildFor(k);
+                return evt.load(ctx);
+            };
+            MapEvent.prototype.with = function (key) {
+                var k = this.normalizeKey(key);
+                return this.findCreateChildFor(k);
+            };
+            MapEvent.prototype.isLoaded = function () {
+                return this.loaded;
+            };
+            MapEvent.prototype.assertLoaded = function () {
+                if (!this.loaded)
+                    throw new Error("Collection at url " + this.getUrl() + " is not loaded");
+            };
+            MapEvent.prototype.save = function () {
+                var _this = this;
+                if (!this.isLoaded) {
+                    console.log('not saving cause not loaded');
+                    // TODO maybe we should save children that were loaded anyway
+                    return;
+                }
+                return new Promise(function (ok, err) {
+                    var fb = new Firebase(_this.getUrl());
+                    var obj = _this.serialize();
+                    fb.set(obj, function (fberr) {
+                        if (fberr) {
+                            err(fberr);
+                        }
+                        else {
+                            ok(null);
+                        }
+                    });
+                });
+            };
+            MapEvent.prototype.serialize = function (localsOnly, fields) {
+                if (localsOnly === void 0) { localsOnly = false; }
+                var obj = {};
+                var preEntity = this.entity;
+                this.entity = this.realField;
+                try {
+                    var ks = Object.keys(this.realField);
+                    for (var i = 0; i < ks.length; i++) {
+                        var k = ks[i];
+                        obj[k] = this.findCreateChildFor(k).serialize();
+                    }
+                    return obj;
+                }
+                finally {
+                    this.entity = preEntity;
+                }
+            };
+            return MapEvent;
+        })(GenericEvent);
+        Internal.MapEvent = MapEvent;
+        var EventedArray = (function () {
+            function EventedArray(collection) {
+                this.collection = collection;
+                // TODO for the list, we NEED to store the key and a weak, supporting more keys per instance
+                // the reason is that a list can contain more than once the same referenced instance
+                // so, we have to use the key of the datasnapshot as it's the only way of identifing a specific
+                // instance in the list.
+                // But still, even if i have keys, i can't really locate them, i need a parallel list
+                // of ordered keys, but then it would not be in sync with client side modifications of
+                // the array, which we have to forbid. 
+                this.arrayValue = [];
+            }
+            EventedArray.prototype.findPositionFor = function (ent) {
+                var e = ent;
+                if (typeof ent === 'string') {
+                    e = this.collection.realField[ent];
+                }
+                return this.arrayValue.indexOf(e);
+            };
+            EventedArray.prototype.findPositionAfter = function (prev) {
+                if (!prev)
+                    return 0;
+                var pos = this.findPositionFor(prev);
+                if (pos == -1)
+                    return this.arrayValue.length;
+                return pos + 1;
+            };
+            EventedArray.prototype.addToInternal = function (event, ds, val, det) {
+                var curpos = this.findPositionFor(val);
+                if (event == 'child_removed') {
+                    delete this.collection.realField[ds.key()];
+                    if (curpos > -1)
+                        this.arrayValue.splice(curpos, 1);
+                    return;
+                }
+                this.collection.realField[ds.key()] = val;
+                var newpos = this.findPositionAfter(det.precedingKey);
+                console.log("cur " + curpos + " newpos " + newpos);
+                if (curpos == newpos) {
+                    this.arrayValue[curpos] = val;
+                    return;
+                }
+                else {
+                    if (curpos > -1)
+                        this.arrayValue.splice(curpos, 1);
+                    this.arrayValue.splice(newpos, 0, val);
+                }
+            };
+            EventedArray.prototype.prepareSerializeSet = function () {
+                if (this.arrayValue) {
+                    // Add all elements found in the array to the map
+                    var fndkeys = {};
+                    for (var i = 0; i < this.arrayValue.length; i++) {
+                        var e = this.arrayValue[i];
+                        if (!e)
+                            continue;
+                        var k = this.collection.createKeyFor(e);
+                        this.collection.realField[k] = e;
+                        fndkeys[k] = true;
+                    }
+                    // Remove all those that are not there anymore
+                    var ks = Object.keys(this.collection.realField);
+                    for (var i = 0; i < ks.length; i++) {
+                        if (!fndkeys[ks[i]])
+                            delete this.collection.realField[ks[i]];
+                    }
+                }
+            };
+            EventedArray.prototype.prepareSerializeList = function () {
+                if (this.arrayValue) {
+                    // Find keys in positions
+                    var keys = [];
+                    var ks = Object.keys(this.collection.realField);
+                    for (var i = 0; i < ks.length; i++) {
+                        var k = ks[i];
+                        var rfe = this.collection.realField[k];
+                        var pos = this.findPositionFor(rfe);
+                        if (pos == -1) {
+                            delete this.collection.realField[ks[i]];
+                        }
+                        else {
+                            keys[pos] = k;
+                        }
+                    }
+                    for (var i = 0; i < this.arrayValue.length; i++) {
+                        var e = this.arrayValue[i];
+                        if (!e)
+                            continue;
+                        if (!keys[i]) {
+                            this.collection.realField[this.collection.createKeyFor(e)] = e;
+                        }
+                    }
+                }
+            };
+            return EventedArray;
+        })();
+        Internal.EventedArray = EventedArray;
+        var ArrayCollectionEvent = (function (_super) {
+            __extends(ArrayCollectionEvent, _super);
+            function ArrayCollectionEvent() {
+                _super.apply(this, arguments);
+                this.evarray = new EventedArray(this);
+            }
+            ArrayCollectionEvent.prototype.setEntity = function (entity) {
+                var preReal = this.realField || {};
+                _super.prototype.setEntity.call(this, entity);
+                this.realField = preReal;
+                this.evarray.arrayValue = entity;
+            };
+            ArrayCollectionEvent.prototype.add = function (value) {
+                if (arguments.length > 1)
+                    throw new Error("Cannot add to set or list specifying a key, add only the entity");
+                var v = value;
+                var k = this.createKeyFor(v);
+                return _super.prototype.add.call(this, k, v);
+            };
+            ArrayCollectionEvent.prototype.addToInternal = function (event, ds, val, det) {
+                this.evarray.addToInternal(event, ds, val, det);
+                if (this.parent && this.parent.entity) {
+                    this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
+                }
+            };
+            return ArrayCollectionEvent;
+        })(MapEvent);
+        Internal.ArrayCollectionEvent = ArrayCollectionEvent;
+        var ListEvent = (function (_super) {
+            __extends(ListEvent, _super);
+            function ListEvent() {
+                _super.apply(this, arguments);
+            }
+            ListEvent.prototype.createKeyFor = function (value) {
+                if (this.isReference)
+                    return Utils.IdGenerator.next();
+                var enturl = this.state.createEvent(value).getUrl();
+                if (!enturl)
+                    return Utils.IdGenerator.next();
+                if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
+                    throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+                }
+                enturl = enturl.substr(this.getUrl().length);
+                enturl = enturl.replace(/\//g, '');
+                return enturl;
+            };
+            ListEvent.prototype.normalizeKey = function (key) {
+                if (typeof key === 'string') {
+                    key = key;
+                }
+                else if (typeof key === 'number') {
+                    key = key + '';
+                }
+                return key.toString();
+            };
+            ListEvent.prototype.serialize = function (localsOnly, fields) {
+                if (localsOnly === void 0) { localsOnly = false; }
+                this.evarray.prepareSerializeList();
+                return _super.prototype.serialize.call(this, localsOnly, fields);
+            };
+            return ListEvent;
+        })(ArrayCollectionEvent);
+        Internal.ListEvent = ListEvent;
+        var SetEvent = (function (_super) {
+            __extends(SetEvent, _super);
+            function SetEvent() {
+                _super.apply(this, arguments);
+            }
+            SetEvent.prototype.createKeyFor = function (value) {
+                // get the url
+                var enturl = this.state.createEvent(value).getUrl();
+                if (this.isReference) {
+                    // if it is a reference, use path from the root path
+                    if (!enturl)
+                        throw new Error("Cannot add to a set a reference that has not been loaded or not yet been saved");
+                    var entroot = this.state.entityRootFromUrl(enturl);
+                    enturl = enturl.substr(entroot.getUrl().length);
+                }
+                else {
+                    // if it's an embedded, check if it has a url and substract my url to obtain id
+                    if (enturl) {
+                        if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
+                            throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+                        }
+                        enturl = enturl.substr(this.getUrl().length);
+                    }
+                    else {
+                        // if no url, generate a new random id
+                        return Utils.IdGenerator.next();
+                    }
+                }
+                // Remove slashes from the resulting url
+                enturl = enturl.replace(/\//g, '');
+                return enturl;
+            };
+            SetEvent.prototype.normalizeKey = function (key) {
+                if (typeof key === 'string') {
+                    key = key;
+                }
+                else if (typeof key === 'number') {
+                    key = key + '';
+                }
+                else {
+                    return this.createKeyFor(key);
+                }
+                return key;
+            };
+            SetEvent.prototype.serialize = function (localsOnly, fields) {
+                if (localsOnly === void 0) { localsOnly = false; }
+                this.evarray.prepareSerializeSet();
+                return _super.prototype.serialize.call(this, localsOnly, fields);
+            };
+            return SetEvent;
+        })(ArrayCollectionEvent);
+        Internal.SetEvent = SetEvent;
         var IgnoreEvent = (function (_super) {
             __extends(IgnoreEvent, _super);
             function IgnoreEvent() {
@@ -871,6 +1429,7 @@ var Db;
             function DbState() {
                 this.cache = {};
                 this.myMeta = allMetadata;
+                this.entEvent = new Utils.WeakWrap();
             }
             DbState.prototype.configure = function (conf) {
                 this.conf = conf;
@@ -879,8 +1438,15 @@ var Db;
                 // - double roots
             };
             DbState.prototype.reset = function () {
+                // Automatic off for all handlers?
+                for (var k in this.cache) {
+                    var val = this.cache[k];
+                    if (val instanceof GenericEvent) {
+                        val.offAll();
+                    }
+                }
+                // Clean the cache
                 this.cache = {};
-                // TODO automatic off for all handlers?
             };
             DbState.prototype.entityRoot = function (param) {
                 var meta = null;
@@ -902,11 +1468,24 @@ var Db;
                 }
                 return new EntityRoot(this, meta);
             };
+            DbState.prototype.entityRootFromUrl = function (url) {
+                // Check if the given url pertains to me
+                if (url.indexOf(this.getUrl()) != 0)
+                    return null;
+                // Make the url relative
+                var relurl = url.substring(this.getUrl().length);
+                var meta = this.myMeta.findRooted(relurl);
+                if (!meta)
+                    throw new Error("No entity root found for url " + url);
+                return this.entityRoot(meta);
+            };
             DbState.prototype.getUrl = function () {
                 return this.conf['baseUrl'];
             };
             DbState.prototype.createEvent = function (e, stack) {
-                var roote = e.__dbevent;
+                if (stack === void 0) { stack = []; }
+                //var roote = (<IDb3Annotated>e).__dbevent;
+                var roote = this.entEvent.get(e);
                 if (!roote) {
                     var clmeta = this.myMeta.findMeta(e);
                     var nre = new EntityEvent();
@@ -914,7 +1493,8 @@ var Db;
                     nre.setEntity(e);
                     nre.classMeta = clmeta;
                     roote = nre;
-                    e.__dbevent = roote;
+                    //(<IDb3Annotated>e).__dbevent = roote;
+                    this.entEvent.set(e, roote);
                 }
                 // Follow each call stack
                 var acp = roote;
@@ -950,6 +1530,16 @@ var Db;
                 this.cache[url] = event;
                 return event;
             };
+            DbState.prototype.storeInCache = function (evt) {
+                var url = evt.getUrl();
+                if (!url)
+                    return;
+                var pre = this.cache[url];
+                if (pre && pre !== evt) {
+                    throw new Error('Storing in cache two different events for the same key ' + url);
+                }
+                this.cache[url] = evt;
+            };
             DbState.prototype.loadEventWithInstance = function (url, meta) {
                 var dis = null;
                 var segs = url.split('/');
@@ -979,7 +1569,10 @@ var Db;
                         if (inst.dbInit) {
                             inst.dbInit(url, this.db);
                         }
-                        inst.__dbevent = event;
+                        /*
+                        Object.defineProperty(inst, '__dbevent', {readable:true, writable:true, enumerable:false});
+                        (<IDb3Annotated>inst).__dbevent = event;
+                        */
                         event.setEntity(inst);
                     }
                 }
@@ -1089,6 +1682,8 @@ var Db;
                     sup.addSubclass(this);
                 }
                 for (var k in sup.descriptors) {
+                    if (k == 'constructor')
+                        continue;
                     if (this.descriptors[k])
                         continue;
                     this.descriptors[k] = sup.descriptors[k];
@@ -1158,6 +1753,81 @@ var Db;
             return ReferenceMetaDescriptor;
         })(MetaDescriptor);
         Internal.ReferenceMetaDescriptor = ReferenceMetaDescriptor;
+        var MapMetaDescriptor = (function (_super) {
+            __extends(MapMetaDescriptor, _super);
+            function MapMetaDescriptor() {
+                _super.apply(this, arguments);
+                this.isReference = false;
+                this.sorting = null;
+            }
+            MapMetaDescriptor.prototype.named = function (name) {
+                _super.prototype.named.call(this, name);
+                return this;
+            };
+            MapMetaDescriptor.prototype.createEvent = function (allMetadata) {
+                var ret = new MapEvent();
+                ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
+                ret.classMeta = allMetadata.findMeta(this.ctor);
+                ret.nameOnParent = this.localName;
+                ret.isReference = this.isReference;
+                ret.sorting = this.sorting;
+                return ret;
+            };
+            return MapMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.MapMetaDescriptor = MapMetaDescriptor;
+        var SetMetaDescriptor = (function (_super) {
+            __extends(SetMetaDescriptor, _super);
+            function SetMetaDescriptor() {
+                _super.apply(this, arguments);
+                this.isReference = false;
+                this.sorting = null;
+            }
+            SetMetaDescriptor.prototype.named = function (name) {
+                _super.prototype.named.call(this, name);
+                return this;
+            };
+            SetMetaDescriptor.prototype.createEvent = function (allMetadata) {
+                var ret = new SetEvent();
+                ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
+                ret.classMeta = allMetadata.findMeta(this.ctor);
+                ret.nameOnParent = this.localName;
+                ret.isReference = this.isReference;
+                ret.sorting = this.sorting;
+                return ret;
+            };
+            return SetMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.SetMetaDescriptor = SetMetaDescriptor;
+        var ListMetaDescriptor = (function (_super) {
+            __extends(ListMetaDescriptor, _super);
+            function ListMetaDescriptor() {
+                _super.apply(this, arguments);
+                this.isReference = false;
+                this.sorting = null;
+            }
+            ListMetaDescriptor.prototype.named = function (name) {
+                _super.prototype.named.call(this, name);
+                return this;
+            };
+            ListMetaDescriptor.prototype.createEvent = function (allMetadata) {
+                var ret = new ListEvent();
+                ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
+                ret.classMeta = allMetadata.findMeta(this.ctor);
+                ret.nameOnParent = this.localName;
+                ret.isReference = this.isReference;
+                ret.sorting = this.sorting;
+                return ret;
+            };
+            return ListMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.ListMetaDescriptor = ListMetaDescriptor;
         var ObservableMetaDescriptor = (function (_super) {
             __extends(ObservableMetaDescriptor, _super);
             function ObservableMetaDescriptor() {
@@ -1213,6 +1883,15 @@ var Db;
                 }
                 this.classes.push(md);
                 return md;
+            };
+            Metadata.prototype.findRooted = function (relurl) {
+                for (var i = 0; i < this.classes.length; i++) {
+                    var acc = this.classes[i];
+                    var acr = acc.root;
+                    if (relurl.indexOf(acr) == 0)
+                        return acc;
+                }
+                return null;
             };
             Metadata.prototype.findDiscriminated = function (base, dis) {
                 return base.findForDiscriminator(dis);
@@ -1304,6 +1983,8 @@ var Db;
         Utils.isEmpty = isEmpty;
         function copyObj(from, to) {
             for (var k in from) {
+                if (k == 'constructor')
+                    continue;
                 var val = from[k];
                 if (typeof val === 'object') {
                     var valto = to[k] || {};
@@ -1363,6 +2044,39 @@ var Db;
             return IdGenerator;
         })();
         Utils.IdGenerator = IdGenerator;
+        var WeakWrap = (function () {
+            function WeakWrap() {
+                this.wm = null;
+                if (typeof WeakMap !== 'undefined') {
+                    this.wm = new WeakMap();
+                }
+                else {
+                    this.id = IdGenerator.next();
+                }
+            }
+            WeakWrap.prototype.getOrMake = function (k) {
+                if (!k.hasOwnProperty('__weaks')) {
+                    Object.defineProperty(k, '__weaks', { readable: true, writable: true, enumerable: false, value: {} });
+                }
+                return k['__weaks'];
+            };
+            WeakWrap.prototype.get = function (k) {
+                if (this.wm)
+                    return this.wm.get(k);
+                var obj = this.getOrMake(k);
+                return obj[this.id];
+            };
+            WeakWrap.prototype.set = function (k, val) {
+                if (this.wm) {
+                    this.wm.set(k, val);
+                    return;
+                }
+                var obj = this.getOrMake(k);
+                obj[this.id] = val;
+            };
+            return WeakWrap;
+        })();
+        Utils.WeakWrap = WeakWrap;
     })(Utils = Db.Utils || (Db.Utils = {}));
     function bind(localName, targetName, live) {
         if (live === void 0) { live = true; }
@@ -1371,6 +2085,14 @@ var Db;
         return ret;
     }
     Db.bind = bind;
+    function sortBy(field, desc) {
+        if (desc === void 0) { desc = false; }
+        return {
+            field: field,
+            desc: desc
+        };
+    }
+    Db.sortBy = sortBy;
     // --- Annotations
     function embedded(def, binding) {
         return function (target, propertyKey) {
@@ -1388,6 +2110,33 @@ var Db;
         };
     }
     Db.reference = reference;
+    function map(valueType, reference, sorting) {
+        if (reference === void 0) { reference = false; }
+        return function (target, propertyKey) {
+            var ret = meta.map(valueType, reference, sorting);
+            addDescriptor(target, propertyKey, ret);
+            installMetaGetter(target, propertyKey.toString(), ret);
+        };
+    }
+    Db.map = map;
+    function set(valueType, reference, sorting) {
+        if (reference === void 0) { reference = false; }
+        return function (target, propertyKey) {
+            var ret = meta.set(valueType, reference, sorting);
+            addDescriptor(target, propertyKey, ret);
+            installMetaGetter(target, propertyKey.toString(), ret);
+        };
+    }
+    Db.set = set;
+    function list(valueType, reference, sorting) {
+        if (reference === void 0) { reference = false; }
+        return function (target, propertyKey) {
+            var ret = meta.list(valueType, reference, sorting);
+            addDescriptor(target, propertyKey, ret);
+            installMetaGetter(target, propertyKey.toString(), ret);
+        };
+    }
+    Db.list = list;
     function root(name, override) {
         return function (target) {
             var myname = name;
@@ -1446,10 +2195,12 @@ var Db;
             enumerable: true,
             set: function (v) {
                 this[nkey] = v;
-                var mye = this.__dbevent;
+                /*
+                var mye = (<Internal.IDb3Annotated>this).__dbevent;
                 if (mye) {
                     mye.findCreateChildFor(propertyKey, true);
                 }
+                */
             },
             get: function () {
                 if (lastExpect && this !== lastExpect) {
@@ -1485,6 +2236,33 @@ var Db;
             return ret;
         }
         meta_1.reference = reference;
+        function map(valuetype, reference, sorting) {
+            if (reference === void 0) { reference = false; }
+            var ret = new Db.Internal.MapMetaDescriptor();
+            ret.setType(valuetype);
+            ret.isReference = reference;
+            ret.sorting = sorting;
+            return ret;
+        }
+        meta_1.map = map;
+        function set(valuetype, reference, sorting) {
+            if (reference === void 0) { reference = false; }
+            var ret = new Db.Internal.SetMetaDescriptor();
+            ret.setType(valuetype);
+            ret.isReference = reference;
+            ret.sorting = sorting;
+            return ret;
+        }
+        meta_1.set = set;
+        function list(valuetype, reference, sorting) {
+            if (reference === void 0) { reference = false; }
+            var ret = new Db.Internal.ListMetaDescriptor();
+            ret.setType(valuetype);
+            ret.isReference = reference;
+            ret.sorting = sorting;
+            return ret;
+        }
+        meta_1.list = list;
         function observable() {
             var ret = new Db.Internal.ObservableMetaDescriptor();
             return ret;
