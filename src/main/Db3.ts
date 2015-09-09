@@ -77,6 +77,7 @@ module Db {
 				var ret = state.createEvent(e, stack);
 				return ret;
 			};
+			state.db = db;
 			return db;
 		}
 		
@@ -363,6 +364,7 @@ module Db {
 			state :DbState;
 			parent :GenericEvent;
 			private children :{[index:string]:GenericEvent} = {};
+			private dependants :GenericEvent[] = [];
 			private _classMeta :ClassMetadata = null;
 			private _originalClassMeta :ClassMetadata = null;
 
@@ -419,6 +421,9 @@ module Db {
 				for (var k in this.children) {
 					if (k == 'constructor') continue;
 					this.children[k].urlInited();
+				}
+				for (var i = 0; i < this.dependants.length; i++) {
+					this.dependants[i].urlInited();
 				}
 				this.saveChildrenInCache();
 			}
@@ -535,6 +540,7 @@ module Db {
 			assertLoaded():void;
 			assignUrl():void;
 			save():Promise<any>;
+			clone() :E;
 		}
 		
 		export class SingleDbHandlerEvent<E> extends GenericEvent {
@@ -603,6 +609,8 @@ module Db {
 			binding :BindingImpl = null;
 			bindingPromise :Promise<BindingState> = null;
 			
+			lastDs :FirebaseDataSnapshot = null;
+			
 			progDiscriminator = 1;
 			
 			setEntity(entity :Entity) {
@@ -655,6 +663,8 @@ module Db {
 
 			
 			parseValue(ds :FirebaseDataSnapshot) {
+				this.loaded = true;
+				this.lastDs = ds;
 				var val = ds.val();
 				if (val) {
 					if (val['_dis']) {
@@ -811,6 +821,14 @@ module Db {
 					return this.save();
 				}
 			}
+			
+			clone() :E {
+				if (!this.loaded) throw new Error('Cannot clone an instance that has not been loaded');
+				var nent = this.classMeta.createInstance();
+				var evt = <EntityEvent<E>><any>this.state.db(nent);
+				evt.parseValue(this.lastDs);
+				return <E>evt.entity;
+			}
 		}
 		
 		export class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
@@ -945,11 +963,13 @@ module Db {
 				if (!this.pointedEvent) throw new Error("The reference is null, can't save it");
 				return this.pointedEvent.save();
 			}
+			
+			clone() :E {
+				return this.pointedEvent.clone();
+			}
 		}
 		
 		export interface IReadableCollection<E extends Entity> {
-			load(ctx:Object) :Promise<any>;
-			dereference(ctx:Object) :Promise<any>;
 			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
 			live(ctx:Object) :void;
 			
@@ -961,6 +981,9 @@ module Db {
 		}
 		
 		export interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+			load(ctx:Object) :Promise<any>;
+			dereference(ctx:Object) :Promise<any>;
+			
 			// Collection specific methods
 			remove(key :string|number|Entity) :Promise<any>;
 			fetch(ctx:Object, key :string|number|E) :Promise<EventDetails<E>>;
@@ -980,8 +1003,11 @@ module Db {
 		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
 			add(value :E) :Promise<any>;
 			pop() :Promise<EventDetails<E>>;
+			peekTail() :Promise<EventDetails<E>>;
+			
 			unshift(value :E):Promise<any>;
 			shift() :Promise<EventDetails<E>>;
+			peekHead() :Promise<EventDetails<E>>;
 		}
 		
 		export class CollectionDbEventHandler extends DbEventHandler {
@@ -1284,31 +1310,20 @@ module Db {
 		}
 		
 		export class EventedArray<E> {
-			// TODO for the list, we NEED to store the key and a weak, supporting more keys per instance
-			// the reason is that a list can contain more than once the same referenced instance
-			// so, we have to use the key of the datasnapshot as it's the only way of identifing a specific
-			// instance in the list.
-			
-			// But still, even if i have keys, i can't really locate them, i need a parallel list
-			// of ordered keys, but then it would not be in sync with client side modifications of
-			// the array, which we have to forbid. 
-			
 			arrayValue :E[] = [];
+			keys :string[] = [];
+			
 			constructor(
 				public collection :MapEvent<E>
 			) {
 				
 			}
 
-			private findPositionFor(ent :E|string) :number {
-				var e = <E>ent;
-				if (typeof ent === 'string') {
-					e = this.collection.realField[ent];
-				}
-				return this.arrayValue.indexOf(e);
+			private findPositionFor(key :string) :number {
+				return this.keys.indexOf(key);
 			}
 			
-			private findPositionAfter(prev :E|string) :number {
+			private findPositionAfter(prev :string) :number {
 				if (!prev) return 0;
 				var pos = this.findPositionFor(prev);
 				if (pos == -1) return this.arrayValue.length;
@@ -1317,10 +1332,14 @@ module Db {
   			
 			
 			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
-				var curpos = this.findPositionFor(val);
+				var key = ds.key();
+				var curpos = this.findPositionFor(key);
 				if (event == 'child_removed') {
 					delete this.collection.realField[ds.key()];
-					if (curpos > -1) this.arrayValue.splice(curpos,1);
+					if (curpos > -1) {
+						this.arrayValue.splice(curpos,1);
+						this.keys.splice(curpos,1);
+					}
 					return;
 				}
 				this.collection.realField[ds.key()] = val;
@@ -1333,8 +1352,12 @@ module Db {
 					this.arrayValue[curpos] = val;
 					return;
 				} else {
-					if (curpos > -1) this.arrayValue.splice(curpos,1);
+					if (curpos > -1) {
+						this.arrayValue.splice(curpos,1);
+						this.keys.splice(curpos,1);
+					}
 					this.arrayValue.splice(newpos, 0, val);
+					this.keys.splice(newpos, 0, key);
 				}
 			}
 			
@@ -1411,7 +1434,7 @@ module Db {
 			
 		}
 		
-		export class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+		export class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> implements IListSetEvent<E> {
 			createKeyFor(value :Entity) :string {
 				if (this.isReference) return Utils.IdGenerator.next();
 				var enturl = this.state.createEvent(value).getUrl();
@@ -1586,9 +1609,79 @@ module Db {
 			
 		}
 		
-		export interface IQuery<E extends Entity> {
-			// TODO implement this
+		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
+			sortOn(field :string, desc? :boolean):IQuery<E>;
+			limit(limit :number):IQuery<E>;
+			range(from :any, to :any):IQuery<E>;
+			equals(val :any):IQuery<E>;
 		}
+		
+		export class QueryImpl<E> implements IQuery<E> {
+			
+			private _sortField :string = null;
+			private _sortDesc :boolean = false;
+			private _limit :number = 0;
+			private _rangeFrom :any = null;
+			private _rangeTo :any = null;
+			private _equals :any = null;
+
+			constructor(ev :GenericEvent) {
+				super();
+				//this.
+			}
+			
+			sortOn(field :string, desc = false) {
+				this._sortField = field;
+				this._sortDesc = desc;
+				return this;
+			}
+			
+			limit(limit :number) {
+				this._limit = limit;
+				return this; 
+			}
+			
+			range(from :any, to :any) {
+				this._rangeFrom = from;
+				this._rangeTo = to;
+				return this;
+			}
+			
+			equals(val :any) {
+				this._equals = val;
+				return this;
+			}
+			
+			init(gh :EventHandler) {
+				super.init(gh);
+				var h = <CollectionDbEventHandler>gh;
+				h.ref = new Firebase(h.event.url);
+				if (this._sortField) {
+					h.ref = h.ref.orderByChild(this._sortField);
+					if (this._rangeFrom) {
+						h.ref = h.ref.startAt(this._rangeFrom);
+					}
+					if (this._rangeTo) {
+						h.ref = h.ref.startAt(this._rangeTo);
+					}
+					if (this._equals) {
+						h.ref = h.ref.equalTo(this._equals);
+					}
+				}
+				if (this._sortDesc) {
+					if (this._limit) {
+						h.ref = h.ref.limitToLast(this._limit);
+					} else {
+						h.ref = h.ref.limitToLast(Number.MAX_VALUE);
+					}
+				} else {
+					if (this._limit) {
+						h.ref = h.ref.limitToFirst(this._limit);
+					}
+				}
+			}
+		}
+		
 		
 		export class DbState {
 			cache :{[index:string]:GenericEvent} = {};
@@ -2151,6 +2244,8 @@ module Db {
 			static PUSH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 			
 			static BASE = IdGenerator.PUSH_CHARS.length;
+			
+			static REVPOINT = 1440691098716;
 		
 			// Timestamp of last push, used to prevent local collisions if you push twice in one ms.
 			static lastPushTime = 0;
@@ -2160,6 +2255,7 @@ module Db {
 			// generated because in the event of a collision, we'll use those same characters except
 			// "incremented" by one.
 			static lastRandChars = [];
+			static lastBackRandChars = [];
 		
 			static next() {
 				var now = new Date().getTime();
@@ -2189,6 +2285,42 @@ module Db {
 				}
 				for (i = 0; i < 14; i++) {
 					id += IdGenerator.PUSH_CHARS.charAt(IdGenerator.lastRandChars[i]);
+				}
+				if (id.length != 22) throw new Error('Length should be 22, but was ' + id.length);
+		
+				return id;
+			}
+			
+			static back() {
+				var now = new Date().getTime();
+				var duplicateTime = (now === IdGenerator.lastPushTime);
+				IdGenerator.lastPushTime = now;
+				
+				now = IdGenerator.REVPOINT - (now - IdGenerator.REVPOINT);
+		
+				var timeStampChars = new Array(8);
+				for (var i = 7; i >= 0; i--) {
+					timeStampChars[i] = IdGenerator.PUSH_CHARS.charAt(now % IdGenerator.BASE);
+					// NOTE: Can't use << here because javascript will convert to int and lose the upper bits.
+					now = Math.floor(now / IdGenerator.BASE);
+				}
+				if (now !== 0) throw new Error('We should have converted the entire timestamp.');
+		
+				var id = timeStampChars.join('');
+		
+				if (!duplicateTime || IdGenerator.lastBackRandChars.length == 0) {
+					for (i = 0; i < 14; i++) {
+						IdGenerator.lastBackRandChars[i] = Math.floor(Math.random() * IdGenerator.BASE);
+					}
+				} else {
+					// If the timestamp hasn't changed since last push, use the same random number, except incremented by 1.
+					for (i = 13; i >= 0 && IdGenerator.lastBackRandChars[i] === 0; i--) {
+						IdGenerator.lastBackRandChars[i] = IdGenerator.BASE-1;
+					}
+					IdGenerator.lastBackRandChars[i]--;
+				}
+				for (i = 0; i < 14; i++) {
+					id += IdGenerator.PUSH_CHARS.charAt(IdGenerator.lastBackRandChars[i]);
 				}
 				if (id.length != 22) throw new Error('Length should be 22, but was ' + id.length);
 		
@@ -2230,6 +2362,15 @@ module Db {
 				}
 				var obj = this.getOrMake(k);
 				obj[this.id] = val;
+			}
+			
+			delete(k:any) {
+				if (this.wm) {
+					this.wm.delete(k);
+					return;
+				}
+				var obj = this.getOrMake(k);
+				delete obj[this.id];
 			}
 			
 		}

@@ -719,6 +719,56 @@ describe('Db3 >', function () {
             assert("Didn't got confused by subsequent entity only call with right type but different instance")
                 .when(ge).is(M.not(M.exactly(wp2e)));
         });
+        it('should generate valid unique ids forward', function (done) {
+            var iterations = 5000;
+            var block = 50;
+            this.timeout(iterations * 1.5);
+            var ids = {};
+            var cnt = 1;
+            var lst = '0';
+            function checkRnd() {
+                var id = Db3.Utils.IdGenerator.next();
+                M.assert('Id is unique ' + id + ' on ' + cnt).when(ids[id]).is(M.aFalsey);
+                M.assert('Id is progressive').when(id > lst).is(true);
+                ids[id] = cnt++;
+                lst = id;
+                //console.log(id,cnt);
+            }
+            var intH = setInterval(function () {
+                for (var i = 0; i < block; i++) {
+                    checkRnd();
+                }
+                if (cnt > iterations) {
+                    clearInterval(intH);
+                    done();
+                }
+            }, 1);
+        });
+        it('should generate valid unique ids backward', function (done) {
+            var iterations = 5000;
+            var block = 50;
+            this.timeout(iterations * 1.5);
+            var ids = {};
+            var cnt = 1;
+            var lst = 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF';
+            function checkRnd() {
+                var id = Db3.Utils.IdGenerator.back();
+                M.assert('Id is unique ' + id + ' on ' + cnt).when(ids[id]).is(M.aFalsey);
+                M.assert('Id is progressive').when(id < lst).is(true);
+                ids[id] = cnt++;
+                lst = id;
+                //console.log(id,cnt);
+            }
+            var intH = setInterval(function () {
+                for (var i = 0; i < block; i++) {
+                    checkRnd();
+                }
+                if (cnt > iterations) {
+                    clearInterval(intH);
+                    done();
+                }
+            }, 1);
+        });
         // TODO implement the .props property to clean any ambiguity
     });
     describe('Entity reading >', function () {
@@ -1920,7 +1970,7 @@ describe('Db3 >', function () {
                 });
             });
         });
-        describe.only('List >', function () {
+        describe('List >', function () {
             it('should permit same reference more than once', function () {
                 var wl2 = Db(WithList).load('wl2');
                 var wp1 = Db(WithProps).load('wp1');
@@ -1932,6 +1982,27 @@ describe('Db3 >', function () {
                     Db(wl2.refList).off(_this);
                     return new Promise(function (ok) {
                         wlt2Fb.child('refList').on('value', ok);
+                    });
+                }).then(function (ds) {
+                    var val = ds.val();
+                    var cnt = 0;
+                    for (var k in val) {
+                        cnt++;
+                    }
+                    assert('list is grown').when(cnt).is(4);
+                });
+            });
+            it('should be able to clone and readd', function () {
+                var wl1 = Db(WithList).load('wl1');
+                return Db(wl1.embedList).load(_this).then(function () {
+                    Db(wl1.embedList).live(_this);
+                    var fr = Db(wl1.embedList[1]).clone();
+                    return Db(wl1.embedList).add(fr);
+                }).then(function () {
+                    assert('set has grown in ram').when(wl1.embedList).is(M.withLength(4));
+                    Db(wl1.embedList).off(_this);
+                    return new Promise(function (ok) {
+                        wlt1Fb.child('embedList').on('value', ok);
                     });
                 }).then(function (ds) {
                     var val = ds.val();

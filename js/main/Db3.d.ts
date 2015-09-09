@@ -124,6 +124,7 @@ declare module Db {
             state: DbState;
             parent: GenericEvent;
             private children;
+            private dependants;
             private _classMeta;
             private _originalClassMeta;
             /**
@@ -162,6 +163,7 @@ declare module Db {
             assertLoaded(): void;
             assignUrl(): void;
             save(): Promise<any>;
+            clone(): E;
         }
         class SingleDbHandlerEvent<E> extends GenericEvent {
             loaded: boolean;
@@ -178,6 +180,7 @@ declare module Db {
             nameOnParent: string;
             binding: BindingImpl;
             bindingPromise: Promise<BindingState>;
+            lastDs: FirebaseDataSnapshot;
             progDiscriminator: number;
             setEntity(entity: Entity): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
@@ -196,6 +199,7 @@ declare module Db {
             serialize(localsOnly?: boolean, fields?: string[]): Object;
             assignUrl(): void;
             save(): Promise<any>;
+            clone(): E;
         }
         class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
             classMeta: ClassMetadata;
@@ -219,10 +223,9 @@ declare module Db {
             serialize(localsOnly?: boolean): Object;
             assignUrl(): void;
             save(): Promise<any>;
+            clone(): E;
         }
         interface IReadableCollection<E extends Entity> {
-            load(ctx: Object): Promise<any>;
-            dereference(ctx: Object): Promise<any>;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             live(ctx: Object): void;
             added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
@@ -231,6 +234,8 @@ declare module Db {
             moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
         }
         interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+            load(ctx: Object): Promise<any>;
+            dereference(ctx: Object): Promise<any>;
             remove(key: string | number | Entity): Promise<any>;
             fetch(ctx: Object, key: string | number | E): Promise<EventDetails<E>>;
             with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
@@ -245,8 +250,10 @@ declare module Db {
         interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
             add(value: E): Promise<any>;
             pop(): Promise<EventDetails<E>>;
+            peekTail(): Promise<EventDetails<E>>;
             unshift(value: E): Promise<any>;
             shift(): Promise<EventDetails<E>>;
+            peekHead(): Promise<EventDetails<E>>;
         }
         class CollectionDbEventHandler extends DbEventHandler {
             dbEvents: string[];
@@ -292,8 +299,9 @@ declare module Db {
         class EventedArray<E> {
             collection: MapEvent<E>;
             arrayValue: E[];
+            keys: string[];
             constructor(collection: MapEvent<E>);
-            private findPositionFor(ent);
+            private findPositionFor(key);
             private findPositionAfter(prev);
             addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
             prepareSerializeSet(): void;
@@ -305,7 +313,7 @@ declare module Db {
             add(value?: Entity): Promise<any>;
             addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
         }
-        class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+        class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> implements IListSetEvent<E> {
             createKeyFor(value: Entity): string;
             normalizeKey(key: string | number | Entity): string;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
@@ -353,7 +361,25 @@ declare module Db {
             query(): IQuery<E>;
             getUrl(): string;
         }
-        interface IQuery<E extends Entity> {
+        interface IQuery<E extends Entity> extends IReadableCollection<E> {
+            sortOn(field: string, desc?: boolean): IQuery<E>;
+            limit(limit: number): IQuery<E>;
+            range(from: any, to: any): IQuery<E>;
+            equals(val: any): IQuery<E>;
+        }
+        class QueryImpl<E> implements IQuery<E> {
+            private _sortField;
+            private _sortDesc;
+            private _limit;
+            private _rangeFrom;
+            private _rangeTo;
+            private _equals;
+            constructor(ev: GenericEvent);
+            sortOn(field: string, desc?: boolean): QueryImpl<E>;
+            limit(limit: number): QueryImpl<E>;
+            range(from: any, to: any): QueryImpl<E>;
+            equals(val: any): QueryImpl<E>;
+            init(gh: EventHandler): void;
         }
         class DbState {
             cache: {
@@ -459,9 +485,12 @@ declare module Db {
         class IdGenerator {
             static PUSH_CHARS: string;
             static BASE: number;
+            static REVPOINT: number;
             static lastPushTime: number;
             static lastRandChars: any[];
+            static lastBackRandChars: any[];
             static next(): string;
+            static back(): string;
         }
         class WeakWrap<V> {
             private wm;
@@ -470,6 +499,7 @@ declare module Db {
             private getOrMake(k);
             get(k: any): V;
             set(k: any, val: V): void;
+            delete(k: any): void;
         }
     }
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;

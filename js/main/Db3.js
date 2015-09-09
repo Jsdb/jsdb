@@ -48,6 +48,7 @@ var Db;
                 var ret = state.createEvent(e, stack);
                 return ret;
             };
+            state.db = db;
             return db;
         }
         Internal.createDb = createDb;
@@ -258,6 +259,7 @@ var Db;
         var GenericEvent = (function () {
             function GenericEvent() {
                 this.children = {};
+                this.dependants = [];
                 this._classMeta = null;
                 this._originalClassMeta = null;
                 /**
@@ -316,6 +318,9 @@ var Db;
                     if (k == 'constructor')
                         continue;
                     this.children[k].urlInited();
+                }
+                for (var i = 0; i < this.dependants.length; i++) {
+                    this.dependants[i].urlInited();
                 }
                 this.saveChildrenInCache();
             };
@@ -475,6 +480,7 @@ var Db;
                 this.nameOnParent = null;
                 this.binding = null;
                 this.bindingPromise = null;
+                this.lastDs = null;
                 this.progDiscriminator = 1;
             }
             EntityEvent.prototype.setEntity = function (entity) {
@@ -523,6 +529,8 @@ var Db;
                 });
             };
             EntityEvent.prototype.parseValue = function (ds) {
+                this.loaded = true;
+                this.lastDs = ds;
                 var val = ds.val();
                 if (val) {
                     if (val['_dis']) {
@@ -691,6 +699,14 @@ var Db;
                     return this.save();
                 }
             };
+            EntityEvent.prototype.clone = function () {
+                if (!this.loaded)
+                    throw new Error('Cannot clone an instance that has not been loaded');
+                var nent = this.classMeta.createInstance();
+                var evt = this.state.db(nent);
+                evt.parseValue(this.lastDs);
+                return evt.entity;
+            };
             return EntityEvent;
         })(SingleDbHandlerEvent);
         Internal.EntityEvent = EntityEvent;
@@ -829,6 +845,9 @@ var Db;
                 if (!this.pointedEvent)
                     throw new Error("The reference is null, can't save it");
                 return this.pointedEvent.save();
+            };
+            ReferenceEvent.prototype.clone = function () {
+                return this.pointedEvent.clone();
             };
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
@@ -1135,21 +1154,11 @@ var Db;
         var EventedArray = (function () {
             function EventedArray(collection) {
                 this.collection = collection;
-                // TODO for the list, we NEED to store the key and a weak, supporting more keys per instance
-                // the reason is that a list can contain more than once the same referenced instance
-                // so, we have to use the key of the datasnapshot as it's the only way of identifing a specific
-                // instance in the list.
-                // But still, even if i have keys, i can't really locate them, i need a parallel list
-                // of ordered keys, but then it would not be in sync with client side modifications of
-                // the array, which we have to forbid. 
                 this.arrayValue = [];
+                this.keys = [];
             }
-            EventedArray.prototype.findPositionFor = function (ent) {
-                var e = ent;
-                if (typeof ent === 'string') {
-                    e = this.collection.realField[ent];
-                }
-                return this.arrayValue.indexOf(e);
+            EventedArray.prototype.findPositionFor = function (key) {
+                return this.keys.indexOf(key);
             };
             EventedArray.prototype.findPositionAfter = function (prev) {
                 if (!prev)
@@ -1160,11 +1169,14 @@ var Db;
                 return pos + 1;
             };
             EventedArray.prototype.addToInternal = function (event, ds, val, det) {
-                var curpos = this.findPositionFor(val);
+                var key = ds.key();
+                var curpos = this.findPositionFor(key);
                 if (event == 'child_removed') {
                     delete this.collection.realField[ds.key()];
-                    if (curpos > -1)
+                    if (curpos > -1) {
                         this.arrayValue.splice(curpos, 1);
+                        this.keys.splice(curpos, 1);
+                    }
                     return;
                 }
                 this.collection.realField[ds.key()] = val;
@@ -1175,9 +1187,12 @@ var Db;
                     return;
                 }
                 else {
-                    if (curpos > -1)
+                    if (curpos > -1) {
                         this.arrayValue.splice(curpos, 1);
+                        this.keys.splice(curpos, 1);
+                    }
                     this.arrayValue.splice(newpos, 0, val);
+                    this.keys.splice(newpos, 0, key);
                 }
             };
             EventedArray.prototype.prepareSerializeSet = function () {
@@ -1425,6 +1440,69 @@ var Db;
             return EntityRoot;
         })();
         Internal.EntityRoot = EntityRoot;
+        var QueryImpl = (function () {
+            function QueryImpl(ev) {
+                this._sortField = null;
+                this._sortDesc = false;
+                this._limit = 0;
+                this._rangeFrom = null;
+                this._rangeTo = null;
+                this._equals = null;
+                _super.call(this);
+                //this.
+            }
+            QueryImpl.prototype.sortOn = function (field, desc) {
+                if (desc === void 0) { desc = false; }
+                this._sortField = field;
+                this._sortDesc = desc;
+                return this;
+            };
+            QueryImpl.prototype.limit = function (limit) {
+                this._limit = limit;
+                return this;
+            };
+            QueryImpl.prototype.range = function (from, to) {
+                this._rangeFrom = from;
+                this._rangeTo = to;
+                return this;
+            };
+            QueryImpl.prototype.equals = function (val) {
+                this._equals = val;
+                return this;
+            };
+            QueryImpl.prototype.init = function (gh) {
+                _super.init.call(this, gh);
+                var h = gh;
+                h.ref = new Firebase(h.event.url);
+                if (this._sortField) {
+                    h.ref = h.ref.orderByChild(this._sortField);
+                    if (this._rangeFrom) {
+                        h.ref = h.ref.startAt(this._rangeFrom);
+                    }
+                    if (this._rangeTo) {
+                        h.ref = h.ref.startAt(this._rangeTo);
+                    }
+                    if (this._equals) {
+                        h.ref = h.ref.equalTo(this._equals);
+                    }
+                }
+                if (this._sortDesc) {
+                    if (this._limit) {
+                        h.ref = h.ref.limitToLast(this._limit);
+                    }
+                    else {
+                        h.ref = h.ref.limitToLast(Number.MAX_VALUE);
+                    }
+                }
+                else {
+                    if (this._limit) {
+                        h.ref = h.ref.limitToFirst(this._limit);
+                    }
+                }
+            };
+            return QueryImpl;
+        })();
+        Internal.QueryImpl = QueryImpl;
         var DbState = (function () {
             function DbState() {
                 this.cache = {};
@@ -2030,10 +2108,44 @@ var Db;
                     throw new Error('Length should be 22, but was ' + id.length);
                 return id;
             };
+            IdGenerator.back = function () {
+                var now = new Date().getTime();
+                var duplicateTime = (now === IdGenerator.lastPushTime);
+                IdGenerator.lastPushTime = now;
+                now = IdGenerator.REVPOINT - (now - IdGenerator.REVPOINT);
+                var timeStampChars = new Array(8);
+                for (var i = 7; i >= 0; i--) {
+                    timeStampChars[i] = IdGenerator.PUSH_CHARS.charAt(now % IdGenerator.BASE);
+                    // NOTE: Can't use << here because javascript will convert to int and lose the upper bits.
+                    now = Math.floor(now / IdGenerator.BASE);
+                }
+                if (now !== 0)
+                    throw new Error('We should have converted the entire timestamp.');
+                var id = timeStampChars.join('');
+                if (!duplicateTime || IdGenerator.lastBackRandChars.length == 0) {
+                    for (i = 0; i < 14; i++) {
+                        IdGenerator.lastBackRandChars[i] = Math.floor(Math.random() * IdGenerator.BASE);
+                    }
+                }
+                else {
+                    // If the timestamp hasn't changed since last push, use the same random number, except incremented by 1.
+                    for (i = 13; i >= 0 && IdGenerator.lastBackRandChars[i] === 0; i--) {
+                        IdGenerator.lastBackRandChars[i] = IdGenerator.BASE - 1;
+                    }
+                    IdGenerator.lastBackRandChars[i]--;
+                }
+                for (i = 0; i < 14; i++) {
+                    id += IdGenerator.PUSH_CHARS.charAt(IdGenerator.lastBackRandChars[i]);
+                }
+                if (id.length != 22)
+                    throw new Error('Length should be 22, but was ' + id.length);
+                return id;
+            };
             // Modeled after base64 web-safe chars, but ordered by ASCII.
             // SG : removed - and _
             IdGenerator.PUSH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
             IdGenerator.BASE = IdGenerator.PUSH_CHARS.length;
+            IdGenerator.REVPOINT = 1440691098716;
             // Timestamp of last push, used to prevent local collisions if you push twice in one ms.
             IdGenerator.lastPushTime = 0;
             // We generate 72-bits of randomness which get turned into 14 characters and appended to the
@@ -2041,6 +2153,7 @@ var Db;
             // generated because in the event of a collision, we'll use those same characters except
             // "incremented" by one.
             IdGenerator.lastRandChars = [];
+            IdGenerator.lastBackRandChars = [];
             return IdGenerator;
         })();
         Utils.IdGenerator = IdGenerator;
@@ -2073,6 +2186,14 @@ var Db;
                 }
                 var obj = this.getOrMake(k);
                 obj[this.id] = val;
+            };
+            WeakWrap.prototype.delete = function (k) {
+                if (this.wm) {
+                    this.wm.delete(k);
+                    return;
+                }
+                var obj = this.getOrMake(k);
+                delete obj[this.id];
             };
             return WeakWrap;
         })();
