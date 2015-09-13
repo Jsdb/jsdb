@@ -96,7 +96,6 @@ module Db {
 
 			<V extends nativeArrObj>(value :V) :IObservableEvent<V>;
 
-			// TODO maybe differentiate map and set/list interfaces
 			<T extends Entity>(map :{[index:string]:T}) :IMapEvent<T>
 
 			<T extends Entity>(list :T[]) :IListSetEvent<T>;
@@ -463,8 +462,8 @@ module Db {
 				this.handlers.filter((h) => { h.handle(ed); return true; });
 			}
 
-			findCreateChildFor(key :String, force? :boolean):GenericEvent
-			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent
+			findCreateChildFor(key :String, force? :boolean):GenericEvent;
+			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent;
 			findCreateChildFor(param :any, force = false):GenericEvent {
 				var meta:MetaDescriptor = null;
 				if (param instanceof MetaDescriptor) {
@@ -499,6 +498,12 @@ module Db {
 						this.state.storeInCache(this.children[k]);
 					}
 				}
+			}
+			
+			addDependant(dep :GenericEvent) {
+				this.dependants.push(dep);
+				dep.parent = this;
+				dep.state = this.state;
 			}
 			
 			parseValue(ds :FirebaseDataSnapshot) {
@@ -971,26 +976,27 @@ module Db {
 		
 		export interface IReadableCollection<E extends Entity> {
 			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			live(ctx:Object) :void;
 			
 			// Collection events
 			added(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
 			removed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
 			changed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
 			moved(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
+
+			off(ctx:Object) :void;
 		}
 		
 		export interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
-			load(ctx:Object) :Promise<any>;
-			dereference(ctx:Object) :Promise<any>;
+			live(ctx:Object) :void;
 			
 			// Collection specific methods
 			remove(key :string|number|Entity) :Promise<any>;
 			fetch(ctx:Object, key :string|number|E) :Promise<EventDetails<E>>;
 			with(key :string|number|Entity) :IEntityOrReferenceEvent<E>;
 			
+			query() :IQuery<E>;
+			
 			// Handling methods
-			off(ctx:Object) :void;
 			isLoaded():boolean;
 			assertLoaded():void;
 			save():Promise<any>;
@@ -998,6 +1004,9 @@ module Db {
 		
 		export interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
 			add(key :string|number|Entity, value :E) :Promise<any>;
+
+			load(ctx:Object) :Promise<{[index:string]:E}>;
+			dereference(ctx:Object) :Promise<{[index:string]:E}>;
 		}
 
 		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
@@ -1008,6 +1017,9 @@ module Db {
 			unshift(value :E):Promise<any>;
 			shift() :Promise<EventDetails<E>>;
 			peekHead() :Promise<EventDetails<E>>;
+
+			load(ctx:Object) :Promise<E[]>;
+			dereference(ctx:Object) :Promise<E[]>;
 		}
 		
 		export class CollectionDbEventHandler extends DbEventHandler {
@@ -1090,7 +1102,7 @@ module Db {
 			}
 			
 			load(ctx:Object,deref = true) :Promise<any> {
-				return new Promise<EventDetails<E>>((resolve,error) => {
+				return new Promise<any>((resolve,error) => {
 					var allProms :Promise<any>[] = [];
 					this.updated(ctx, (det) => {
 						if (det.type == EventType.LIST_END) {
@@ -1127,8 +1139,8 @@ module Db {
 				sh.hookAll((ds,prev,event) => this.handleDbEvent(sh,event,ds,prev));
 			}
 			
-			findCreateChildFor(key :String, force? :boolean):GenericEvent
-			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent
+			findCreateChildFor(key :String, force? :boolean):GenericEvent;
+			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent;
 			findCreateChildFor(param :any, force = false):GenericEvent {
 				var meta:MetaDescriptor = null;
 				if (!(param instanceof MetaDescriptor)) {
@@ -1189,7 +1201,7 @@ module Db {
 				var k :string = null;
 				var v = value;
 				if (!v) {
-					v = key;
+					v = <Entity>key;
 					k = this.createKeyFor(v);
 				} else {
 					k = this.normalizeKey(key);
@@ -1220,7 +1232,7 @@ module Db {
 				} else if (typeof key === 'number') {
 					key = key + '';
 				} else {
-					var enturl = this.state.createEvent(key).getUrl();
+					var enturl = this.state.createEvent(<Entity>key).getUrl();
 					if (!enturl) throw new Error("The entity used as a key in a map must be already saved elsewhere");
 					var entroot = this.state.entityRootFromUrl(enturl);
 					enturl = enturl.substr(entroot.getUrl().length);
@@ -1306,6 +1318,14 @@ module Db {
 				} finally {
 					this.entity = preEntity;
 				}
+			}
+			
+			query() :IQuery<E> {
+				var ret = new QueryImpl<E>(this);
+				ret.isReference = this.isReference;
+				ret.sorting = this.sorting;
+				ret.classMeta = this.classMeta;
+				return ret;
 			}
 		}
 		
@@ -1430,6 +1450,14 @@ module Db {
 				if (this.parent && this.parent.entity) {
 					this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
 				}
+			}
+
+			load(ctx:Object) :Promise<E[]> {
+				return super.load(ctx).then(()=>this.evarray.arrayValue);
+			}
+			
+			dereference(ctx:Object) :Promise<E[]> {
+				return super.dereference(ctx).then(()=>this.evarray.arrayValue);
 			}
 			
 		}
@@ -1610,16 +1638,17 @@ module Db {
 		}
 		
 		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
+			load(ctx:Object) :Promise<E[]>;
+			dereference(ctx:Object) :Promise<E[]>;
+			
 			sortOn(field :string, desc? :boolean):IQuery<E>;
 			limit(limit :number):IQuery<E>;
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
 		}
 		
-		export class QueryImpl<E> implements IQuery<E> {
+		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements IQuery<E> {
 			
-			private _sortField :string = null;
-			private _sortDesc :boolean = false;
 			private _limit :number = 0;
 			private _rangeFrom :any = null;
 			private _rangeTo :any = null;
@@ -1631,8 +1660,10 @@ module Db {
 			}
 			
 			sortOn(field :string, desc = false) {
-				this._sortField = field;
-				this._sortDesc = desc;
+				this.sorting = {
+					field: field,
+					desc :desc
+				};
 				return this;
 			}
 			
@@ -1651,13 +1682,12 @@ module Db {
 				this._equals = val;
 				return this;
 			}
-			
+
 			init(gh :EventHandler) {
-				super.init(gh);
 				var h = <CollectionDbEventHandler>gh;
-				h.ref = new Firebase(h.event.url);
-				if (this._sortField) {
-					h.ref = h.ref.orderByChild(this._sortField);
+				h.ref = new Firebase(this.parent.getUrl());
+				if (this.sorting) {
+					h.ref = h.ref.orderByChild(this.sorting.field);
 					if (this._rangeFrom) {
 						h.ref = h.ref.startAt(this._rangeFrom);
 					}
@@ -1668,7 +1698,7 @@ module Db {
 						h.ref = h.ref.equalTo(this._equals);
 					}
 				}
-				if (this._sortDesc) {
+				if (this.sorting && this.sorting.desc) {
 					if (this._limit) {
 						h.ref = h.ref.limitToLast(this._limit);
 					} else {
@@ -1679,6 +1709,18 @@ module Db {
 						h.ref = h.ref.limitToFirst(this._limit);
 					}
 				}
+				h.event = this;
+				h.hookAll((ds,prev,event) => this.handleDbEvent(h,event,ds,prev));
+			}
+
+			findCreateChildFor(key :String, force? :boolean):GenericEvent;
+			findCreateChildFor(meta :MetaDescriptor, force? :boolean):GenericEvent;
+			findCreateChildFor(param :any, force = false):GenericEvent {
+				return this.parent.findCreateChildFor(param, force);
+			}
+			
+			save() :Promise<any> {
+				throw new Error("Can't save a query");
 			}
 		}
 		
@@ -1709,8 +1751,8 @@ module Db {
 				this.cache = {};
 			}
 			
-			entityRoot(ctor :EntityType<any>) :IEntityRoot<any>
-			entityRoot(meta :ClassMetadata) :IEntityRoot<any>
+			entityRoot(ctor :EntityType<any>) :IEntityRoot<any>;
+			entityRoot(meta :ClassMetadata) :IEntityRoot<any>;
 			entityRoot(param :any) :IEntityRoot<any> {
 				var meta :ClassMetadata = null;
 				if (param instanceof ClassMetadata) {
@@ -2185,7 +2227,7 @@ module Db {
 			var acproto = (<EntityType<any>>o).prototype;
 			if (!acproto) {
 				acproto = Object.getPrototypeOf(o);
-				firstCtor = o.constructor;
+				firstCtor = <Entity>o.constructor;
 			}
 			if (!acproto) throw new Error("Cannot reconstruct hierarchy following prototype chain of " + o);
 			var ret :EntityType<any>[] = [];
@@ -2344,7 +2386,7 @@ module Db {
 			
 			private getOrMake(k :Object) {
 				if (!k.hasOwnProperty('__weaks')) { 
-					Object.defineProperty(k, '__weaks', {readable:true, writable:true, enumerable:false,value:{}});
+					Object.defineProperty(k, '__weaks', {writable:true, enumerable:false,value:{}});
 				}
 				return k['__weaks'];
 			}
