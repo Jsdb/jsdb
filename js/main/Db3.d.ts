@@ -102,7 +102,7 @@ declare module Db {
             callback: (ed: EventDetails<any>) => void;
             discriminator: any;
             after: (h?: EventHandler) => any;
-            private canceled;
+            canceled: boolean;
             constructor(ctx?: Object, callback?: (ed: EventDetails<any>) => void, discriminator?: any);
             equals(oth: EventHandler): boolean;
             decomission(remove: boolean): boolean;

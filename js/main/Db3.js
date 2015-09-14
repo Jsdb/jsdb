@@ -239,6 +239,8 @@ var Db;
                 this.cbs = [];
             }
             DbEventHandler.prototype.hook = function (event, fn) {
+                if (this.canceled)
+                    return;
                 this.cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
                 console.log(this.myprog + " on " + event);
@@ -1344,12 +1346,8 @@ var Db;
                 var _this = this;
                 return new Promise(function (ok, err) {
                     _this.query().limit(dir).added(ctx, function (det) {
-                        if (det.type == EventType.LIST_END) {
-                            det.offMe();
-                        }
-                        else {
-                            ok(det);
-                        }
+                        det.offMe();
+                        ok(det);
                     });
                 });
             };

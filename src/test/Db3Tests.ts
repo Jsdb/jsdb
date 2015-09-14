@@ -2066,7 +2066,7 @@ describe('Db3 >', () => {
 			});
 		});
 		
-		describe.only('List >', ()=> {
+		describe('List >', ()=> {
 			it('should permit same reference more than once', ()=>{
 				var wl2 = Db(WithList).load('wl2');
 				var wp1 = Db(WithProps).load('wp1'); 

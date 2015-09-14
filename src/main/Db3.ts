@@ -291,7 +291,7 @@ module Db {
 			callback :(ed:EventDetails<any>)=>void;
 			discriminator :any = null;
 			after: (h?:EventHandler)=>any;
-			private canceled = false;
+			canceled = false;
 			
 			constructor(ctx? :Object, callback? :(ed:EventDetails<any>)=>void, discriminator :any = null) {
 				this.ctx = ctx;
@@ -340,6 +340,7 @@ module Db {
 			protected cbs :{event:string; fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void}[] = [];
 
 			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void) {
+				if (this.canceled) return;
 				this.cbs.push({event:event, fn:fn});
 				// TODO do something on cancelCallback? It's here only because of method signature
 				console.log(this.myprog + " on " + event);
@@ -1509,11 +1510,8 @@ module Db {
 			intPeek(ctx:Object, dir :number) :Promise<EventDetails<E>> {
 				return new Promise<EventDetails<E>>((ok,err)=>{
 					this.query().limit(dir).added(ctx, (det)=>{
-						if (det.type == EventType.LIST_END) {
-							det.offMe();
-						} else {
-							ok(det);
-						}
+						det.offMe();
+						ok(det);
 					});
 				});
 			}

@@ -1970,7 +1970,7 @@ describe('Db3 >', function () {
                 });
             });
         });
-        describe.only('List >', function () {
+        describe('List >', function () {
             it('should permit same reference more than once', function () {
                 var wl2 = Db(WithList).load('wl2');
                 var wp1 = Db(WithProps).load('wp1');
