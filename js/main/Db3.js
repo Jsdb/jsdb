@@ -7,20 +7,49 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
+/**
+ * The default db, will be the first database created, handy since most projects will only use one db.
+ */
 var defaultDb = null;
+/**
+ * The main Db module.
+ */
 var Db;
 (function (Db) {
+    /**
+     * Create a database instance using given configuration. The first call to this function
+     * will also initialize the {@link defaultDb}.
+     *
+     * TODO extend on the configuration options
+     *
+     * @return An initialized and configured db instance
+     */
     function configure(conf) {
-        defaultDb = Db.Internal.createDb(conf);
-        return defaultDb;
+        if (!defaultDb) {
+            defaultDb = Db.Internal.createDb(conf);
+            return defaultDb;
+        }
+        else {
+            return Db.Internal.createDb(conf);
+        }
     }
     Db.configure = configure;
+    /**
+     * Return the {@link defaultDb} if any has been created.
+     */
     function getDefaultDb() {
         return defaultDb;
     }
     Db.getDefaultDb = getDefaultDb;
+    /**
+     * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
+     * they should never be used directly.
+     */
     var Internal;
     (function (Internal) {
+        /**
+         * Creates a Db based on the given configuration.
+         */
         function createDb(conf) {
             var state = new DbState();
             state.configure(conf);
@@ -52,6 +81,9 @@ var Db;
             return db;
         }
         Internal.createDb = createDb;
+        /**
+         * Implementation of {@link IDbOperations}.
+         */
         var DbOperations = (function () {
             function DbOperations(state) {
                 this.state = state;
@@ -71,6 +103,9 @@ var Db;
             return DbOperations;
         })();
         Internal.DbOperations = DbOperations;
+        /**
+         * Implementation of {@link IBinding}.
+         */
         var BindingImpl = (function () {
             function BindingImpl() {
                 this.keys = [];
@@ -84,6 +119,22 @@ var Db;
                 this.live[local] = live;
                 return this;
             };
+            /**
+             * Start pre-loading bound fields.
+             *
+             * It will search on the parent the required fields and trigger a "load". Load is implemented in
+             * {@link IEntityOrReferenceEvent}, {@link IMapEvent} and {@link IListSetEvent}, and in all of them it
+             * returns a promise that is fulfilled when the given field is completely loaded.
+             *
+             * All the returned promises are then executed in parallel using Promise.all and the results
+             * combined in the {@link BindingState} of the returned promise.
+             *
+             * This phase executes in parallel with the loading of the target entity.
+             *
+             * @param metadata the class metadata of the parent entity
+             * @param state the db state to operate on
+             * @param parent the parent entity instance
+             */
             BindingImpl.prototype.startLoads = function (metadata, state, parent) {
                 var proms = [];
                 var evts = [];
@@ -109,6 +160,15 @@ var Db;
                     };
                 });
             };
+            /**
+             * Completes the binding once the target entity completed loading and the Promise returned by
+             * {@link startLoads} completes.
+             *
+             * It sets all the values found in the "result", and optionally subscribes to the
+             * "updated" event to keep the value live. For references, the updated event is also
+             * trigger on reference change, so the value will be kept in sync.
+             *
+             */
             BindingImpl.prototype.resolve = function (tgt, result) {
                 var _this = this;
                 var vals = result.vals;
@@ -127,6 +187,7 @@ var Db;
                         // Wrapping in closure for 'k'
                         (function (k) {
                             evt.updated(tgt, function (updet) {
+                                // TODO if the target event is a collection, updated payload will not contain the full collection
                                 tgt[_this.bindings[k]] = updet.payload;
                             });
                         })(k);
@@ -139,37 +200,114 @@ var Db;
             return BindingImpl;
         })();
         Internal.BindingImpl = BindingImpl;
+        /**
+         * Various kind of events that can be triggered when using {@link EventDetails}.
+         */
         (function (EventType) {
+            /**
+             * Unknown event type.
+             */
             EventType[EventType["UNDEFINED"] = 0] = "UNDEFINED";
+            /**
+             * The value has been updated, used on entities when there was a change and on collections when an elements
+             * is changed or has been reordered.
+             */
             EventType[EventType["UPDATE"] = 1] = "UPDATE";
+            /**
+             * The value has been removed, used on root entities when they are deleted, embedded and references when
+             * they are nulled, references also when the referenced entity has been deleted, and on collections when
+             * an element has been removed from the collection.
+             */
             EventType[EventType["REMOVED"] = 2] = "REMOVED";
+            /**
+             * The value has been added, used on collections when a new element has been added.
+             */
             EventType[EventType["ADDED"] = 3] = "ADDED";
+            /**
+             * Special event used on collection to notify that the collection has finished loading, and following
+             * events will be updates to the previous state and not initial population of the collection.
+             */
             EventType[EventType["LIST_END"] = 4] = "LIST_END";
         })(Internal.EventType || (Internal.EventType = {}));
         var EventType = Internal.EventType;
+        /**
+         * Class describing an event from the Db. It is used in every listener callback.
+         */
         var EventDetails = (function () {
             function EventDetails() {
+                /**
+                 * The type of the event, see {@link EventType}.
+                 */
                 this.type = EventType.UNDEFINED;
+                /**
+                 * The payload of the event.
+                 *
+                 * For entities, it is an instance of the entity. In collections, it is the value that has been
+                 * added, removed or updated.
+                 */
                 this.payload = null;
+                /**
+                 * True during initial population of a collection, false when later updating the collection values.
+                 */
                 this.populating = false;
+                /**
+                 * True if an entity has been populated only with projected values (see {@link reference}), false
+                 * if instead values are fresh from the main entry in the database.
+                 */
                 this.projected = false;
+                /**
+                 * Original underlying database event.
+                 *
+                 * TODO remove this, it exposes underlying informations that could not be stable
+                 */
                 this.originalEvent = null;
+                /**
+                 * Original event url.
+                 *
+                 * TODO maybe whe should remove this, as it exposes potentially dangerous informations
+                 */
                 this.originalUrl = null;
+                /**
+                 * Key on which the event originated. On a root entity, it is the id of the entity; on an embedded
+                 * it's the name of the field; on a reference it could be the name of the field (if the
+                 * reference has changed) or the id (or field name) of the referenced entity; on a collection
+                 * it's the key that has been added, removed or changed.
+                 */
                 this.originalKey = null;
+                /**
+                 * Preceding key in the current sorting order. This is useful only on collections, and it's mostly
+                 * useful when the order of the elements in the collection has changed.
+                 */
                 this.precedingKey = null;
+                /**
+                 * The event handler that is broadcasting this event.
+                 */
                 this.handler = null;
+                /**
+                 * True if {@link offMe} was called.
+                 */
                 this.offed = false;
             }
             EventDetails.prototype.setHandler = function (handler) {
                 this.handler = handler;
             };
+            /**
+             * Detaches the current listener, so that the listener will not receive further events
+             * and resources can be released.
+             */
             EventDetails.prototype.offMe = function () {
                 this.handler.offMe();
                 this.offed = true;
             };
+            /**
+             * @returns true if {@link offMe} was called.
+             */
             EventDetails.prototype.wasOffed = function () {
                 return this.offed;
             };
+            /**
+             * Creates an equivalent copy of this instance.
+             */
             EventDetails.prototype.clone = function () {
                 var ret = new EventDetails();
                 ret.type = this.type;
@@ -185,19 +323,45 @@ var Db;
             return EventDetails;
         })();
         Internal.EventDetails = EventDetails;
+        /**
+         * Generic binding between a {@link GenericEvent} and a callback function that consume {@link EventDetails}.
+         */
         var EventHandler = (function () {
+            /**
+             * @param ctx the {@link ctx} context object for this handler
+             * @param callback the {@link callback} for this handler
+             * @param discriminator the optional {@link discriminator} for this handler
+             */
             function EventHandler(ctx, callback, discriminator) {
                 if (discriminator === void 0) { discriminator = null; }
+                /** Progressive number of this handler, for debug purposes */
                 this.myprog = EventHandler.prog++;
+                /**
+                 * A discriminator, used to differentiate between two different handlers that happen to have
+                 * the same context and the same callback.
+                 */
                 this.discriminator = null;
+                //after: (h?:EventHandler)=>any;
+                /**
+                 * true is this handler was canceled.
+                 */
                 this.canceled = false;
                 this.ctx = ctx;
                 this.callback = callback;
                 this.discriminator = discriminator;
             }
+            /**
+             * @returns true if the given handler has same {@link ctx}, {@link callback} and eventually {@link discrimnator} as this one.
+             */
             EventHandler.prototype.equals = function (oth) {
                 return this.ctx == oth.ctx && this.callback == oth.callback && this.discriminator == oth.discriminator;
             };
+            /**
+             * Decommission (cancel) this handler, only if the "remove" parameter is true.
+             *
+             * @param remove if true decommiission this handler, otherwise not.
+             * @return the same value of "remove" parameter.
+             */
             EventHandler.prototype.decomission = function (remove) {
                 // override off, must remove only this instance callbacks, Firebase does not
                 if (remove) {
@@ -205,6 +369,11 @@ var Db;
                 }
                 return remove;
             };
+            /**
+             * Handles the given {@link EventDetails}.
+             *
+             * The EventDetails will be cloned, connected to this handler, and the the callback will be invoked.
+             */
             EventHandler.prototype.handle = function (evd) {
                 if (this.canceled) {
                     console.warn(this.myprog + " : Receiving events on canceled handler", evd);
@@ -216,8 +385,7 @@ var Db;
                 evd = evd.clone();
                 evd.setHandler(this);
                 // the after is executed before to avoid bouncing
-                if (this.after)
-                    this.after(this);
+                //if (this.after) this.after(this);
                 try {
                     this.callback.call(this.ctx, evd);
                 }
@@ -225,34 +393,56 @@ var Db;
                 }
                 //console.log("Then calling", this.after);
             };
+            /**
+             * Ask to the bound {@link event} to decommission this handler.
+             */
             EventHandler.prototype.offMe = function () {
                 this.event.offHandler(this);
             };
+            /** Holder for progressive number of the handler, for debug purposes */
             EventHandler.prog = 1;
             return EventHandler;
         })();
         Internal.EventHandler = EventHandler;
+        /**
+         * A specialized EventHandler that also holds registered callbacks on the underlying database.
+         *
+         * This handler does not directly react to database events, it simply hooks them to a given callback
+         * passed in {@link hook}. However, since usually when a handler is decommissioned also underlying
+         * database resources can be released, having them encapsulated in the same instance is easier and
+         * less error prone.
+         */
         var DbEventHandler = (function (_super) {
             __extends(DbEventHandler, _super);
             function DbEventHandler() {
                 _super.apply(this, arguments);
+                /**
+                 * The callbacks registered by this handler on the underlying database reference.
+                 */
                 this.cbs = [];
             }
+            /**
+             * Hooks to the underlying database.
+             *
+             * @param event the event to hook to
+             * @param fn the callback to hook to the database
+             */
             DbEventHandler.prototype.hook = function (event, fn) {
                 if (this.canceled)
                     return;
                 this.cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
-                console.log(this.myprog + " on " + event);
                 this.ref.on(event, fn, function (err) { });
             };
+            /**
+             * Extends the decommission function to also detach database callbacks registered thru {@link hook}.
+             */
             DbEventHandler.prototype.decomission = function (remove) {
                 // override off, must remove only this instance callbacks, Firebase does not
                 if (remove) {
                     for (var i = 0; i < this.cbs.length; i++) {
                         var cb = this.cbs[i];
                         this.ref.off(cb.event, cb.fn);
-                        console.log(this.myprog + " off " + cb.event);
                     }
                 }
                 return _super.prototype.decomission.call(this, remove);
@@ -260,17 +450,27 @@ var Db;
             return DbEventHandler;
         })(EventHandler);
         Internal.DbEventHandler = DbEventHandler;
+        /**
+         * Base class of all events.
+         */
         var GenericEvent = (function () {
             function GenericEvent() {
+                /** The children of this event */
                 this.children = {};
+                /** Dependant events */
                 this.dependants = [];
+                /** The class meta data this event operates on */
                 this._classMeta = null;
+                /** The declared class meta data for this event, cause {@link _classMeta} could change in case of polimorphic classes */
                 this._originalClassMeta = null;
-                /**
-                 * Array of current handlers.
-                 */
+                /** Array of current registered handlers. */
                 this.handlers = [];
             }
+            /**
+             * Set the entity this event works on.
+             *
+             * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
+             */
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 if (entity && typeof entity == 'object') {
@@ -279,9 +479,15 @@ var Db;
                 // TODO clean the children if entity changed? they could be pointing to old instance data
             };
             Object.defineProperty(GenericEvent.prototype, "classMeta", {
+                /**
+                 * Get the {@link _classMeta} this event works on.
+                 */
                 get: function () {
                     return this._classMeta;
                 },
+                /**
+                 * Set the {@link _classMeta} this event works on.
+                 */
                 set: function (meta) {
                     if (!this._originalClassMeta)
                         this._originalClassMeta = meta;
@@ -292,6 +498,9 @@ var Db;
                 configurable: true
             });
             Object.defineProperty(GenericEvent.prototype, "originalClassMeta", {
+                /**
+                 * Set the {@link _originalClassMeta} this event works on.
+                 */
                 get: function () {
                     return this._originalClassMeta;
                 },

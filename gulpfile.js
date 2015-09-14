@@ -37,6 +37,7 @@ var paths = {
     tsout : './js',
     //tests: ["./js/test/**/*.js"],
     tests: ["./js/test/Db3Tests.js"],
+    tsSrcs: ["./src/main/**/*.ts"],
     remoteBuildFiles: [
         "./js/**",
         "package.json"
@@ -411,9 +412,12 @@ gulp.task("clean:tsd", function (cb) {
  */
 gulp.task("typedoc", function() {
     return gulp
-        .src(paths.ts)
+        .src(paths.tsSrcs)
         .pipe(typedoc({
             module: "commonjs",
+            experimentalDecorators: true,
+            excludeExternals: true,
+            includeDeclarations: false,
             target: "es5",
             out: "docs/",
             name: "JSDB"
