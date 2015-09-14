@@ -241,6 +241,7 @@ var Db;
             DbEventHandler.prototype.hook = function (event, fn) {
                 this.cbs.push({ event: event, fn: fn });
                 // TODO do something on cancelCallback? It's here only because of method signature
+                console.log(this.myprog + " on " + event);
                 this.ref.on(event, fn, function (err) { });
             };
             DbEventHandler.prototype.decomission = function (remove) {
@@ -249,6 +250,7 @@ var Db;
                     for (var i = 0; i < this.cbs.length; i++) {
                         var cb = this.cbs[i];
                         this.ref.off(cb.event, cb.fn);
+                        console.log(this.myprog + " off " + cb.event);
                     }
                 }
                 return _super.prototype.decomission.call(this, remove);
@@ -319,9 +321,12 @@ var Db;
                         continue;
                     this.children[k].urlInited();
                 }
+                // Propagate also to dependants
                 for (var i = 0; i < this.dependants.length; i++) {
                     this.dependants[i].urlInited();
                 }
+                // Dependants are not needed after the url init has been propagated
+                this.dependants = [];
                 this.saveChildrenInCache();
             };
             GenericEvent.prototype.on = function (handler) {
@@ -378,6 +383,7 @@ var Db;
                     ret.setEntity(this.entity[meta.localName]);
                 }
                 this.children[meta.localName] = ret;
+                // TODO should we give then urlInited if the url is already present?
                 this.saveChildrenInCache();
                 return ret;
             };
@@ -391,6 +397,17 @@ var Db;
                     for (var k in this.children) {
                         this.state.storeInCache(this.children[k]);
                     }
+                }
+            };
+            GenericEvent.prototype.addDependant = function (dep) {
+                dep.parent = this;
+                dep.state = this.state;
+                // We don't need to save dependants if we already have an url, just send them the urlInited
+                if (!this.getUrl()) {
+                    this.dependants.push(dep);
+                }
+                else {
+                    dep.urlInited();
                 }
             };
             GenericEvent.prototype.parseValue = function (ds) {
@@ -1148,6 +1165,14 @@ var Db;
                     this.entity = preEntity;
                 }
             };
+            MapEvent.prototype.query = function () {
+                var ret = new QueryImpl(this);
+                ret.isReference = this.isReference;
+                ret.sorting = this.sorting;
+                ret.classMeta = this.classMeta;
+                this.addDependant(ret);
+                return ret;
+            };
             return MapEvent;
         })(GenericEvent);
         Internal.MapEvent = MapEvent;
@@ -1263,11 +1288,22 @@ var Db;
                 var k = this.createKeyFor(v);
                 return _super.prototype.add.call(this, k, v);
             };
+            ArrayCollectionEvent.prototype.intSuperAdd = function (key, value) {
+                return _super.prototype.add.call(this, key, value);
+            };
             ArrayCollectionEvent.prototype.addToInternal = function (event, ds, val, det) {
                 this.evarray.addToInternal(event, ds, val, det);
                 if (this.parent && this.parent.entity) {
                     this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
                 }
+            };
+            ArrayCollectionEvent.prototype.load = function (ctx) {
+                var _this = this;
+                return _super.prototype.load.call(this, ctx).then(function () { return _this.evarray.arrayValue; });
+            };
+            ArrayCollectionEvent.prototype.dereference = function (ctx) {
+                var _this = this;
+                return _super.prototype.dereference.call(this, ctx).then(function () { return _this.evarray.arrayValue; });
             };
             return ArrayCollectionEvent;
         })(MapEvent);
@@ -1303,6 +1339,42 @@ var Db;
                 if (localsOnly === void 0) { localsOnly = false; }
                 this.evarray.prepareSerializeList();
                 return _super.prototype.serialize.call(this, localsOnly, fields);
+            };
+            ListEvent.prototype.intPeek = function (ctx, dir) {
+                var _this = this;
+                return new Promise(function (ok, err) {
+                    _this.query().limit(dir).added(ctx, function (det) {
+                        if (det.type == EventType.LIST_END) {
+                            det.offMe();
+                        }
+                        else {
+                            ok(det);
+                        }
+                    });
+                });
+            };
+            ListEvent.prototype.intPeekRemove = function (ctx, dir) {
+                var _this = this;
+                var fnd;
+                return this.intPeek(ctx, dir).then(function (det) {
+                    fnd = det;
+                    return _super.prototype.remove.call(_this, det.originalKey);
+                }).then(function () { return fnd; });
+            };
+            ListEvent.prototype.pop = function (ctx) {
+                return this.intPeekRemove(ctx, -1);
+            };
+            ListEvent.prototype.peekTail = function (ctx) {
+                return this.intPeek(ctx, -1);
+            };
+            ListEvent.prototype.unshift = function (value) {
+                return _super.prototype.intSuperAdd.call(this, Utils.IdGenerator.back(), value);
+            };
+            ListEvent.prototype.shift = function (ctx) {
+                return this.intPeekRemove(ctx, 1);
+            };
+            ListEvent.prototype.peekHead = function (ctx) {
+                return this.intPeek(ctx, 1);
             };
             return ListEvent;
         })(ArrayCollectionEvent);
@@ -1440,21 +1512,26 @@ var Db;
             return EntityRoot;
         })();
         Internal.EntityRoot = EntityRoot;
-        var QueryImpl = (function () {
+        var QueryImpl = (function (_super) {
+            __extends(QueryImpl, _super);
             function QueryImpl(ev) {
-                this._sortField = null;
-                this._sortDesc = false;
+                _super.call(this);
                 this._limit = 0;
                 this._rangeFrom = null;
                 this._rangeTo = null;
                 this._equals = null;
-                _super.call(this);
+                this.realField = {};
                 //this.
             }
+            QueryImpl.prototype.getUrl = function (force) {
+                return this.parent.getUrl(force);
+            };
             QueryImpl.prototype.sortOn = function (field, desc) {
                 if (desc === void 0) { desc = false; }
-                this._sortField = field;
-                this._sortDesc = desc;
+                this.sorting = {
+                    field: field,
+                    desc: desc
+                };
                 return this;
             };
             QueryImpl.prototype.limit = function (limit) {
@@ -1471,37 +1548,62 @@ var Db;
                 return this;
             };
             QueryImpl.prototype.init = function (gh) {
-                _super.init.call(this, gh);
+                var _this = this;
                 var h = gh;
-                h.ref = new Firebase(h.event.url);
-                if (this._sortField) {
-                    h.ref = h.ref.orderByChild(this._sortField);
-                    if (this._rangeFrom) {
-                        h.ref = h.ref.startAt(this._rangeFrom);
-                    }
-                    if (this._rangeTo) {
-                        h.ref = h.ref.startAt(this._rangeTo);
-                    }
+                h.ref = new Firebase(this.parent.getUrl());
+                if (this.sorting) {
+                    h.ref = h.ref.orderByChild(this.sorting.field);
                     if (this._equals) {
                         h.ref = h.ref.equalTo(this._equals);
                     }
+                    else {
+                        if (this._rangeFrom) {
+                            h.ref = h.ref.startAt(this._rangeFrom);
+                        }
+                        if (this._rangeTo) {
+                            h.ref = h.ref.endAt(this._rangeTo);
+                        }
+                    }
                 }
-                if (this._sortDesc) {
-                    if (this._limit) {
-                        h.ref = h.ref.limitToLast(this._limit);
+                var limVal = this._limit || 0;
+                if (limVal != 0) {
+                    var limLast = this.sorting && this.sorting.desc;
+                    if (limVal < 0) {
+                        limVal = Math.abs(limVal);
+                        limLast = !limLast;
+                    }
+                    if (limLast) {
+                        h.ref = h.ref.limitToLast(limVal);
                     }
                     else {
-                        h.ref = h.ref.limitToLast(Number.MAX_VALUE);
+                        h.ref = h.ref.limitToFirst(limVal);
                     }
                 }
-                else {
+                /*
+                if (this.sorting && this.sorting.desc) {
+                    if (this._limit) {
+                        h.ref = h.ref.limitToLast(this._limit);
+                    } else {
+                        h.ref = h.ref.limitToLast(Number.MAX_VALUE);
+                    }
+                } else {
                     if (this._limit) {
                         h.ref = h.ref.limitToFirst(this._limit);
                     }
                 }
+                */
+                h.event = this;
+                h.hookAll(function (ds, prev, event) { return _this.handleDbEvent(h, event, ds, prev); });
+            };
+            QueryImpl.prototype.findCreateChildFor = function (param, force) {
+                if (force === void 0) { force = false; }
+                return this.parent.findCreateChildFor(param, force);
+            };
+            QueryImpl.prototype.save = function () {
+                throw new Error("Can't save a query");
             };
             return QueryImpl;
-        })();
+        })(ArrayCollectionEvent);
         Internal.QueryImpl = QueryImpl;
         var DbState = (function () {
             function DbState() {
@@ -2169,7 +2271,7 @@ var Db;
             }
             WeakWrap.prototype.getOrMake = function (k) {
                 if (!k.hasOwnProperty('__weaks')) {
-                    Object.defineProperty(k, '__weaks', { readable: true, writable: true, enumerable: false, value: {} });
+                    Object.defineProperty(k, '__weaks', { writable: true, enumerable: false, value: {} });
                 }
                 return k['__weaks'];
             };

@@ -2066,7 +2066,7 @@ describe('Db3 >', () => {
 			});
 		});
 		
-		describe('List >', ()=> {
+		describe.only('List >', ()=> {
 			it('should permit same reference more than once', ()=>{
 				var wl2 = Db(WithList).load('wl2');
 				var wp1 = Db(WithProps).load('wp1'); 
@@ -2108,6 +2108,94 @@ describe('Db3 >', () => {
 						cnt++;
 					}
 					assert('list is grown').when(cnt).is(4);
+				});
+			});
+			
+			it('should unshift a new value at the head', ()=> {
+				var wl1 = Db(WithList).load('wl1');
+				var ns = new SubEntity();
+				ns.str = 'zz ahead';
+				return Db(wl1.embedList).unshift(ns).then(()=>{
+					return Db(wl1.embedList).load(this);
+				}).then(()=>{
+					assert('list has grown').when(wl1.embedList).is(M.withLength(4));
+					assert('new elements is first').when(wl1.embedList[0].str).is('zz ahead');
+				});
+			});
+			
+			it('should peek the first element', ()=>{
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).peekHead(this).then((det)=>{
+					assert('it is the right element').when(det.payload.str).is('3 a');
+				});
+			});
+			
+			it('should shift the first element', ()=>{
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).shift(this).then((det)=>{
+					assert('it is the right element').when(det.payload.str).is('3 a');
+					return Db(wl1.embedList).load(this);
+				}).then(()=>{
+					assert('list has shrinked').when(wl1.embedList).is(M.withLength(2));
+					assert('first is now the second one').when(wl1.embedList[0].str).is('2 b');
+				});
+			});
+			
+			it('should peek the last element', ()=>{
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).peekTail(this).then((det)=>{
+					assert('it is the right element').when(det.payload.str).is('1 c');
+				});
+			});
+			
+			it('should pop the last element', ()=>{
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).pop(this).then((det)=>{
+					assert('it is the right element').when(det.payload.str).is('1 c');
+					return Db(wl1.embedList).load(this);
+				}).then(()=>{
+					assert('list has shrinked').when(wl1.embedList).is(M.withLength(2));
+					assert('first is still the first one').when(wl1.embedList[0].str).is('3 a');
+					assert('second is still the second one').when(wl1.embedList[1].str).is('2 b');
+				});
+			});
+		});
+		
+		describe('Query >', ()=> {
+			it('should load a query on embedded objects', () => {
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).query().load(this).then((vals) => {
+					assert('the list has right size').when(vals).is(M.withLength(3));
+					assert('the first element is right').when(vals[0].str).is('3 a');
+					assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
+				});
+			});
+			it('should load a query on ref objects', () => {
+				var wl2 = Db(WithList).load('wl2');
+				return Db(wl2.refList).query().load(this).then((vals) => {
+					assert('the list has right size').when(vals).is(M.withLength(3));
+					assert('the first element is right type').when(vals[0]).is(M.instanceOf(WithProps));
+					assert('the first element is resolved').when(vals[0].str).is('String 1');
+					assert('field is not inited').when(wl2.refList).is(M.withLength(0));
+				});
+			});
+			it('should filter by range',() => {
+				var wl1 = Db(WithList).load('wl1');
+				var query = Db(wl1.embedList).query();
+				query = query.sortOn('str').range('2','4');
+				return query.load(this).then((vals) => {
+					assert('the list has right size').when(vals).is(M.withLength(2));
+					assert('the first element is right').when(vals[0].str).is('2 b');
+					assert('the second element is right').when(vals[1].str).is('3 a');
+					assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
+				});
+			});
+			it('should limit', () => {
+				var wl1 = Db(WithList).load('wl1');
+				return Db(wl1.embedList).query().limit(1).load(this).then((vals) => {
+					assert('the list has right size').when(vals).is(M.withLength(1));
+					assert('the first element is right').when(vals[0].str).is('3 a');
+					assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
 				});
 			});
 		});

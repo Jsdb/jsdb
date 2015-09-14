@@ -342,6 +342,7 @@ module Db {
 			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void) {
 				this.cbs.push({event:event, fn:fn});
 				// TODO do something on cancelCallback? It's here only because of method signature
+				console.log(this.myprog + " on " + event);
 				this.ref.on(event, fn, (err) => {});
 			}
 			
@@ -351,6 +352,7 @@ module Db {
 					for (var i = 0; i < this.cbs.length; i++) {
 						var cb = this.cbs[i];
 						this.ref.off(cb.event, cb.fn);
+						console.log(this.myprog + " off " + cb.event);
 					}
 				}
 				return super.decomission(remove);
@@ -421,9 +423,13 @@ module Db {
 					if (k == 'constructor') continue;
 					this.children[k].urlInited();
 				}
+				// Propagate also to dependants
 				for (var i = 0; i < this.dependants.length; i++) {
 					this.dependants[i].urlInited();
 				}
+				// Dependants are not needed after the url init has been propagated
+				this.dependants = [];
+				
 				this.saveChildrenInCache();
 			}
 			
@@ -485,6 +491,7 @@ module Db {
 					ret.setEntity(this.entity[meta.localName]);
 				}
 				this.children[meta.localName] = ret;
+				// TODO should we give then urlInited if the url is already present?
 				this.saveChildrenInCache();
 				return ret;
 			}
@@ -501,9 +508,14 @@ module Db {
 			}
 			
 			addDependant(dep :GenericEvent) {
-				this.dependants.push(dep);
 				dep.parent = this;
 				dep.state = this.state;
+				// We don't need to save dependants if we already have an url, just send them the urlInited
+				if (!this.getUrl()) {
+					this.dependants.push(dep);
+				} else {
+					dep.urlInited();
+				}
 			}
 			
 			parseValue(ds :FirebaseDataSnapshot) {
@@ -1011,12 +1023,12 @@ module Db {
 
 		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
 			add(value :E) :Promise<any>;
-			pop() :Promise<EventDetails<E>>;
-			peekTail() :Promise<EventDetails<E>>;
+			pop(ctx:Object) :Promise<EventDetails<E>>;
+			peekTail(ctx:Object) :Promise<EventDetails<E>>;
 			
 			unshift(value :E):Promise<any>;
-			shift() :Promise<EventDetails<E>>;
-			peekHead() :Promise<EventDetails<E>>;
+			shift(ctx:Object) :Promise<EventDetails<E>>;
+			peekHead(ctx:Object) :Promise<EventDetails<E>>;
 
 			load(ctx:Object) :Promise<E[]>;
 			dereference(ctx:Object) :Promise<E[]>;
@@ -1325,6 +1337,7 @@ module Db {
 				ret.isReference = this.isReference;
 				ret.sorting = this.sorting;
 				ret.classMeta = this.classMeta;
+				this.addDependant(ret);
 				return ret;
 			}
 		}
@@ -1444,6 +1457,10 @@ module Db {
 				var k = this.createKeyFor(v);
 				return super.add(k,v);
 			}
+			
+			intSuperAdd(key :string|number|Entity, value? :Entity) :Promise<any> {
+				return super.add(key,value);
+			}
 
 			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
 				this.evarray.addToInternal(event, ds, val, det);
@@ -1487,6 +1504,46 @@ module Db {
 			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
 				this.evarray.prepareSerializeList();
 				return super.serialize(localsOnly, fields);
+			}
+			
+			intPeek(ctx:Object, dir :number) :Promise<EventDetails<E>> {
+				return new Promise<EventDetails<E>>((ok,err)=>{
+					this.query().limit(dir).added(ctx, (det)=>{
+						if (det.type == EventType.LIST_END) {
+							det.offMe();
+						} else {
+							ok(det);
+						}
+					});
+				});
+			}
+			
+			intPeekRemove(ctx:Object, dir:number) :Promise<EventDetails<E>> {
+				var fnd :EventDetails<E>;
+				return this.intPeek(ctx,dir).then((det)=>{
+					fnd = det;
+					return super.remove(det.originalKey);
+				}).then(()=>fnd);
+			}
+			
+			pop(ctx:Object) :Promise<EventDetails<E>> {
+				return this.intPeekRemove(ctx,-1);
+			}
+			
+			peekTail(ctx :Object) :Promise<EventDetails<E>> {
+				return this.intPeek(ctx,-1);
+			}
+			
+			unshift(value :E):Promise<any> {
+				return super.intSuperAdd(Utils.IdGenerator.back(), value);
+			}
+			
+			shift(ctx :Object) :Promise<EventDetails<E>> {
+				return this.intPeekRemove(ctx,1);
+			}
+			
+			peekHead(ctx :Object) :Promise<EventDetails<E>> {
+				return this.intPeek(ctx,1);
 			}
 		}
 		
@@ -1656,7 +1713,12 @@ module Db {
 
 			constructor(ev :GenericEvent) {
 				super();
+				this.realField = {};
 				//this.
+			}
+			
+			getUrl(force :boolean) :string {
+				return this.parent.getUrl(force);
 			}
 			
 			sortOn(field :string, desc = false) {
@@ -1688,16 +1750,31 @@ module Db {
 				h.ref = new Firebase(this.parent.getUrl());
 				if (this.sorting) {
 					h.ref = h.ref.orderByChild(this.sorting.field);
-					if (this._rangeFrom) {
-						h.ref = h.ref.startAt(this._rangeFrom);
-					}
-					if (this._rangeTo) {
-						h.ref = h.ref.startAt(this._rangeTo);
-					}
 					if (this._equals) {
 						h.ref = h.ref.equalTo(this._equals);
+					} else {
+						if (this._rangeFrom) {
+							h.ref = h.ref.startAt(this._rangeFrom);
+						}
+						if (this._rangeTo) {
+							h.ref = h.ref.endAt(this._rangeTo);
+						}
 					}
 				}
+				var limVal = this._limit || 0;
+				if (limVal != 0) {
+					var limLast = this.sorting && this.sorting.desc;
+					if (limVal < 0) {
+						limVal = Math.abs(limVal);
+						limLast = !limLast;
+					}
+					if (limLast) {
+						h.ref = h.ref.limitToLast(limVal);
+					} else {
+						h.ref = h.ref.limitToFirst(limVal);
+					}
+				}
+				/*
 				if (this.sorting && this.sorting.desc) {
 					if (this._limit) {
 						h.ref = h.ref.limitToLast(this._limit);
@@ -1709,6 +1786,7 @@ module Db {
 						h.ref = h.ref.limitToFirst(this._limit);
 					}
 				}
+				*/
 				h.event = this;
 				h.hookAll((ds,prev,event) => this.handleDbEvent(h,event,ds,prev));
 			}

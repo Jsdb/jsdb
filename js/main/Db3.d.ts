@@ -145,6 +145,7 @@ declare module Db {
             findCreateChildFor(key: String, force?: boolean): GenericEvent;
             findCreateChildFor(meta: MetaDescriptor, force?: boolean): GenericEvent;
             saveChildrenInCache(key?: string): void;
+            addDependant(dep: GenericEvent): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             isTraversingTree(): boolean;
             getTraversed(): GenericEvent;
@@ -227,33 +228,40 @@ declare module Db {
         }
         interface IReadableCollection<E extends Entity> {
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            live(ctx: Object): void;
             added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
+            off(ctx: Object): void;
         }
         interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
-            load(ctx: Object): Promise<any>;
-            dereference(ctx: Object): Promise<any>;
+            live(ctx: Object): void;
             remove(key: string | number | Entity): Promise<any>;
             fetch(ctx: Object, key: string | number | E): Promise<EventDetails<E>>;
             with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
-            off(ctx: Object): void;
+            query(): IQuery<E>;
             isLoaded(): boolean;
             assertLoaded(): void;
             save(): Promise<any>;
         }
         interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
             add(key: string | number | Entity, value: E): Promise<any>;
+            load(ctx: Object): Promise<{
+                [index: string]: E;
+            }>;
+            dereference(ctx: Object): Promise<{
+                [index: string]: E;
+            }>;
         }
         interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
             add(value: E): Promise<any>;
-            pop(): Promise<EventDetails<E>>;
-            peekTail(): Promise<EventDetails<E>>;
+            pop(ctx: Object): Promise<EventDetails<E>>;
+            peekTail(ctx: Object): Promise<EventDetails<E>>;
             unshift(value: E): Promise<any>;
-            shift(): Promise<EventDetails<E>>;
-            peekHead(): Promise<EventDetails<E>>;
+            shift(ctx: Object): Promise<EventDetails<E>>;
+            peekHead(ctx: Object): Promise<EventDetails<E>>;
+            load(ctx: Object): Promise<E[]>;
+            dereference(ctx: Object): Promise<E[]>;
         }
         class CollectionDbEventHandler extends DbEventHandler {
             dbEvents: string[];
@@ -295,6 +303,7 @@ declare module Db {
             assertLoaded(): void;
             save(): Promise<any>;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
+            query(): IQuery<E>;
         }
         class EventedArray<E> {
             collection: MapEvent<E>;
@@ -311,12 +320,22 @@ declare module Db {
             protected evarray: EventedArray<E>;
             setEntity(entity: Entity): void;
             add(value?: Entity): Promise<any>;
+            intSuperAdd(key: string | number | Entity, value?: Entity): Promise<any>;
             addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
+            load(ctx: Object): Promise<E[]>;
+            dereference(ctx: Object): Promise<E[]>;
         }
         class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> implements IListSetEvent<E> {
             createKeyFor(value: Entity): string;
             normalizeKey(key: string | number | Entity): string;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
+            intPeek(ctx: Object, dir: number): Promise<EventDetails<E>>;
+            intPeekRemove(ctx: Object, dir: number): Promise<EventDetails<E>>;
+            pop(ctx: Object): Promise<EventDetails<E>>;
+            peekTail(ctx: Object): Promise<EventDetails<E>>;
+            unshift(value: E): Promise<any>;
+            shift(ctx: Object): Promise<EventDetails<E>>;
+            peekHead(ctx: Object): Promise<EventDetails<E>>;
         }
         class SetEvent<E extends Entity> extends ArrayCollectionEvent<E> {
             createKeyFor(value: Entity): string;
@@ -362,24 +381,28 @@ declare module Db {
             getUrl(): string;
         }
         interface IQuery<E extends Entity> extends IReadableCollection<E> {
+            load(ctx: Object): Promise<E[]>;
+            dereference(ctx: Object): Promise<E[]>;
             sortOn(field: string, desc?: boolean): IQuery<E>;
             limit(limit: number): IQuery<E>;
             range(from: any, to: any): IQuery<E>;
             equals(val: any): IQuery<E>;
         }
-        class QueryImpl<E> implements IQuery<E> {
-            private _sortField;
-            private _sortDesc;
+        class QueryImpl<E> extends ArrayCollectionEvent<E> implements IQuery<E> {
             private _limit;
             private _rangeFrom;
             private _rangeTo;
             private _equals;
             constructor(ev: GenericEvent);
+            getUrl(force: boolean): string;
             sortOn(field: string, desc?: boolean): QueryImpl<E>;
             limit(limit: number): QueryImpl<E>;
             range(from: any, to: any): QueryImpl<E>;
             equals(val: any): QueryImpl<E>;
             init(gh: EventHandler): void;
+            findCreateChildFor(key: String, force?: boolean): GenericEvent;
+            findCreateChildFor(meta: MetaDescriptor, force?: boolean): GenericEvent;
+            save(): Promise<any>;
         }
         class DbState {
             cache: {
