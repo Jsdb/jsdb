@@ -452,6 +452,15 @@ var Db;
         Internal.DbEventHandler = DbEventHandler;
         /**
          * Base class of all events.
+         *
+         * Events are responsible of :
+         * - Holding informations about the current state of part of the underlying Db
+         * - Managing a list of {@link EventHandler}s interested in that part of the Db.
+         * - Generating {@link EventDetails} when something happens on that part of the Db
+         * - Dispatch the EventDetails to all the EventHandlers in the list.
+         *
+         * Events are organized in a hierarchy, having multiple {@link EntityRoot} as roots.
+         *
          */
         var GenericEvent = (function () {
             function GenericEvent() {
@@ -507,6 +516,22 @@ var Db;
                 enumerable: true,
                 configurable: true
             });
+            /**
+             * Return this url this event is relative to.
+             *
+             * Each event is relative to a path segment, and combining this segment
+             * with anchestor events (up to the {@link EntityRoot}) yields the complete url.
+             *
+             * However, events could be initially not connected to the full hierarchy (also see
+             * {@link urlInited}), but still have a partial url fragment.
+             *
+             * Normally this method return null if the event is not connected to the
+             * full events hierarchy. If however the "evenIfIncomplete" parameter is true it
+             * will return the partial path fragment.
+             *
+             * @param evenIfIncomplete if true will return the partial fragment even if the event is not
+             * 			connected to the complete events hierarchy.
+             */
             GenericEvent.prototype.getUrl = function (evenIfIncomplete) {
                 if (evenIfIncomplete === void 0) { evenIfIncomplete = false; }
                 if (!this.parent) {
@@ -523,6 +548,11 @@ var Db;
                     return null;
                 return pre + this.url + '/';
             };
+            /**
+             * Triggered when this events has been connected to the events hierarchy (either directly
+             * or indirectly by one of its anchestors). After this method is called, calling {@link getUrl}
+             * will yield a complete Url.
+             */
             GenericEvent.prototype.urlInited = function () {
                 for (var i = 0; i < this.handlers.length; i++) {
                     this.init(this.handlers[i]);
@@ -540,6 +570,15 @@ var Db;
                 this.dependants = [];
                 this.saveChildrenInCache();
             };
+            /**
+             * Registers an event handler on this event.
+             *
+             * If there is already an event handler with same ctx, callback and discriminator, it will be removed
+             * before the given one is added.
+             *
+             * If the event is already linked to the events hierarchy, the handler will be inited
+             * by {@link init}.
+             */
             GenericEvent.prototype.on = function (handler) {
                 this.handlers = this.handlers.filter(function (h) { return !h.decomission(h.equals(handler)); });
                 handler.event = this;
@@ -549,6 +588,10 @@ var Db;
                     this.init(handler);
                 }
             };
+            /**
+             * Unregisters and decommissions all the {@link EventHandler}s registered using {@link on} that
+             * have the given ctx and 8if specified) the given callback.
+             */
             GenericEvent.prototype.off = function (ctx, callback) {
                 if (callback) {
                     this.handlers = this.handlers.filter(function (h) { return !h.decomission(h.ctx === ctx && h.callback === callback); });
@@ -557,27 +600,59 @@ var Db;
                     this.handlers = this.handlers.filter(function (h) { return !h.decomission(h.ctx === ctx); });
                 }
             };
+            /**
+             * Unregisters and decommissions a specific handler.
+             */
             GenericEvent.prototype.offHandler = function (h) {
                 h.decomission(true);
                 this.handlers = this.handlers.filter(function (ch) { return ch !== h; });
             };
+            /**
+             * Unregisters and decommissions all the handlers registered on this event.
+             */
             GenericEvent.prototype.offAll = function () {
                 this.handlers = this.handlers.filter(function (h) { return !h.decomission(true); });
             };
+            /**
+             * Initializes an EventHandler that hs been registered with this event.
+             *
+             * This initialization will occurr as soon as the handler is registered using
+             * {@link on} or it could be delayed to when this events gets connected to the
+             * events hierarchy.
+             *
+             * This method must be overridden in subclasses, depending on the kind of event
+             * and event handler they use.
+             */
             GenericEvent.prototype.init = function (h) {
                 throw new Error("Implement init in GenericEvent subclasses");
             };
+            /**
+             * Utility method to broadcast the given EventDEtails to all the registered
+             * {@link EventHandler}s.
+             */
             GenericEvent.prototype.broadcast = function (ed) {
                 this.handlers.filter(function (h) { h.handle(ed); return true; });
             };
-            GenericEvent.prototype.findCreateChildFor = function (param, force) {
+            /**
+             * Find or create a child event.
+             *
+             * Given the name or the {@link MetaDescriptor} of the child, an existing children
+             * will be searched in {@link children}.
+             *
+             * If not found:
+             * - a new event will be created calling {@link MetaDescriptor.createEvent}
+             * - it will be wired to this event setting its {@link parent}
+             * - if this event is working on an entity the new event's {@link setEntity} method will be called
+             * with the pertaining field, if any.
+             */
+            GenericEvent.prototype.findCreateChildFor = function (metaOrkey, force) {
                 if (force === void 0) { force = false; }
                 var meta = null;
-                if (param instanceof MetaDescriptor) {
-                    meta = param;
+                if (metaOrkey instanceof MetaDescriptor) {
+                    meta = metaOrkey;
                 }
                 else {
-                    meta = this.classMeta.descriptors[param];
+                    meta = this.classMeta.descriptors[metaOrkey];
                 }
                 if (!meta)
                     return null;
@@ -598,6 +673,11 @@ var Db;
                 this.saveChildrenInCache();
                 return ret;
             };
+            /**
+             * Save the children of this event to the {@link DbState} cache.
+             *
+             * @param key if a specific key is given, only that children will be saven in the cache.
+             */
             GenericEvent.prototype.saveChildrenInCache = function (key) {
                 if (!this.getUrl())
                     return;
@@ -610,6 +690,19 @@ var Db;
                     }
                 }
             };
+            /**
+             * Adds a dependant event.
+             *
+             * Dependants, like children events, depenend on their parent for proper initialization,
+             * Url resolution and other functionalities.
+             *
+             * Unlike children events, however, they are not attached permanently to their parent.
+             *
+             * This method stores them in the {@link dependants} array only if {@link getUrl} is currently
+             * returning null, and only up to when the {@link urlInited} method gets called, which usually
+             * means this event is properly initialized and children and dependant events can initialize
+             * themselves accordingly.
+             */
             GenericEvent.prototype.addDependant = function (dep) {
                 dep.parent = this;
                 dep.state = this.state;
@@ -621,33 +714,95 @@ var Db;
                     dep.urlInited();
                 }
             };
+            /**
+             * Parse a value arriving from the Db.
+             *
+             * This method must be overridden by subclasses.
+             *
+             * The noral behaviour is to parse the given database data and apply it to
+             * the {@link entity} this event is working on.
+             */
             GenericEvent.prototype.parseValue = function (ds) {
                 throw new Error("Please override parseValue in subclasses of GenericEvent");
             };
+            /**
+             * Return true if this event creates a logica "traversal" on the normal tree structure
+             * of events. For example, a reference will traverse to another branch of the tree, so it's
+             * children will not be grandchildren of its parent.
+             */
             GenericEvent.prototype.isTraversingTree = function () {
                 return false;
             };
+            /**
+             * If {@link isTraversingTree} returns true, then getTraversed returns the event
+             * to which this events makes a traversal to.
+             *
+             * TODO this has not been implemented by relevant subclasses, like ReferenceEvent. Moreover,+
+             * until we don't load the reference we don't know how to properly init the event (cause eventually
+             * we would need to reuse an existing one from the cache).
+             */
             GenericEvent.prototype.getTraversed = function () {
                 return null;
             };
+            /**
+             * Serialize the {@link entity} to persist it on the Db.
+             *
+             * This method must be overridden by subclasses.
+             *
+             * This is the logical opposite of {@link parseValue}.
+             */
             GenericEvent.prototype.serialize = function (localsOnly, fields) {
                 if (localsOnly === void 0) { localsOnly = false; }
                 throw new Error("Please override serialize in subclasses of GenericEvent");
             };
+            /**
+             * Denotes that this event represent a "local" value during serialization.
+             *
+             * A local value is a value that gets saved together with native values on the
+             * {@link entity} and not on a separate node of the database tree.
+             */
             GenericEvent.prototype.isLocal = function () {
                 return false;
             };
             return GenericEvent;
         })();
         Internal.GenericEvent = GenericEvent;
+        /**
+         * An utility base class for events that deal with a single databse reference.
+         *
+         * It spawns a single {@link DbEventHandler} hooking database events to the {@link handleDbEvent} function.
+         * This function does a default parsing of the data, delegating to {@link parseValue}, and creates
+         * an {@link EventDetails} that is then dispatched to registered {@link EventHandler}s.
+         *
+         * It stores most recent EventDetails to quickly dispatch it to handler that gets registered
+         * after the db has already been hooked.
+         *
+         * It also keeps the {@link loaded} boolean and offer base implementation of {@link isLoaded} and {@link assertLoaded}.
+         */
         var SingleDbHandlerEvent = (function (_super) {
             __extends(SingleDbHandlerEvent, _super);
             function SingleDbHandlerEvent() {
                 _super.apply(this, arguments);
+                /** true if data has been loaded */
                 this.loaded = false;
+                /**
+                 * The only instance of DbEventHandler used, it gets hooked to {@link handleDbEvent} when needed
+                 * and decommissioned when not needed anymore.
+                 */
                 this.dbhandler = null;
+                /** Most recent EventDetails, used to bootstrap new EventHandlers registered after the first data has been received. */
                 this.lastDetail = null;
             }
+            /**
+             * Initializes the given handler.
+             *
+             * If the {@link dbHandler} has not yet been initialized, it gets initialized and hooked to the db. It
+             * will later trigger {@link handleDbevent} which will create and dispach an {@link EventDetails} to
+             * registered handlers.
+             *
+             * If instead it is already hooked to the db, and has already received db events and created an EventDetails,
+             * it reuses it (from {@link lastDetail}) to bootstrap the newly added handler.
+             */
             SingleDbHandlerEvent.prototype.init = function (h) {
                 var _this = this;
                 if (this.dbhandler == null) {
@@ -664,15 +819,36 @@ var Db;
                     }
                 }
             };
+            /** Useless callback */
             SingleDbHandlerEvent.prototype.mockCb = function () { };
+            /**
+             * Does what specified in {@link GenericEvent.off}, then invokes {@link checkDisconnect} to
+             * decommission the {@link dbhandler}.
+             */
             SingleDbHandlerEvent.prototype.off = function (ctx, callback) {
                 _super.prototype.off.call(this, ctx, callback);
                 this.checkDisconnect();
             };
+            /**
+             * Does what specified in {@link GenericEvent.offHandler}, then invokes {@link checkDisconnect} to
+             * decommission the {@link dbhandler}.
+             */
             SingleDbHandlerEvent.prototype.offHandler = function (h) {
                 _super.prototype.offHandler.call(this, h);
                 this.checkDisconnect();
             };
+            /**
+             * Does what specified in {@link GenericEvent.offAll}, then invokes {@link checkDisconnect} to
+             * decommission the {@link dbhandler}.
+             */
+            SingleDbHandlerEvent.prototype.offAll = function () {
+                _super.prototype.offAll.call(this);
+                this.checkDisconnect();
+            };
+            /**
+             * If there are no more {@link EventHandler}s listening on this event, then it decommissions the
+             * {@link dbhandler} and clears {@link lastDetail}.
+             */
             SingleDbHandlerEvent.prototype.checkDisconnect = function () {
                 if (this.handlers.length == 0) {
                     if (this.dbhandler) {
@@ -682,6 +858,10 @@ var Db;
                     this.lastDetail = null;
                 }
             };
+            /**
+             * Upon receiving data from the database, it creates an {@link EventDetails} object
+             * based on current state and received data, and {@link broadcast}s it.
+             */
             SingleDbHandlerEvent.prototype.handleDbEvent = function (ds, prevName) {
                 this.parseValue(ds);
                 var evd = new EventDetails();
@@ -698,17 +878,47 @@ var Db;
                 this.lastDetail = evd;
                 this.broadcast(this.lastDetail);
             };
+            SingleDbHandlerEvent.prototype.isLoaded = function () {
+                return this.loaded;
+            };
+            SingleDbHandlerEvent.prototype.assertLoaded = function () {
+                if (!this.loaded)
+                    throw new Error("Data at url " + this.getUrl() + " is not loaded");
+            };
             return SingleDbHandlerEvent;
         })(GenericEvent);
         Internal.SingleDbHandlerEvent = SingleDbHandlerEvent;
+        /**
+         * Implementation of IEntityOrReferenceEvent for root and {@link embedded} entities.
+         *
+         * It handles the most important parts of entity serialization, deserialization and synchronization :
+         * - correctly parsing and materializing an entity in local ram, in {@link parseValue}
+         * - correctly serializing an entity, taking into consideration what was loaded and what not in (@link serialize}
+         * - issue a complete load or a partial update in {@link save}
+         * - honour the {@link bind} directives using {@link BindingImpl}
+         * - assign a generated id to {@link root} entities in {@link assignUrl}
+         */
         var EntityEvent = (function (_super) {
             __extends(EntityEvent, _super);
             function EntityEvent() {
                 _super.apply(this, arguments);
+                /**
+                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
+                 */
                 this.nameOnParent = null;
+                /**
+                 * If given, binding directives.
+                 */
                 this.binding = null;
+                /**
+                 * If we are loading this entity, this promise is loading the bound entities if eny.
+                 */
                 this.bindingPromise = null;
+                /**
+                 * Latest data from the database, if any, used in {@link clone}.
+                 */
                 this.lastDs = null;
+                /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                 this.progDiscriminator = 1;
             }
             EntityEvent.prototype.setEntity = function (entity) {
@@ -727,6 +937,10 @@ var Db;
                 this.loaded = true;
                 _super.prototype.handleDbEvent.call(this, ds, prevName);
             };
+            /**
+             * Used to receive the projections when {@link ReferenceEvent} is loading the arget
+             * event and has found some projections.
+             */
             EntityEvent.prototype.handleProjection = function (ds) {
                 if (this.loaded)
                     return;
@@ -758,37 +972,49 @@ var Db;
             };
             EntityEvent.prototype.parseValue = function (ds) {
                 this.loaded = true;
+                // Save last data for use in clone later
                 this.lastDs = ds;
                 var val = ds.val();
                 if (val) {
+                    // Check if we have a discriminator
                     if (val['_dis']) {
+                        // Find <nd set the correct metadata
                         var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta, val['_dis']);
                         if (!cm)
                             throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
                         this.classMeta = cm;
                     }
                     else {
+                        // If we don't have a discriminator, reset the original metadata
+                        // resetting it is important because this could be an update
                         this.classMeta = this.originalClassMeta;
                     }
-                    // TODO disciminator : change here then this.classMeta
+                    // TODO?? disciminator : change here then this.classMeta
+                    // If we do't have created the entity instance yet, or the entity we have is not the right
+                    // type (which could happen if this is an updated and the discriminator changed,
+                    // create an instance of the right type.
                     if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
                         this.setEntity(this.classMeta.createInstance());
                     }
                     for (var k in val) {
                         if (k == 'constructor')
                             continue;
+                        // find a descriptor if any, a descriptor is there if the 
+                        // property has been annotated somehow (embedded, reference, observable etc..)
                         var descr = this.classMeta.descriptors[k];
-                        // travel sub entities 
                         if (descr) {
+                            // if we have a descriptor, find/create the event and delegate to it 
                             var subev = this.findCreateChildFor(descr);
                             subev.parseValue(ds.child(k));
                         }
                         else {
+                            // otherwise, simply copy the value in the proper field
                             this.entity[k] = val[k];
                         }
                     }
                 }
                 else {
+                    // if value is null, then set the entity null
                     this.setEntity(null);
                 }
                 // if it's embedded should set the value on the parent entity
@@ -808,13 +1034,6 @@ var Db;
             EntityEvent.prototype.live = function (ctx) {
                 this.updated(ctx, function () { });
             };
-            EntityEvent.prototype.isLoaded = function () {
-                return this.loaded;
-            };
-            EntityEvent.prototype.assertLoaded = function () {
-                if (!this.loaded)
-                    throw new Error("Entity at url " + this.getUrl() + " is not loaded");
-            };
             EntityEvent.prototype.dereference = function (ctx) {
                 throw new Error("Can't dereference something that is not a reference");
             };
@@ -824,10 +1043,34 @@ var Db;
             EntityEvent.prototype.getReferencedUrl = function () {
                 throw new Error("Embedded entities don't have a referenced url");
             };
+            /**
+             * Serializes the entity in a way suitable for database update.
+             *
+             * If the entity has a "serialize" method, that method will be invoked instead of performing
+             * the normal serialization.
+             *
+             * If "localsOnly" is true, then only "local" values will be serialized. Local values are :
+             * - native values, not annotated at all (not {@link embedded}, not {@link reference} etc..)
+             * - values annotate for which {@link GenericEvent.isLocal} returns true.
+             *
+             * For example, an {@link observable} is considered a local value during serizalization, so
+             * {@link ObservableEvent} will return true on "isLocal".
+             *
+             * If a list of field names is given in "fields", then only those fields will be serialized.
+             *
+             * Otherwise, all the properties that whose name doesn't start with an underscore are serialized. If
+             * they are annotated, a corresponding event is found using {@link findCreateChildFor} and its "serialize"
+             * method is called, recursively.
+             *
+             * @return a js object with data to serialize, or null to explicitly serialize a null, or undefined
+             * 		to leave the eventually existing value completely untouched.
+             */
             EntityEvent.prototype.serialize = function (localsOnly, fields) {
                 if (localsOnly === void 0) { localsOnly = false; }
+                // No entity : serialize a null
                 if (!this.entity)
                     return null;
+                // Honour the "serialize" method, if present
                 if (typeof this.entity['serialize'] === 'function') {
                     return this.entity['serialize'].apply(this.entity, [this]);
                 }
@@ -838,22 +1081,28 @@ var Db;
                     var val = this.entity[k];
                     if (typeof val === 'function')
                         continue;
+                    // Look if the property is annotated
                     var evt = this.findCreateChildFor(k);
                     if (evt) {
-                        // TODO some events (like ignore or observable) should be called even if on locals only
+                        // If localsOnly skip this value, however some events (like ignore or observable) 
+                        // are called even if on locals only if their isLocal return true
                         if (localsOnly && !evt.isLocal())
                             continue;
+                        // Delegate serialization to the child event
                         val = evt.serialize();
+                        // Ignore the undefined
                         if (val !== undefined) {
                             ret[k] = val;
                         }
                     }
                     else {
+                        // Skip every property starting with "_"
                         if (k.charAt(0) == '_')
                             continue;
                         ret[k] = val;
                     }
                 }
+                // Set the discriminator if needed
                 if (this.classMeta.discriminator != null) {
                     ret['_dis'] = this.classMeta.discriminator;
                 }
@@ -877,6 +1126,7 @@ var Db;
             };
             EntityEvent.prototype.save = function () {
                 var _this = this;
+                // If this entity was previously loaded or saved, then perform a serialize and save
                 if (this.loaded) {
                     return new Promise(function (ok, err) {
                         var fb = new Firebase(_this.getUrl());
@@ -891,8 +1141,9 @@ var Db;
                     });
                 }
                 else if (this.getUrl()) {
+                    // Otherwise, if we already have an URL, delegate saving to child events.
+                    // Save promises of child events
                     var proms = [];
-                    // forward to sub events
                     for (var k in this.entity) {
                         if (k == 'constructor')
                             continue;
@@ -918,6 +1169,7 @@ var Db;
                             }));
                         }
                     }
+                    // When all child events have performed their save, we can resolve our promise
                     return Promise.all(proms);
                 }
                 else {
@@ -938,15 +1190,39 @@ var Db;
             return EntityEvent;
         })(SingleDbHandlerEvent);
         Internal.EntityEvent = EntityEvent;
+        /**
+         * Implementation of IEntityOrReferenceEvent for {@link reference}s.
+         *
+         * It wraps an {@link EntityEvent} (in {@link pointedEvent}) to which it delegates
+         * most methods. The pointedEvent is loaded or created based on the pointer found in the reference,
+         * and is recreated if the reference pointer gets changed.
+         *
+         * Main functionalities are :
+         * - when reading, it creates the pointedEvent and eventually forwards projections in {@link parseValue}
+         * - when saving, it saves the pointed url, eventually annotated with the discriminator, and saves the projections, in {@link serialize}.
+         */
         var ReferenceEvent = (function (_super) {
             __extends(ReferenceEvent, _super);
             function ReferenceEvent() {
                 _super.apply(this, arguments);
-                this.classMeta = null;
+                //classMeta :ClassMetadata = null;
+                /**
+                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
+                 */
                 this.nameOnParent = null;
+                /**
+                 * List of fields to save as projections.
+                 */
                 this.project = null;
+                /**
+                 * The main event that controls the pointed entity
+                 */
                 this.pointedEvent = null;
+                /**
+                 * The previous pointedEvent, saved here to decomission it when not needed anymore
+                 */
                 this.prevPointedEvent = null;
+                /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                 this.progDiscriminator = 1;
             }
             // Overridden to : 1) don't install this event 2) get pointedUrl
@@ -959,6 +1235,9 @@ var Db;
                     this.pointedEvent = null;
                 }
             };
+            /**
+             * Load this reference AND the pointed entity.
+             */
             ReferenceEvent.prototype.load = function (ctx) {
                 var _this = this;
                 return this.dereference(ctx).then(function (ed) {
@@ -976,6 +1255,9 @@ var Db;
                     }
                 };
             };
+            /**
+             * Notifies of modifications on the reference AND on the pointed entity.
+             */
             ReferenceEvent.prototype.updated = function (ctx, callback, discriminator) {
                 var _this = this;
                 if (discriminator === void 0) { discriminator = null; }
@@ -992,6 +1274,9 @@ var Db;
                     }
                 }, callback);
             };
+            /**
+             * Keeps both the reference AND the referenced entity live.
+             */
             ReferenceEvent.prototype.live = function (ctx) {
                 this.updated(ctx, function () { });
             };
@@ -1016,14 +1301,19 @@ var Db;
             ReferenceEvent.prototype.parseValue = function (ds) {
                 var val = ds.val();
                 if (val && val._ref) {
+                    // We have a value, and the value is a reference.
+                    // If there is no pointedEvent, or it was pointing to another entity ..
                     if (this.pointedEvent == null || this.pointedEvent.getUrl() != val._ref) {
+                        //  .. create a new pointed event
                         this.prevPointedEvent = this.pointedEvent;
                         this.pointedEvent = this.state.loadEventWithInstance(val._ref, this.classMeta);
+                        // Forward the projection
                         this.pointedEvent.handleProjection(ds);
                         this.setEntity(this.pointedEvent.entity);
                     }
                 }
                 else {
+                    // Otherwise, consider it null
                     this.prevPointedEvent = this.pointedEvent;
                     this.pointedEvent = null;
                     this.setEntity(null);
@@ -1033,13 +1323,6 @@ var Db;
                     this.parent.entity[this.nameOnParent] = this.entity;
                 }
             };
-            ReferenceEvent.prototype.isLoaded = function () {
-                return this.loaded;
-            };
-            ReferenceEvent.prototype.assertLoaded = function () {
-                if (!this.loaded)
-                    throw new Error("Reference at url " + this.getUrl() + " is not loaded");
-            };
             ReferenceEvent.prototype.getReferencedUrl = function () {
                 if (!this.pointedEvent)
                     return null;
@@ -1047,20 +1330,24 @@ var Db;
             };
             ReferenceEvent.prototype.serialize = function (localsOnly) {
                 if (localsOnly === void 0) { localsOnly = false; }
+                // No event, serialize null
                 if (!this.pointedEvent)
                     return null;
                 var obj = null;
                 if (this.project) {
+                    // use the pointed event serialize method to serialize projections, if any
                     obj = this.pointedEvent.serialize(false, this.project);
                 }
                 else {
                     obj = {};
                 }
+                // Decorate the url with the discriminator
                 var url = this.pointedEvent.getUrl();
                 var disc = this.pointedEvent.classMeta.discriminator || '';
                 if (disc)
                     disc = '*' + disc;
                 url = url + disc;
+                // Set the _ref property on the serialized object
                 obj._ref = url;
                 return obj;
             };
@@ -1080,6 +1367,13 @@ var Db;
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
         Internal.ReferenceEvent = ReferenceEvent;
+        /**
+         * An event handler for collections.
+         *
+         * It extends the DbEventHandler :
+         * - adding automatic multiple db events hooking and unhooking
+         * - changing the signature of the callback to also pass the event name
+         */
         var CollectionDbEventHandler = (function (_super) {
             __extends(CollectionDbEventHandler, _super);
             function CollectionDbEventHandler() {
@@ -1107,6 +1401,9 @@ var Db;
             return CollectionDbEventHandler;
         })(DbEventHandler);
         Internal.CollectionDbEventHandler = CollectionDbEventHandler;
+        /**
+         * Default implementation of map.
+         */
         var MapEvent = (function (_super) {
             __extends(MapEvent, _super);
             function MapEvent() {
@@ -1166,11 +1463,11 @@ var Db;
                             det.offMe();
                             if (allProms.length) {
                                 Promise.all(allProms).then(function () {
-                                    resolve(null);
+                                    resolve(_this.realField);
                                 });
                             }
                             else {
-                                resolve(null);
+                                resolve(_this.realField);
                             }
                         }
                         if (det.type != EventType.ADDED)
@@ -1197,22 +1494,22 @@ var Db;
                 sh.event = this;
                 sh.hookAll(function (ds, prev, event) { return _this.handleDbEvent(sh, event, ds, prev); });
             };
-            MapEvent.prototype.findCreateChildFor = function (param, force) {
+            MapEvent.prototype.findCreateChildFor = function (metaOrkey, force) {
                 if (force === void 0) { force = false; }
-                var meta = null;
-                if (!(param instanceof MetaDescriptor)) {
+                var meta = metaOrkey;
+                if (!(metaOrkey instanceof MetaDescriptor)) {
                     if (this.isReference) {
                         var refmeta = Db.meta.reference(this.classMeta.ctor, this.project);
-                        refmeta.localName = param;
-                        param = refmeta;
+                        refmeta.localName = metaOrkey;
+                        meta = refmeta;
                     }
                     else {
                         var embmeta = Db.meta.embedded(this.classMeta.ctor, this.binding);
-                        embmeta.localName = param;
-                        param = embmeta;
+                        embmeta.localName = metaOrkey;
+                        meta = embmeta;
                     }
                 }
-                return _super.prototype.findCreateChildFor.call(this, param, force);
+                return _super.prototype.findCreateChildFor.call(this, meta, force);
             };
             MapEvent.prototype.handleDbEvent = function (handler, event, ds, prevKey) {
                 console.log("Got event " + event, " prev " + prevKey + " key " + ds.key(), ds.val());
@@ -1802,9 +2099,9 @@ var Db;
                 h.event = this;
                 h.hookAll(function (ds, prev, event) { return _this.handleDbEvent(h, event, ds, prev); });
             };
-            QueryImpl.prototype.findCreateChildFor = function (param, force) {
+            QueryImpl.prototype.findCreateChildFor = function (metaOrkey, force) {
                 if (force === void 0) { force = false; }
-                return this.parent.findCreateChildFor(param, force);
+                return this.parent.findCreateChildFor(metaOrkey, force);
             };
             QueryImpl.prototype.save = function () {
                 throw new Error("Can't save a query");
