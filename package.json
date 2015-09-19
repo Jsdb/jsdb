@@ -29,8 +29,8 @@
     "gulp-replace": "^0.5.4",
     "moment": "^2.10.6",
     "exec-sync": "^0.1.6",
-    "typescript": "1.6.2"
-    
+    "typescript": "1.6.2",
+    "tsMatchers": "SimoneGianni/tsMatchers#noded"
   },
   "config": {
     "blanket": {
