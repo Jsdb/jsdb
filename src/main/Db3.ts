@@ -25,18 +25,6 @@ interface WeakMapConstructor {
 declare var WeakMap: WeakMapConstructor;
 
 /**
- * The default db, will be the first database created, handy since most projects will only use one db.
- */
-var defaultDb :Db.Internal.IDb3Static = null;
-
-/**
- * Weak association between entities and their database events. Each entity instance can be 
- * connected only to a single database event, and as such to a single database.
- */
-var entEvent = new Db.Utils.WeakWrap<Db.Internal.GenericEvent>();
-
-
-/**
  * The main Db module.
  */
 module Db {
@@ -871,7 +859,7 @@ module Db {
 				}
 				if (!meta) return null;
 				var ret = this.children[meta.localName];
-				//if (ret && !force) return ret;
+				if (ret && !force) return ret;
 				if (ret && this.entity) {
 					ret.setEntity(this.entity[meta.localName]);
 					return ret;
@@ -3549,12 +3537,10 @@ module Db {
 			enumerable: true,
 			set: function(v) {
 				this[nkey] = v;
-				/*
-				var mye = (<Internal.IDb3Annotated>this).__dbevent;
+				var mye = entEvent.get(this);
 				if (mye) {
 					mye.findCreateChildFor(propertyKey, true);
 				}
-				*/
 			},
 			get: function() {
 				if (lastExpect && this !== lastExpect) {
@@ -3637,8 +3623,20 @@ module Db {
 			}
 		}
 	}
-	
+
 }
+
+/**
+ * The default db, will be the first database created, handy since most projects will only use one db.
+ */
+var defaultDb :Db.Internal.IDb3Static = null;
+
+/**
+ * Weak association between entities and their database events. Each entity instance can be 
+ * connected only to a single database event, and as such to a single database.
+ */
+var entEvent = new Db.Utils.WeakWrap<Db.Internal.GenericEvent>();
+
 
 export = Db;
 
