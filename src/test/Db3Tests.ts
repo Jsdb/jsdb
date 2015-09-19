@@ -669,7 +669,7 @@ describe('Db3 >', () => {
 		});
 		
 		it("builds correct simple event path", () => {
-			var ws1 = Db(WithSubentity).load('ws1');
+			var ws1 = Db(WithSubentity).get('ws1');
 			var ge = <Db3.Internal.GenericEvent><any>Db(ws1.sub);
 			assert("returned a generic event").when(ge).is(M.aTruthy);
 			var state = ge.state;
@@ -681,7 +681,7 @@ describe('Db3 >', () => {
 		});
 		
 		it("avoids getting confused with other calls to getters", () => {
-			var wr1 = Db(WithRef).load('wr1');
+			var wr1 = Db(WithRef).get('wr1');
 			var ge = Db(wr1.ref);
 			var a = wr1.ref;
 			var b = wr1.ref;
@@ -692,7 +692,7 @@ describe('Db3 >', () => {
 			assert("Didn't got confused by subsequent entity only call").when(wr1e).is(M.not(M.exactly(<any>ge2)));
 			assert("Returned the right event").when(wr1e.getUrl()).is(baseUrl + 'withRefs/wr1/');
 			
-			var wp2 = Db(WithProps).load('wp2');
+			var wp2 = Db(WithProps).get('wp2');
 			var ge = Db(wr1.ref);
 			var a = wr1.ref;
 			var wp2e = Db(wp2);
@@ -760,22 +760,22 @@ describe('Db3 >', () => {
 	describe('Entity reading >', ()=>{
 		it('should return an entity root', () => {
 			var er = Db(WithProps);
-			assert("returned an entity root").when(er).is(M.objectMatching({load: M.aFunction}));
+			assert("returned an entity root").when(er).is(M.objectMatching({get: M.aFunction}));
 			assert("root has right url").when(er.getUrl()).is(baseUrl + 'withProps/');
 		});
 		
 		it('should pre-init an entity',() => {
 			var er = Db(WithProps);
-			var wp1 = er.load('wp1');
+			var wp1 = er.get('wp1');
 			M.assert("Inited entity").when(wp1).is(M.aTruthy);
-			var wp2 = er.load('wp1');
+			var wp2 = er.get('wp1');
 			M.assert("Same instance").when(wp2).is(M.exactly(wp1));
 			
 			M.assert("Has right url").when(Db(wp1).getUrl()).is(baseUrl + 'withProps/wp1/');
 		});
 		
 		it('should load simple entities', (done) => {
-			var wp1 = Db(WithProps).load('wp1');
+			var wp1 = Db(WithProps).get('wp1');
 			Db(wp1).load(this)
 			.then((det) => {
 				M.assert('Data loaded').when(wp1).is(M.objectMatching({
@@ -801,19 +801,19 @@ describe('Db3 >', () => {
 			
 			var cnt = 0;
 			function lastLoad() {
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				Db(wp1).load(this).then((det) => {
 					cnt++;
 					if (cnt == 4) done();
 				});
 			}
 			setTimeout(() => {
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				Db(wp1).load(this).then((det) => {
 					cnt++;
 					lastLoad();
 				});
-				var wp12 = Db(WithProps).load('wp1');
+				var wp12 = Db(WithProps).get('wp1');
 				Db(wp12).updated(this,(det) => {
 					cnt++;
 					lastLoad();
@@ -823,12 +823,12 @@ describe('Db3 >', () => {
 		});
 		
 		it('should load polimorphic on rooted',() => {
-			var wp3 = Db(WithProps).load('more*wp3');
+			var wp3 = Db(WithProps).get('more*wp3');
 			assert('it\'s right entity type').when(wp3).is(M.instanceOf(WithMoreProps));
 		});
 		
 		it('should update data',(done) => {
-			var wp1 = Db(WithProps).load('wp1');
+			var wp1 = Db(WithProps).get('wp1');
 			var times = 0;
 			Db(wp1).updated(this, (det)=> {
 				if (times == 0) {
@@ -847,7 +847,7 @@ describe('Db3 >', () => {
 		});
 		
 		it('should update data for observable',(done) => {
-			var wp1 = Db(WithProps).load('wp1');
+			var wp1 = Db(WithProps).get('wp1');
 			var times = 0;
 			Db(wp1.num).updated(this, (det)=> {
 				if (times == 0) {
@@ -869,7 +869,7 @@ describe('Db3 >', () => {
 
 		describe('Embeddeds >', ()=>{
 			it('should load sub entities with the main one',() => {
-				var ws1 = Db(WithSubentity).load('ws1');
+				var ws1 = Db(WithSubentity).get('ws1');
 				return Db(ws1).load(this).then((det) => {
 					M.assert("Loaded main").when(ws1.str).is('String 1');
 					M.assert("Sub has right type").when(ws1.sub).is(M.instanceOf(SubEntity));
@@ -878,7 +878,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load sub sub entities with the main one',() => {
-				var ws1 = Db(WithSubentity).load('ws3');
+				var ws1 = Db(WithSubentity).get('ws3');
 				return Db(ws1).load(this).then((det) => {
 					M.assert("Loaded main").when(ws1.str).is('String 3');
 					M.assert("Nested has right type").when(ws1.nested).is(M.instanceOf(WithSubentity));
@@ -889,7 +889,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load sub sub entities discriminating the type',() => {
-				var ws1 = Db(WithSubentity).load('ws3');
+				var ws1 = Db(WithSubentity).get('ws3');
 				return Db(ws1).load(this).then((det) => {
 					M.assert("Sub has right type").when(ws1.nested.sub).is(M.instanceOf(SubEntityOth));
 					M.assert("Loaded subsubentity").when(ws1.nested.sub.str).is('Sub Sub String 3');
@@ -897,7 +897,7 @@ describe('Db3 >', () => {
 			});
 		
 			it('should load sub entities withOUT the main one',() => {
-				var ws2 = Db(WithSubentity).load('ws2');
+				var ws2 = Db(WithSubentity).get('ws2');
 				return Db(ws2.sub).load(this).then((det) => {
 					M.assert("NOT Loaded main").when(ws2.str).is(M.aFalsey);
 					M.assert("Sub has right type").when(ws2.sub).is(M.instanceOf(SubEntity));
@@ -906,7 +906,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should handle null sub entities when loading withOUT the main one',() => {
-				var ws4 = Db(WithSubentity).load('ws4');
+				var ws4 = Db(WithSubentity).get('ws4');
 				return Db(ws4.sub).load(this).then((det) => {
 					M.assert("NOT Loaded main").when(ws4.str).is(M.aFalsey);
 					M.assert("Loaded subentity").when(ws4.sub).is(M.exactly(null));
@@ -918,7 +918,7 @@ describe('Db3 >', () => {
 		
 		describe('References >', ()=> {
 			it('should dereference a reference', () => {
-				var wr1 = Db(WithRef).load('wr1');
+				var wr1 = Db(WithRef).get('wr1');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
 				return refevent.dereference(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
@@ -931,7 +931,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should dereference a reference with projections', () => {
-				var wr1 = Db(WithRef).load('wr2');
+				var wr1 = Db(WithRef).get('wr2');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
 				return refevent.dereference(this).then((det) => {
 					M.assert("Applied projections").when(wr1.ref).is(M.objectMatching({
@@ -942,7 +942,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should dereference a polimorphic reference to root', () => {
-				var wr1 = Db(WithRef).load('wr3');
+				var wr1 = Db(WithRef).get('wr3');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
 				return refevent.dereference(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
@@ -955,7 +955,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should notify of referencing', (done) => {
-				var wr1 = Db(WithRef).load('wr1');
+				var wr1 = Db(WithRef).get('wr1');
 				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.ref);
 				var cnt = 0;
 				var wp1 = null;
@@ -979,7 +979,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load sub entites reference with the main one', () => {
-				var wr1 = Db(WithRef).load('wr1');
+				var wr1 = Db(WithRef).get('wr1');
 				
 				return Db(wr1).load(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
@@ -992,7 +992,7 @@ describe('Db3 >', () => {
 			});
 		
 			it('should load sub entites reference withOUT the main one', () => {
-				var wr1 = Db(WithRef).load('wr2');
+				var wr1 = Db(WithRef).get('wr2');
 				
 				return Db(wr1.ref).load(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
@@ -1010,7 +1010,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load reference to other entities sub references', () => {
-				var wr1 = Db(WithRef).load('wr1');
+				var wr1 = Db(WithRef).get('wr1');
 				
 				return Db(wr1.othSubRef).load(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
@@ -1020,7 +1020,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load polimorphic reference to other entities sub references', () => {
-				var wr1 = Db(WithRef).load('wr3');
+				var wr1 = Db(WithRef).get('wr3');
 				
 				return Db(wr1.othSubRef).load(this).then((det) => {
 					M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
@@ -1031,7 +1031,7 @@ describe('Db3 >', () => {
 		
 		describe('Binding >', () => {
 			it('should bind and keep live on subentity and parent', () => {
-				var wpl1 = Db(WithPreloads).load('wpl1');
+				var wpl1 = Db(WithPreloads).get('wpl1');
 				
 				return Db(wpl1.oth).load(this).then(() => {
 					M.assert("Inited the subentity").when(wpl1.sub).is(M.aTruthy);
@@ -1051,7 +1051,7 @@ describe('Db3 >', () => {
 
 			// update live when a reference pointer is changed
 			it('should bind and keep live on reference pointer', () => {
-				var wpl1 = Db(WithPreloads).load('wpl1');
+				var wpl1 = Db(WithPreloads).get('wpl1');
 				
 				return Db(wpl1.oth).load(this).then(() => {
 					M.assert("Loaded the ref").when(wpl1.ref).is(M.aTruthy);
@@ -1069,7 +1069,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should bind and keep live on referenced entity', () => {
-				var wpl1 = Db(WithPreloads).load('wpl1');
+				var wpl1 = Db(WithPreloads).get('wpl1');
 				
 				return Db(wpl1.oth).load(this).then(() => {
 					M.assert("Loaded the ref").when(wpl1.ref).is(M.aTruthy);
@@ -1179,7 +1179,7 @@ describe('Db3 >', () => {
 			
 			it('should serialize correctly references', () => {
 				var wr = new WithRef();
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				wr.ref = wp1;
 				
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr);
@@ -1192,7 +1192,7 @@ describe('Db3 >', () => {
 			
 			it('should serialize correctly reference projections', () => {
 				var wpr = new WithPreloads();
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				return Db(wp1).load(this).then(() => {
 					wpr.ref = wp1;
 					
@@ -1209,7 +1209,7 @@ describe('Db3 >', () => {
 			
 			it('should serialize correctly polimorphic root references', () => {
 				var wr = new WithRef();
-				var wp1 = Db(WithProps).load('more*wp3');
+				var wp1 = Db(WithProps).get('more*wp3');
 				wr.ref = wp1;
 				
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr);
@@ -1222,7 +1222,7 @@ describe('Db3 >', () => {
 			
 			it('should serialize correctly polimorphic sub references', () => {
 				var wr = new WithRef();
-				var ws3 = Db(WithSubentity).load('ws3');
+				var ws3 = Db(WithSubentity).get('ws3');
 				return Db(ws3).load(this).then(() => {
 					wr.othSubRef = ws3.nested.sub;
 					
@@ -1313,7 +1313,7 @@ describe('Db3 >', () => {
 		
 			// write reference
 			it('should save a reference correctly', () => {
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				var url = Db(wp1).getUrl();
 				var wrn = new WithRef();
 				wrn.str = 'abc';
@@ -1336,7 +1336,7 @@ describe('Db3 >', () => {
 		
 		describe('Updating >', ()=>{
 			it('should update an entity', () => {
-				var wp1 = Db(WithProps).load('wp1');
+				var wp1 = Db(WithProps).get('wp1');
 				return Db(wp1).load(this)
 				.then(() => {
 					wp1.num = 1000;
@@ -1364,7 +1364,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should correctly update partially loaded entity', ()=>{
-				var ws1 = Db(WithSubentity).load('ws2');
+				var ws1 = Db(WithSubentity).get('ws2');
 				ws1.str = 'saved';
 				return Db(ws1.sub).load(this)
 				.then(()=>{
@@ -1391,7 +1391,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should support swapping sub entities', ()=>{
-				var ws1 = Db(WithSubentity).load('ws2');
+				var ws1 = Db(WithSubentity).get('ws2');
 				return Db(ws1).load(this)
 				.then(()=>{
 					var nsub = new SubEntity();
@@ -1415,7 +1415,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should support swapping polimorphic sub entities', ()=>{
-				var ws1 = Db(WithSubentity).load('ws2');
+				var ws1 = Db(WithSubentity).get('ws2');
 				return Db(ws1).load(this)
 				.then(()=>{
 					var nsub = new SubEntityOth();
@@ -1448,7 +1448,7 @@ describe('Db3 >', () => {
 		var serDb = Db().fork({override:'server'});
 		
 		it('should have proper metadata', ()=> {
-			var wp1 = Db(WithProps).load('wp1');
+			var wp1 = Db(WithProps).get('wp1');
 			var ev = <Db3.Internal.GenericEvent><any>Db(wp1);
 			var state = ev.state;
 			var meta = state.myMeta.findMeta(WithProps);
@@ -1461,7 +1461,7 @@ describe('Db3 >', () => {
 		});
 		
 		it('should properly load root entity for server',() => {
-			var wp1 = serDb(WithProps).load('wp1');
+			var wp1 = serDb(WithProps).get('wp1');
 			assert('entity root returned right overridden type').when(wp1).is(M.instanceOf(ServerWithProps)); 
 			return serDb(wp1).load(this).then((det) => {
 				M.assert('Right type').when(wp1).is(M.instanceOf(ServerWithProps));
@@ -1477,7 +1477,7 @@ describe('Db3 >', () => {
 		});
 		
 		it('should load sub entities for server',() => {
-			var ws1 = serDb(WithSubentity).load('ws1');
+			var ws1 = serDb(WithSubentity).get('ws1');
 			return serDb(ws1).load(this).then((det) => {
 				M.assert("Right type").when(ws1.sub).is(M.instanceOf(ServerSubEntity));
 				M.assert("Loaded main").when(ws1.str).is('String 1');
@@ -1486,7 +1486,7 @@ describe('Db3 >', () => {
 		});
 	
 		it('should load sub entites reference withOUT the main one for server', () => {
-			var wr1 = serDb(WithRef).load('wr2');
+			var wr1 = serDb(WithRef).get('wr2');
 			
 			return serDb(wr1.ref).load(this).then((det) => {
 				M.assert("Inited the ref").when(wr1.ref).is(M.aTruthy);
@@ -1506,7 +1506,7 @@ describe('Db3 >', () => {
 	
 		
 		it('should load reference to other entities sub references for server', () => {
-			var wr1 = serDb(WithRef).load('wr1');
+			var wr1 = serDb(WithRef).get('wr1');
 			
 			return serDb(wr1.othSubRef).load(this).then((det) => {
 				M.assert("inited the ref").when(wr1.othSubRef).is(M.aTruthy);
@@ -1520,7 +1520,7 @@ describe('Db3 >', () => {
 	describe('Collections >', ()=>{
 		describe('Map >', ()=>{
 			it('should notify simple adds for each element',(done)=>{
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				Db(wm1.embedMap).added(this, (det) => {
 					if (det.type != Db3.Internal.EventType.LIST_END) {
@@ -1568,7 +1568,7 @@ describe('Db3 >', () => {
 			});
 
 			it('should notify simple adds for each element on references',(done)=>{
-				var wm1 = Db(WithMap).load('wm2');
+				var wm1 = Db(WithMap).get('wm2');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				Db(wm1.refMap).added(this, (det) => {
 					if (det.type != Db3.Internal.EventType.LIST_END) {
@@ -1610,7 +1610,7 @@ describe('Db3 >', () => {
 			});
 
 			it('should notify elements removal',(done)=>{
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				Db(wm1.embedMap).removed(this, (det) => {
 					recvs.push(det);
@@ -1633,7 +1633,7 @@ describe('Db3 >', () => {
 			});
 
 			it('should notify elements modification',(done)=>{
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				Db(wm1.embedMap).changed(this, (det) => {
 					recvs.push(det);
@@ -1656,7 +1656,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should keep the field in sync when using update',(done)=>{
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				Db(wm1.embedMap).updated(this, (det) => {
 					if (det.type != Db3.Internal.EventType.LIST_END) {
@@ -1677,7 +1677,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load all the collection with load',()=>{
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.embedMap).load(this).then(() => {
 					assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
@@ -1689,7 +1689,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should load all the collection resolving references with load',()=>{
-				var wm1 = Db(WithMap).load('wm2');
+				var wm1 = Db(WithMap).get('wm2');
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.refMap).load(this).then(() => {
 					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
@@ -1725,7 +1725,7 @@ describe('Db3 >', () => {
 			});
 				
 			it('should load all the collection only dereferencing references',()=>{
-				var wm1 = Db(WithMap).load('wm2');
+				var wm1 = Db(WithMap).get('wm2');
 				var evt = <Db3.Internal.GenericEvent><any>Db(wm1);
 				var state = evt.state;
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
@@ -1760,7 +1760,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should add embedded to the map', () => {
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				var sub = new SubEntityOth();
 				sub.str = 'added';
 				return Db(wm1.embedMap).add('d', sub).then(() => {
@@ -1778,8 +1778,8 @@ describe('Db3 >', () => {
 			});
 			
 			it('should add reference to the map', () => {
-				var wm1 = Db(WithMap).load('wm2');
-				var wp1 = Db(WithProps).load('wp1');
+				var wm1 = Db(WithMap).get('wm2');
+				var wp1 = Db(WithProps).get('wp1');
 				return Db(wm1.refMap).add('d', wp1).then(() => {
 					return new Promise((ok) => {
 						wm2Fb.child('refMap').once('value',ok);
@@ -1794,7 +1794,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should remove a key from the map', () => {
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1.embedMap).remove('b').then(() => {
 					return new Promise((ok) => {
 						wm1Fb.child('embedMap').once('value',ok);
@@ -1808,7 +1808,7 @@ describe('Db3 >', () => {
 			});
 			
 			it ('should fetch an embed with a specific key', () => {
-				var wm1 = Db(WithMap).load('wm1');
+				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
 						type: Db3.Internal.EventType.UPDATE,
@@ -1822,7 +1822,7 @@ describe('Db3 >', () => {
 			});
 			
 			it ('should fetch a ref with a specific key', () => {
-				var wm1 = Db(WithMap).load('wm2');
+				var wm1 = Db(WithMap).get('wm2');
 				return Db(wm1.refMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
 						type: Db3.Internal.EventType.UPDATE,
@@ -1871,7 +1871,7 @@ describe('Db3 >', () => {
 		
 		describe('Set >', ()=>{
 			it('should load embed set in array', () => {
-				var ws1 = Db(WithSet).load('ws1');
+				var ws1 = Db(WithSet).get('ws1');
 				return Db(ws1.embedSet).load(this).then(() => {
 					assert('right length').when(ws1.embedSet).is(M.withLength(3));
 					assert('right type 0').when(ws1.embedSet[0]).is(M.instanceOf(SubEntity));
@@ -1890,7 +1890,7 @@ describe('Db3 >', () => {
 			});
 
 			it('should load ref set in array', () => {
-				var ws1 = Db(WithSet).load('ws2');
+				var ws1 = Db(WithSet).get('ws2');
 				return Db(ws1.refSet).load(this).then(() => {
 					assert('right length').when(ws1.refSet).is(M.withLength(3));
 					assert('right type 0').when(ws1.refSet[0]).is(M.instanceOf(WithProps));
@@ -1900,7 +1900,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should add new element to the embed set', ()=>{
-				var ws1 = Db(WithSet).load('ws1');
+				var ws1 = Db(WithSet).get('ws1');
 				var ns = new SubEntity();
 				ns.str = 'added';
 				return Db(ws1.embedSet).add(ns).then(() => {
@@ -1927,8 +1927,8 @@ describe('Db3 >', () => {
 			});
 			
 			it('should add new element to the ref set', ()=>{
-				var ws1 = Db(WithSet).load('ws2');
-				var wp4 = Db(WithProps).load('wp4');
+				var ws1 = Db(WithSet).get('ws2');
+				var wp4 = Db(WithProps).get('wp4');
 				return Db(ws1.refSet).add(wp4).then(() => {
 					return new Promise((ok)=>{
 						wst2Fb.child('refSet').on('value',ok);
@@ -1942,7 +1942,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should honour not adding already exiting element to embed set', () => {
-				var ws1 = Db(WithSet).load('ws1');
+				var ws1 = Db(WithSet).get('ws1');
 				return Db(ws1.embedSet).load(this).then(() => {
 					return Db(ws1.embedSet).add(ws1.embedSet[0]);
 				}).then(() => {
@@ -1961,8 +1961,8 @@ describe('Db3 >', () => {
 			});
 			
 			it('should honour not adding already exiting element to ref set', () => {
-				var ws1 = Db(WithSet).load('ws2');
-				var wp1 = Db(WithProps).load('wp1'); 
+				var ws1 = Db(WithSet).get('ws2');
+				var wp1 = Db(WithProps).get('wp1'); 
 				return Db(ws1.refSet).load(this).then(() => {
 					return Db(ws1.refSet).add(wp1);
 				}).then(() => {
@@ -1981,7 +1981,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should keep the ordering', ()=> {
-				var ws1 = Db(WithSet).load('ws1');
+				var ws1 = Db(WithSet).get('ws1');
 				return Db(ws1.sortedSet).load(this).then(() => {
 					assert('element 0 is right').when(ws1.sortedSet[0].str).is('1 c');
 					assert('element 1 is right').when(ws1.sortedSet[1].str).is('2 b');
@@ -1990,7 +1990,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should properly update the array on last element', ()=> {
-				var ws3 = Db(WithSet).load('ws3');
+				var ws3 = Db(WithSet).get('ws3');
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
@@ -2004,7 +2004,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should properly update the array on first element', ()=> {
-				var ws3 = Db(WithSet).load('ws3');
+				var ws3 = Db(WithSet).get('ws3');
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
@@ -2018,7 +2018,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should properly update the array in the middle', ()=> {
-				var ws3 = Db(WithSet).load('ws3');
+				var ws3 = Db(WithSet).get('ws3');
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
@@ -2068,8 +2068,8 @@ describe('Db3 >', () => {
 		
 		describe('List >', ()=> {
 			it('should permit same reference more than once', ()=>{
-				var wl2 = Db(WithList).load('wl2');
-				var wp1 = Db(WithProps).load('wp1'); 
+				var wl2 = Db(WithList).get('wl2');
+				var wp1 = Db(WithProps).get('wp1'); 
 				return Db(wl2.refList).load(this).then(() => {
 					Db(wl2.refList).live(this);
 					return Db(wl2.refList).add(wp1);
@@ -2090,7 +2090,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should be able to clone and readd', ()=> {
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).load(this).then(() => {
 					Db(wl1.embedList).live(this);
 					var fr = Db(wl1.embedList[1]).clone();
@@ -2112,7 +2112,7 @@ describe('Db3 >', () => {
 			});
 			
 			it('should unshift a new value at the head', ()=> {
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				var ns = new SubEntity();
 				ns.str = 'zz ahead';
 				return Db(wl1.embedList).unshift(ns).then(()=>{
@@ -2124,14 +2124,14 @@ describe('Db3 >', () => {
 			});
 			
 			it('should peek the first element', ()=>{
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).peekHead(this).then((det)=>{
 					assert('it is the right element').when(det.payload.str).is('3 a');
 				});
 			});
 			
 			it('should shift the first element', ()=>{
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).shift(this).then((det)=>{
 					assert('it is the right element').when(det.payload.str).is('3 a');
 					return Db(wl1.embedList).load(this);
@@ -2142,14 +2142,14 @@ describe('Db3 >', () => {
 			});
 			
 			it('should peek the last element', ()=>{
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).peekTail(this).then((det)=>{
 					assert('it is the right element').when(det.payload.str).is('1 c');
 				});
 			});
 			
 			it('should pop the last element', ()=>{
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).pop(this).then((det)=>{
 					assert('it is the right element').when(det.payload.str).is('1 c');
 					return Db(wl1.embedList).load(this);
@@ -2163,7 +2163,7 @@ describe('Db3 >', () => {
 		
 		describe('Query >', ()=> {
 			it('should load a query on embedded objects', () => {
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).query().load(this).then((vals) => {
 					assert('the list has right size').when(vals).is(M.withLength(3));
 					assert('the first element is right').when(vals[0].str).is('3 a');
@@ -2171,7 +2171,7 @@ describe('Db3 >', () => {
 				});
 			});
 			it('should load a query on ref objects', () => {
-				var wl2 = Db(WithList).load('wl2');
+				var wl2 = Db(WithList).get('wl2');
 				return Db(wl2.refList).query().load(this).then((vals) => {
 					assert('the list has right size').when(vals).is(M.withLength(3));
 					assert('the first element is right type').when(vals[0]).is(M.instanceOf(WithProps));
@@ -2180,9 +2180,9 @@ describe('Db3 >', () => {
 				});
 			});
 			it('should filter by range',() => {
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				var query = Db(wl1.embedList).query();
-				query = query.sortOn('str').range('2','4');
+				query = query.onField('str').range('2','4');
 				return query.load(this).then((vals) => {
 					assert('the list has right size').when(vals).is(M.withLength(2));
 					assert('the first element is right').when(vals[0].str).is('2 b');
@@ -2191,7 +2191,7 @@ describe('Db3 >', () => {
 				});
 			});
 			it('should limit', () => {
-				var wl1 = Db(WithList).load('wl1');
+				var wl1 = Db(WithList).get('wl1');
 				return Db(wl1.embedList).query().limit(1).load(this).then((vals) => {
 					assert('the list has right size').when(vals).is(M.withLength(1));
 					assert('the first element is right').when(vals[0].str).is('3 a');

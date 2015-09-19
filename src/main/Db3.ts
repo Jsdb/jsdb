@@ -30,6 +30,13 @@ declare var WeakMap: WeakMapConstructor;
 var defaultDb :Db.Internal.IDb3Static = null;
 
 /**
+ * Weak association between entities and their database events. Each entity instance can be 
+ * connected only to a single database event, and as such to a single database.
+ */
+var entEvent = new Db.Utils.WeakWrap<Db.Internal.GenericEvent>();
+
+
+/**
  * The main Db module.
  */
 module Db {
@@ -49,6 +56,12 @@ module Db {
 		} else {
 			return Db.Internal.createDb(conf);
 		}
+	}
+	
+	export function of(e :Entity) :Db.Internal.IDb3Static {
+		var ge = entEvent.get(e);
+		if (!ge) return null;
+		return ge.state.db;
 	}
 	
 	/**
@@ -96,6 +109,9 @@ module Db {
 				if (arguments.length == 0) {
 					return new DbOperations(state);
 				}
+				// Pass-thru for when db(something) is used also when not needed
+				if (param instanceof GenericEvent) return param;
+				
 				if (typeof param == 'function') {
 					return state.entityRoot(param);
 				} else if (!e) {
@@ -126,6 +142,11 @@ module Db {
 			 * Access to global db operations, see {@link IDbOperations}.
 			 */
 			():IDbOperations;
+			
+			/**
+			 * Pass-thru for when db(something) is used also when not needed. 
+			 */
+			<E extends GenericEvent>(evt :E):E;
 			
 			/**
 			 * Access to an entity root given the entity class.
@@ -682,7 +703,7 @@ module Db {
 			setEntity(entity :Entity) {
 				this.entity = entity;
 				if (entity && typeof entity == 'object') {
-					this.state.entEvent.set(this.entity, this);
+					this.state.bindEntity(this.entity, this);
 				}
 				// TODO clean the children if entity changed? they could be pointing to old instance data
 			}
@@ -1087,6 +1108,9 @@ module Db {
 			 * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
 			 */
 			save():Promise<any>;
+			
+			remove():Promise<any>;
+			
 			
 			/**
 			 * Creates a clone of this entity, using the most recent data from the database.
@@ -1511,6 +1535,21 @@ module Db {
 				}
 			}
 			
+			remove():Promise<any> {
+				if (this.getUrl()) {
+					return new Promise<any>((ok,err) => {
+						var fb = new Firebase(this.getUrl());
+						fb.set(null, (fberr) => {
+							if (fberr) {
+								err(fberr);
+							} else {
+								ok(null);
+							}
+						});
+					});
+				}
+			}
+			
 			clone() :E {
 				if (!this.loaded) throw new Error('Cannot clone an instance that has not been loaded');
 				var nent = this.classMeta.createInstance();
@@ -1688,6 +1727,11 @@ module Db {
 				return this.pointedEvent.save();
 			}
 			
+			remove() {
+				if (!this.pointedEvent) throw new Error("The reference is null, can't remove it");
+				return this.pointedEvent.remove();
+			}
+			
 			clone() :E {
 				return this.pointedEvent.clone();
 			}
@@ -1716,8 +1760,8 @@ module Db {
 			
 			// Collection events
 			/**
-			 * Registers a callback to get notified when elements of the collection is loaded,
-			 * or later when avalue is added to the collection.
+			 * Registers a callback to get notified when elements of the collection are loaded,
+			 * or later when a value is added to the collection.
 			 * 
 			 * The callback will be called :
 			 * - once for each entity found in the collection, in sorting order
@@ -1752,7 +1796,7 @@ module Db {
 
 			/**
 			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 * 
+			 * 
 			 * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc.. 
 			 * 		or used on other operations. 
 			 */
@@ -2378,7 +2422,7 @@ module Db {
 				var enturl = this.state.createEvent(value).getUrl();
 				if (!enturl)  return Utils.IdGenerator.next();
 				if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-					throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+					throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .clone()");
 				}
 				enturl = enturl.substr(this.getUrl().length);
 				enturl = enturl.replace(/\//g,'');
@@ -2451,7 +2495,7 @@ module Db {
 					// if it's an embedded, check if it has a url and substract my url to obtain id
 					if (enturl) {
 						if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-							throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+							throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .clone()");
 						}
 						enturl = enturl.substr(this.getUrl().length);
 					} else {
@@ -2557,7 +2601,7 @@ module Db {
 
 		
 		export interface IEntityRoot<E extends Entity> extends IUrled {
-			load(id:string):E;
+			get(id:string):E;
 			query() :IQuery<E>;
 		}
 		
@@ -2569,7 +2613,7 @@ module Db {
 				if (!meta.root) throw new Error("The entity " + meta.getName() + " is not a root entity");
 			}
 			
-			load(id:string) :E {
+			get(id:string) :E {
 				return <E>this.state.load(this.getUrl() + id, this.meta);
 			}
 			
@@ -2588,7 +2632,7 @@ module Db {
 			load(ctx:Object) :Promise<E[]>;
 			dereference(ctx:Object) :Promise<E[]>;
 			
-			sortOn(field :string, desc? :boolean):IQuery<E>;
+			onField(field :string, desc? :boolean):IQuery<E>;
 			limit(limit :number):IQuery<E>;
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
@@ -2611,7 +2655,7 @@ module Db {
 				return this.parent.getUrl(force);
 			}
 			
-			sortOn(field :string, desc = false) {
+			onField(field :string, desc = false) {
 				this.sorting = {
 					field: field,
 					desc :desc
@@ -2696,7 +2740,6 @@ module Db {
 			conf :any;
 			myMeta = allMetadata;
 			db :IDb3Static;
-			entEvent = new Utils.WeakWrap<GenericEvent>();
 			
 			configure(conf :any) {
 				this.conf = conf;
@@ -2753,9 +2796,14 @@ module Db {
 				return this.conf['baseUrl'];
 			}
 			
+			bindEntity(e :Entity, ev :GenericEvent) {
+				// TODO probably we should check and raise an error is the entity was already bound
+				entEvent.set(e, ev);
+			}
+			
 			createEvent(e :Entity, stack :MetaDescriptor[] = []) :GenericEvent {
 				//var roote = (<IDb3Annotated>e).__dbevent;
-				var roote = this.entEvent.get(e);
+				var roote = entEvent.get(e);
 				if (!roote) {
 					var clmeta = this.myMeta.findMeta(e);
 					var nre = new EntityEvent();
@@ -2764,7 +2812,9 @@ module Db {
 					nre.classMeta = clmeta;
 					roote = nre;
 					//(<IDb3Annotated>e).__dbevent = roote;
-					this.entEvent.set(e, roote);
+					entEvent.set(e, roote);
+				} else {
+					if (roote.state != this) throw new Error("The entity " + roote.getUrl(true) + " is already attached to another database, not to " + this.getUrl());
 				}
 				// Follow each call stack
 				var acp = roote;

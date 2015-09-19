@@ -12,6 +12,11 @@ var Promise = PromiseModule.Promise;
  */
 var defaultDb = null;
 /**
+ * Weak association between entities and their database events. Each entity instance can be
+ * connected only to a single database event, and as such to a single database.
+ */
+var entEvent = new Db.Utils.WeakWrap();
+/**
  * The main Db module.
  */
 var Db;
@@ -34,6 +39,13 @@ var Db;
         }
     }
     Db.configure = configure;
+    function of(e) {
+        var ge = entEvent.get(e);
+        if (!ge)
+            return null;
+        return ge.state.db;
+    }
+    Db.of = of;
     /**
      * Return the {@link defaultDb} if any has been created.
      */
@@ -68,6 +80,9 @@ var Db;
                 if (arguments.length == 0) {
                     return new DbOperations(state);
                 }
+                // Pass-thru for when db(something) is used also when not needed
+                if (param instanceof GenericEvent)
+                    return param;
                 if (typeof param == 'function') {
                     return state.entityRoot(param);
                 }
@@ -483,7 +498,7 @@ var Db;
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 if (entity && typeof entity == 'object') {
-                    this.state.entEvent.set(this.entity, this);
+                    this.state.bindEntity(this.entity, this);
                 }
                 // TODO clean the children if entity changed? they could be pointing to old instance data
             };
@@ -1179,6 +1194,22 @@ var Db;
                     return this.save();
                 }
             };
+            EntityEvent.prototype.remove = function () {
+                var _this = this;
+                if (this.getUrl()) {
+                    return new Promise(function (ok, err) {
+                        var fb = new Firebase(_this.getUrl());
+                        fb.set(null, function (fberr) {
+                            if (fberr) {
+                                err(fberr);
+                            }
+                            else {
+                                ok(null);
+                            }
+                        });
+                    });
+                }
+            };
             EntityEvent.prototype.clone = function () {
                 if (!this.loaded)
                     throw new Error('Cannot clone an instance that has not been loaded');
@@ -1360,6 +1391,11 @@ var Db;
                 if (!this.pointedEvent)
                     throw new Error("The reference is null, can't save it");
                 return this.pointedEvent.save();
+            };
+            ReferenceEvent.prototype.remove = function () {
+                if (!this.pointedEvent)
+                    throw new Error("The reference is null, can't remove it");
+                return this.pointedEvent.remove();
             };
             ReferenceEvent.prototype.clone = function () {
                 return this.pointedEvent.clone();
@@ -1828,7 +1864,7 @@ var Db;
                 if (!enturl)
                     return Utils.IdGenerator.next();
                 if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-                    throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+                    throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .clone()");
                 }
                 enturl = enturl.substr(this.getUrl().length);
                 enturl = enturl.replace(/\//g, '');
@@ -1902,7 +1938,7 @@ var Db;
                     // if it's an embedded, check if it has a url and substract my url to obtain id
                     if (enturl) {
                         if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-                            throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .detach() or .clone()");
+                            throw new Error("Cannot add to a set an embedded entity loaded or saved somewhere else, use .clone()");
                         }
                         enturl = enturl.substr(this.getUrl().length);
                     }
@@ -2003,7 +2039,7 @@ var Db;
                 if (!meta.root)
                     throw new Error("The entity " + meta.getName() + " is not a root entity");
             }
-            EntityRoot.prototype.load = function (id) {
+            EntityRoot.prototype.get = function (id) {
                 return this.state.load(this.getUrl() + id, this.meta);
             };
             EntityRoot.prototype.query = function () {
@@ -2030,7 +2066,7 @@ var Db;
             QueryImpl.prototype.getUrl = function (force) {
                 return this.parent.getUrl(force);
             };
-            QueryImpl.prototype.sortOn = function (field, desc) {
+            QueryImpl.prototype.onField = function (field, desc) {
                 if (desc === void 0) { desc = false; }
                 this.sorting = {
                     field: field,
@@ -2113,7 +2149,6 @@ var Db;
             function DbState() {
                 this.cache = {};
                 this.myMeta = allMetadata;
-                this.entEvent = new Utils.WeakWrap();
             }
             DbState.prototype.configure = function (conf) {
                 this.conf = conf;
@@ -2166,10 +2201,14 @@ var Db;
             DbState.prototype.getUrl = function () {
                 return this.conf['baseUrl'];
             };
+            DbState.prototype.bindEntity = function (e, ev) {
+                // TODO probably we should check and raise an error is the entity was already bound
+                entEvent.set(e, ev);
+            };
             DbState.prototype.createEvent = function (e, stack) {
                 if (stack === void 0) { stack = []; }
                 //var roote = (<IDb3Annotated>e).__dbevent;
-                var roote = this.entEvent.get(e);
+                var roote = entEvent.get(e);
                 if (!roote) {
                     var clmeta = this.myMeta.findMeta(e);
                     var nre = new EntityEvent();
@@ -2178,7 +2217,11 @@ var Db;
                     nre.classMeta = clmeta;
                     roote = nre;
                     //(<IDb3Annotated>e).__dbevent = roote;
-                    this.entEvent.set(e, roote);
+                    entEvent.set(e, roote);
+                }
+                else {
+                    if (roote.state != this)
+                        throw new Error("The entity " + roote.getUrl(true) + " is already attached to another database, not to " + this.getUrl());
                 }
                 // Follow each call stack
                 var acp = roote;

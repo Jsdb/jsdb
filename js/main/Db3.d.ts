@@ -11,6 +11,7 @@ declare module Db {
      * @return An initialized and configured db instance
      */
     function configure(conf: any): Db.Internal.IDb3Static;
+    function of(e: Entity): Db.Internal.IDb3Static;
     /**
      * Return the {@link defaultDb} if any has been created.
      */
@@ -51,6 +52,10 @@ declare module Db {
              * Access to global db operations, see {@link IDbOperations}.
              */
             (): IDbOperations;
+            /**
+             * Pass-thru for when db(something) is used also when not needed.
+             */
+            <E extends GenericEvent>(evt: E): E;
             /**
              * Access to an entity root given the entity class.
              */
@@ -663,6 +668,7 @@ declare module Db {
              * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
              */
             save(): Promise<any>;
+            remove(): Promise<any>;
             /**
              * Creates a clone of this entity, using the most recent data from the database.
              *
@@ -809,6 +815,7 @@ declare module Db {
             serialize(localsOnly?: boolean, fields?: string[]): Object;
             assignUrl(): void;
             save(): Promise<any>;
+            remove(): Promise<any>;
             clone(): E;
         }
         /**
@@ -863,6 +870,7 @@ declare module Db {
             serialize(localsOnly?: boolean): Object;
             assignUrl(): void;
             save(): Promise<any>;
+            remove(): Promise<any>;
             clone(): E;
         }
         /**
@@ -886,8 +894,8 @@ declare module Db {
              */
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             /**
-             * Registers a callback to get notified when elements of the collection is loaded,
-             * or later when avalue is added to the collection.
+             * Registers a callback to get notified when elements of the collection are loaded,
+             * or later when a value is added to the collection.
              *
              * The callback will be called :
              * - once for each entity found in the collection, in sorting order
@@ -921,7 +929,7 @@ declare module Db {
             moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             /**
              * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 *
+             *
              * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc..
              * 		or used on other operations.
              */
@@ -1187,21 +1195,21 @@ declare module Db {
             isLocal(): boolean;
         }
         interface IEntityRoot<E extends Entity> extends IUrled {
-            load(id: string): E;
+            get(id: string): E;
             query(): IQuery<E>;
         }
         class EntityRoot<E extends Entity> implements IEntityRoot<E> {
             private state;
             private meta;
             constructor(state: DbState, meta: ClassMetadata);
-            load(id: string): E;
+            get(id: string): E;
             query(): IQuery<E>;
             getUrl(): string;
         }
         interface IQuery<E extends Entity> extends IReadableCollection<E> {
             load(ctx: Object): Promise<E[]>;
             dereference(ctx: Object): Promise<E[]>;
-            sortOn(field: string, desc?: boolean): IQuery<E>;
+            onField(field: string, desc?: boolean): IQuery<E>;
             limit(limit: number): IQuery<E>;
             range(from: any, to: any): IQuery<E>;
             equals(val: any): IQuery<E>;
@@ -1213,7 +1221,7 @@ declare module Db {
             private _equals;
             constructor(ev: GenericEvent);
             getUrl(force: boolean): string;
-            sortOn(field: string, desc?: boolean): QueryImpl<E>;
+            onField(field: string, desc?: boolean): QueryImpl<E>;
             limit(limit: number): QueryImpl<E>;
             range(from: any, to: any): QueryImpl<E>;
             equals(val: any): QueryImpl<E>;
@@ -1228,13 +1236,13 @@ declare module Db {
             conf: any;
             myMeta: Metadata;
             db: IDb3Static;
-            entEvent: Utils.WeakWrap<GenericEvent>;
             configure(conf: any): void;
             reset(): void;
             entityRoot(ctor: EntityType<any>): IEntityRoot<any>;
             entityRoot(meta: ClassMetadata): IEntityRoot<any>;
             entityRootFromUrl(url: string): IEntityRoot<any>;
             getUrl(): string;
+            bindEntity(e: Entity, ev: GenericEvent): void;
             createEvent(e: Entity, stack?: MetaDescriptor[]): GenericEvent;
             loadEvent(url: string, meta?: ClassMetadata): GenericEvent;
             storeInCache(evt: GenericEvent): void;
