@@ -1,7 +1,14 @@
+/**
+ * TSDB version : VERSION_TAG
+ */
+
+
 import Firebase = require('firebase');
 import PromiseModule = require('es6-promise');
 
 var Promise = PromiseModule.Promise;
+
+var Version = 'VERSION_TAG';
 
 /**
  * Imported into TypeScript the WeakMap definition

@@ -1,3 +1,6 @@
+/**
+ * TSDB version : VERSION_TAG
+ */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -7,15 +10,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-/**
- * The default db, will be the first database created, handy since most projects will only use one db.
- */
-var defaultDb = null;
-/**
- * Weak association between entities and their database events. Each entity instance can be
- * connected only to a single database event, and as such to a single database.
- */
-var entEvent = new Db.Utils.WeakWrap();
+var Version = 'VERSION_TAG';
 /**
  * The main Db module.
  */
@@ -672,7 +667,8 @@ var Db;
                 if (!meta)
                     return null;
                 var ret = this.children[meta.localName];
-                //if (ret && !force) return ret;
+                if (ret && !force)
+                    return ret;
                 if (ret && this.entity) {
                     ret.setEntity(this.entity[meta.localName]);
                     return ret;
@@ -2965,12 +2961,10 @@ var Db;
             enumerable: true,
             set: function (v) {
                 this[nkey] = v;
-                /*
-                var mye = (<Internal.IDb3Annotated>this).__dbevent;
+                var mye = entEvent.get(this);
                 if (mye) {
                     mye.findCreateChildFor(propertyKey, true);
                 }
-                */
             },
             get: function () {
                 if (lastExpect && this !== lastExpect) {
@@ -3058,5 +3052,14 @@ var Db;
         meta_1.define = define;
     })(meta = Db.meta || (Db.meta = {}));
 })(Db || (Db = {}));
+/**
+ * The default db, will be the first database created, handy since most projects will only use one db.
+ */
+var defaultDb = null;
+/**
+ * Weak association between entities and their database events. Each entity instance can be
+ * connected only to a single database event, and as such to a single database.
+ */
+var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
 //# sourceMappingURL=Db3.js.map

@@ -6,7 +6,6 @@
         "outDir": "../js",
         "sourceMap": true,
         "declaration": true,
-        "removeComments": true,
-        "sourceRoot": ""
+        "removeComments": false
     }
 }

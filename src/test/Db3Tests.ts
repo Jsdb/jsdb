@@ -1,4 +1,3 @@
-/// <reference path="../../typings/tsd.d.ts" />
 
 
 import Db3 = require('../main/Db3');
