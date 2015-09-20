@@ -1,15 +1,16 @@
 /**
- * TSDB version : 20150920_204425_master_1.0.0_2207036
+ * TSDB version : VERSION_TAG
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    __.prototype = b.prototype;
+    d.prototype = new __();
 };
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20150920_204425_master_1.0.0_2207036';
+var Version = 'VERSION_TAG';
 /**
  * The main Db module.
  */
@@ -2865,6 +2866,8 @@ var Db;
     // --- Annotations
     function embedded(def, binding) {
         return function (target, propertyKey) {
+            if (!def)
+                throw new Error("Cannot find embedded class for " + propertyKey.toString());
             var ret = meta.embedded(def, binding);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -2873,6 +2876,8 @@ var Db;
     Db.embedded = embedded;
     function reference(def, project) {
         return function (target, propertyKey) {
+            if (!def)
+                throw new Error("Cannot find referenced class for " + propertyKey.toString());
             var ret = meta.reference(def, project);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -2882,6 +2887,8 @@ var Db;
     function map(valueType, reference, sorting) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
+            if (!valueType)
+                throw new Error("Cannot find map value type for " + propertyKey.toString());
             var ret = meta.map(valueType, reference, sorting);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -2891,6 +2898,8 @@ var Db;
     function set(valueType, reference, sorting) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
+            if (!valueType)
+                throw new Error("Cannot find set value type for " + propertyKey.toString());
             var ret = meta.set(valueType, reference, sorting);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -2900,6 +2909,8 @@ var Db;
     function list(valueType, reference, sorting) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
+            if (!valueType)
+                throw new Error("Cannot find list value type for " + propertyKey.toString());
             var ret = meta.list(valueType, reference, sorting);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -2990,6 +3001,8 @@ var Db;
     var meta;
     (function (meta_1) {
         function embedded(def, binding) {
+            if (!def)
+                throw new Error("Cannot find embedded class");
             var ret = new Db.Internal.EmbeddedMetaDescriptor();
             ret.setType(def);
             ret.setBinding(binding);
@@ -2997,6 +3010,8 @@ var Db;
         }
         meta_1.embedded = embedded;
         function reference(def, project) {
+            if (!def)
+                throw new Error("Cannot find referenced class");
             var ret = new Db.Internal.ReferenceMetaDescriptor();
             ret.setType(def);
             ret.project = project;
@@ -3005,6 +3020,8 @@ var Db;
         meta_1.reference = reference;
         function map(valuetype, reference, sorting) {
             if (reference === void 0) { reference = false; }
+            if (!valuetype)
+                throw new Error("Cannot find map value type");
             var ret = new Db.Internal.MapMetaDescriptor();
             ret.setType(valuetype);
             ret.isReference = reference;
@@ -3014,6 +3031,8 @@ var Db;
         meta_1.map = map;
         function set(valuetype, reference, sorting) {
             if (reference === void 0) { reference = false; }
+            if (!valuetype)
+                throw new Error("Cannot find set value type");
             var ret = new Db.Internal.SetMetaDescriptor();
             ret.setType(valuetype);
             ret.isReference = reference;
@@ -3023,6 +3042,8 @@ var Db;
         meta_1.set = set;
         function list(valuetype, reference, sorting) {
             if (reference === void 0) { reference = false; }
+            if (!valuetype)
+                throw new Error("Cannot find list value type");
             var ret = new Db.Internal.ListMetaDescriptor();
             ret.setType(valuetype);
             ret.isReference = reference;
@@ -3065,3 +3086,4 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
+//# sourceMappingURL=Db3.js.map

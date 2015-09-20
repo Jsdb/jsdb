@@ -3456,6 +3456,7 @@ module Db {
 	// --- Annotations
 	export function embedded(def :EntityType<any>, binding? :Internal.IBinding) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
+			if (!def) throw new Error("Cannot find embedded class for " + propertyKey.toString());
 			var ret = meta.embedded(def, binding);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -3464,6 +3465,7 @@ module Db {
 	
 	export function reference(def :EntityType<any>, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
+			if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
 			var ret = meta.reference(def, project);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -3472,6 +3474,7 @@ module Db {
 	
 	export function map(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
+			if (!valueType) throw new Error("Cannot find map value type for " + propertyKey.toString());
 			var ret = meta.map(valueType, reference, sorting);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -3480,6 +3483,7 @@ module Db {
 	
 	export function set(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
+			if (!valueType) throw new Error("Cannot find set value type for " + propertyKey.toString());
 			var ret = meta.set(valueType, reference, sorting);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -3488,6 +3492,7 @@ module Db {
 
 	export function list(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
+			if (!valueType) throw new Error("Cannot find list value type for " + propertyKey.toString());
 			var ret = meta.list(valueType, reference, sorting);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -3580,6 +3585,7 @@ module Db {
 	
 	export module meta {
 		export function embedded(def :any, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+			if (!def) throw new Error("Cannot find embedded class");
 			var ret = new Db.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
 			ret.setBinding(binding);
@@ -3587,6 +3593,7 @@ module Db {
 		}
 		
 		export function reference(def :any, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+			if (!def) throw new Error("Cannot find referenced class");
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
 			ret.project = project;
@@ -3594,6 +3601,7 @@ module Db {
 		}
 		
 		export function map(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.MapMetaDescriptor {
+			if (!valuetype) throw new Error("Cannot find map value type");
 			var ret = new Db.Internal.MapMetaDescriptor();
 			ret.setType(valuetype);
 			ret.isReference = reference;
@@ -3602,6 +3610,7 @@ module Db {
 		}
 		
 		export function set(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.SetMetaDescriptor {
+			if (!valuetype) throw new Error("Cannot find set value type");
 			var ret = new Db.Internal.SetMetaDescriptor();
 			ret.setType(valuetype);
 			ret.isReference = reference;
@@ -3610,6 +3619,7 @@ module Db {
 		}
 		
 		export function list(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.ListMetaDescriptor {
+			if (!valuetype) throw new Error("Cannot find list value type");
 			var ret = new Db.Internal.ListMetaDescriptor();
 			ret.setType(valuetype);
 			ret.isReference = reference;
