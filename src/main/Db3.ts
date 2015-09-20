@@ -201,6 +201,11 @@ module Db {
 			 * Reset the internal state of the db, purging the cache and closing al listeners.
 			 */
 			reset();
+			
+			/**
+			 * Deletes all the data from the db, without sending any event, and resets the internal state.
+			 */
+			erase();
 		}
 		
 		/**
@@ -224,6 +229,11 @@ module Db {
 			
 			reset() {
 				this.state.reset();
+			}
+			
+			erase() {
+				this.reset();
+				new Firebase(this.state.getUrl()).remove();
 			}
 		}
 		

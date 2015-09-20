@@ -1,16 +1,15 @@
 /**
- * TSDB version : VERSION_TAG
+ * TSDB version : 20150920_204425_master_1.0.0_2207036
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    __.prototype = b.prototype;
-    d.prototype = new __();
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = 'VERSION_TAG';
+var Version = '20150920_204425_master_1.0.0_2207036';
 /**
  * The main Db module.
  */
@@ -109,6 +108,10 @@ var Db;
             };
             DbOperations.prototype.reset = function () {
                 this.state.reset();
+            };
+            DbOperations.prototype.erase = function () {
+                this.reset();
+                new Firebase(this.state.getUrl()).remove();
             };
             return DbOperations;
         })();
@@ -3062,4 +3065,3 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
-//# sourceMappingURL=Db3.js.map

@@ -1,4 +1,4 @@
-/// <reference path="../../typings/tsd.d.ts" />
+/// <reference path="../../jsdb/typings/tsd.d.ts" />
 export = Db;
 declare class Db {
     /**

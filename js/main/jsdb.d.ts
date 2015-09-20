@@ -108,6 +108,10 @@ declare module 'jsdb' {
                                 * Reset the internal state of the db, purging the cache and closing al listeners.
                                 */
                             reset(): any;
+                            /**
+                                * Deletes all the data from the db, without sending any event, and resets the internal state.
+                                */
+                            erase(): any;
                     }
                     /**
                         * Implementation of {@link IDbOperations}.
@@ -118,6 +122,7 @@ declare module 'jsdb' {
                             fork(conf: any): IDb3Static;
                             load<T extends Entity>(url: string): T;
                             reset(): void;
+                            erase(): void;
                     }
                     /**
                         * Binding between parent and {@link embedded} entities.
