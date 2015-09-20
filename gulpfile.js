@@ -23,12 +23,22 @@ var replace = require('gulp-replace');
 var moment = require('moment');
 var execSync = require('exec-sync');
 
-var NAME = 'JSDB';
-var CODENAME = 'jsdb'
+var packg = {};
+try {
+	packg = JSON.parse(fs.readFileSync('./package.json'));
+} catch (e) {
+	console.log("Error reading package.json");
+	console.log(e);
+}
+var gulpdata = (packg && packg.gulp_data) ? packg.gulp_data : {}; 
+
+var NAME = gulpdata.fullName || packg.name || 'project';
+var CODENAME = gulpdata.codeName || packg.name || 'project';
+
 
 var paths = {
-	tests: ['./js/test/Db3Tests.js'],
-	mainDts: './js/main/Db3.d.ts',
+	tests: ['./js/test/*.js'],
+	mainDts: './js/main/index.d.ts',
 	ts: ['./src/**/*.ts'],
 	js: ['./js/**/*.js'],
 	jsApp: ['./js/main/*.js'],
@@ -37,11 +47,18 @@ var paths = {
 	tsoutApp: './js/main',
 	tsApp: ['./src/main/**/*.ts'],
 	tsTest: ['./src/test/**/*.ts'],
-	remoteBuildFiles: [
-		'./js/**',
-		'package.json'
-	]
 };
+
+if (packg && packg.gulp_data && packg.gulp_data.paths) {
+	var gdpaths = packg.gulp_data.paths;
+	var ks = Object.keys(paths);
+	for (var i = 0; i < ks.length; i++) {
+		var k = ks[i];
+		if (gdpaths.hasOwnProperty(k)) {
+			paths[k] = gdpaths[k];
+		}
+	}
+}
 
 /**
  * Used to determine if the gulp operation was launched for a debug or release build.
@@ -132,8 +149,14 @@ var lastVersionTag = '';
  */
 function versionTag() {
 	if (lastVersionTag) return lastVersionTag;
-	var gitVer = execSync('git log -1 --pretty=%h');
-	var gitBranch = execSync('git rev-parse --abbrev-ref HEAD'); 
+	var gitVer = '';
+	var gitBranch = 'local';
+	try {
+		gitVer = execSync('git log -1 --pretty=%h');
+		gitBranch = execSync('git rev-parse --abbrev-ref HEAD');
+	} catch (e) {
+	}
+	gitVer = packg.version + '_' + gitVer;
 	var ts = moment().format('YYYYMMDD_HHmmss');
 	lastVersionTag = ts + '_' + gitBranch + '_' + gitVer;
 	return lastVersionTag;
@@ -189,7 +212,7 @@ gulp.task("test", ["ts"], function (cb) {
  * as well as the unit tests.
  */
 gulp.task("tsd", function (cb) {
-	runSequence("tsd:app", "tsd:tests", cb);
+	runSequence("tsd:app", cb);
 });
 
 /**
@@ -260,11 +283,13 @@ gulp.task("ts", ["ts:src"], function () {
 		.pipe(replace('VERSION_TAG', versionTag()))
 		.pipe(gulp.dest(paths.tsout))
 		.on('finish', function() {
-			dts.bundle({
-				name: CODENAME,
-				main: paths.mainDts,
-				out: CODENAME + '.d.ts'
-			});
+			if (paths.mainDts) {
+				dts.bundle({
+					name: CODENAME,
+					main: paths.mainDts,
+					out: CODENAME + '.d.ts'
+				});
+			}
 		})
 	]);
 });
