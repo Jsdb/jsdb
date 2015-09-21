@@ -25,10 +25,13 @@ declare module 'jsdb' {
             interface Entity {
             }
             /**
-                * Definition of an entity constructor, just to mane things.
+                * Definition of an entity constructor, just to name things.
                 */
             interface EntityType<T extends Entity> {
                     new (): T;
+            }
+            interface EntityTypeProducer<T extends Entity> {
+                    (): EntityType<T>;
             }
             /**
                 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
@@ -1240,11 +1243,11 @@ declare module 'jsdb' {
                     class MetaDescriptor {
                             localName: string;
                             remoteName: string;
-                            ctor: EntityType<any>;
                             classMeta: ClassMetadata;
                             getTreeChange(md: Metadata): ClassMetadata;
                             getRemoteName(): string;
                             setType(def: any): void;
+                            ctor: EntityType<any>;
                             named(name: string): MetaDescriptor;
                             setLocalName(name: string): void;
                             createEvent(allMetadata: Metadata): GenericEvent;
@@ -1337,22 +1340,22 @@ declare module 'jsdb' {
             }
             function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
             function sortBy(field: string, desc?: boolean): Internal.SortingData;
-            function embedded(def: EntityType<any>, binding?: Internal.IBinding): PropertyDecorator;
-            function reference(def: EntityType<any>, project?: string[]): PropertyDecorator;
-            function map(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
-            function set(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
-            function list(valueType: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+            function embedded(def: EntityType<any> | EntityTypeProducer<any>, binding?: Internal.IBinding): PropertyDecorator;
+            function reference(def: EntityType<any> | EntityTypeProducer<any>, project?: string[]): PropertyDecorator;
+            function map(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+            function set(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+            function list(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
             function root(name?: string, override?: string): ClassDecorator;
             function discriminator(disc: string): ClassDecorator;
             function override(override?: string): ClassDecorator;
             function observable(): PropertyDecorator;
             function ignore(): PropertyDecorator;
             module meta {
-                    function embedded(def: any, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
-                    function reference(def: any, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
-                    function map(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.MapMetaDescriptor;
-                    function set(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.SetMetaDescriptor;
-                    function list(valuetype: EntityType<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.ListMetaDescriptor;
+                    function embedded(def: EntityType<any> | EntityTypeProducer<any>, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
+                    function reference(def: EntityType<any> | EntityTypeProducer<any>, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
+                    function map(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.MapMetaDescriptor;
+                    function set(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.SetMetaDescriptor;
+                    function list(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.ListMetaDescriptor;
                     function observable(): Db.Internal.ObservableMetaDescriptor;
                     function ignore(): Db.Internal.IgnoreMetaDescriptor;
                     function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;
