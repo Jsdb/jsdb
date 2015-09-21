@@ -72,10 +72,14 @@ module Db {
 	export interface Entity {}
 	
 	/**
-	 * Definition of an entity constructor, just to mane things.
+	 * Definition of an entity constructor, just to name things.
 	 */
 	export interface EntityType<T extends Entity> {
-		 new(): T;
+		 new() :T;
+	}
+	
+	export interface EntityTypeProducer<T extends Entity> {
+		() :EntityType<T>;
 	}
 
 	/**
@@ -2936,7 +2940,12 @@ module Db {
 		export class MetaDescriptor {
 			localName :string = null;
 			remoteName :string = null;
-			ctor :EntityType<any> = null;
+			/**
+			 * This could be either a class constructor (EntityType), or an anonymous function returning a costructor 
+			 * (EntityTypeProducer). Code for resolving the producer is in the cotr getter. This producer stuff
+			 * is needed for https://github.com/Microsoft/TypeScript/issues/4888.
+			 */ 
+			private _ctor :any = null;
 			classMeta :ClassMetadata = null;
 			
 			getTreeChange(md :Metadata) :ClassMetadata {
@@ -2949,7 +2958,21 @@ module Db {
 			}
 			
 			setType(def :any) {
-				this.ctor = def;
+				this._ctor = def;
+			}
+			
+			get ctor():EntityType<any> {
+				if (this._ctor == null) {
+					return null;
+				}
+				var ret :EntityType<any> = null;
+				if (!Utils.findName(this._ctor)) {
+					ret = this._ctor();
+					this._ctor = ret;
+				} else {
+					ret = this._ctor;
+				}
+				return ret;
 			}
 			
 			named(name :string) :MetaDescriptor {
@@ -3184,7 +3207,7 @@ module Db {
 					if (md.ctor == ctor) return md;
 				}
 				var md = new Internal.ClassMetadata();
-				md.ctor = ctor;
+				md.setType(ctor);
 				// TODO parse here the manual static metadata
 				var hierarchy = Utils.findHierarchy(ctor);
 				for (var i = 0; i < hierarchy.length; i++) {
@@ -3454,7 +3477,7 @@ module Db {
 	}
 	
 	// --- Annotations
-	export function embedded(def :EntityType<any>, binding? :Internal.IBinding) :PropertyDecorator {
+	export function embedded(def :EntityType<any>|EntityTypeProducer<any>, binding? :Internal.IBinding) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find embedded class for " + propertyKey.toString());
 			var ret = meta.embedded(def, binding);
@@ -3463,7 +3486,7 @@ module Db {
 		}
 	}
 	
-	export function reference(def :EntityType<any>, project? :string[]) :PropertyDecorator {
+	export function reference(def :EntityType<any>|EntityTypeProducer<any>, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
 			var ret = meta.reference(def, project);
@@ -3472,7 +3495,7 @@ module Db {
 		}
 	}
 	
-	export function map(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function map(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find map value type for " + propertyKey.toString());
 			var ret = meta.map(valueType, reference, sorting);
@@ -3481,7 +3504,7 @@ module Db {
 		}
 	}
 	
-	export function set(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function set(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find set value type for " + propertyKey.toString());
 			var ret = meta.set(valueType, reference, sorting);
@@ -3490,7 +3513,7 @@ module Db {
 		}
 	}
 
-	export function list(valueType :EntityType<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function list(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find list value type for " + propertyKey.toString());
 			var ret = meta.list(valueType, reference, sorting);
@@ -3584,7 +3607,7 @@ module Db {
 
 	
 	export module meta {
-		export function embedded(def :any, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+		export function embedded(def :EntityType<any>|EntityTypeProducer<any>, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
 			if (!def) throw new Error("Cannot find embedded class");
 			var ret = new Db.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
@@ -3592,7 +3615,7 @@ module Db {
 			return ret;
 		}
 		
-		export function reference(def :any, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+		export function reference(def :EntityType<any>|EntityTypeProducer<any>, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
 			if (!def) throw new Error("Cannot find referenced class");
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
@@ -3600,7 +3623,7 @@ module Db {
 			return ret;
 		}
 		
-		export function map(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.MapMetaDescriptor {
+		export function map(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.MapMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find map value type");
 			var ret = new Db.Internal.MapMetaDescriptor();
 			ret.setType(valuetype);
@@ -3609,7 +3632,7 @@ module Db {
 			return ret;
 		}
 		
-		export function set(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.SetMetaDescriptor {
+		export function set(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.SetMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find set value type");
 			var ret = new Db.Internal.SetMetaDescriptor();
 			ret.setType(valuetype);
@@ -3618,7 +3641,7 @@ module Db {
 			return ret;
 		}
 		
-		export function list(valuetype: EntityType<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.ListMetaDescriptor {
+		export function list(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.ListMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find list value type");
 			var ret = new Db.Internal.ListMetaDescriptor();
 			ret.setType(valuetype);

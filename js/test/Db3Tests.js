@@ -1,7 +1,8 @@
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    __.prototype = b.prototype;
+    d.prototype = new __();
 };
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
@@ -766,6 +767,29 @@ describe('Db3 >', function () {
                     done();
                 }
             }, 1);
+        });
+        it('should report broken forward declarations', function () {
+            var threw = false;
+            try {
+                var mod = require('./Db3ForwardWrong');
+            }
+            catch (e) {
+                console.log(e);
+                threw = true;
+            }
+            assert('should throw exception').when(threw).is(true);
+        });
+        it.only('should support function based forward declarations', function () {
+            var mod = require('./Db3ForwardRight');
+            Db3.Internal.clearLastStack();
+            var we = new mod.A();
+            var sub = we.prop;
+            var lastEntity = Db3.Internal.getLastEntity();
+            var lastPath = Db3.Internal.getLastMetaPath();
+            var lastEle = lastPath[lastPath.length - 1];
+            var entityType = lastEle.ctor;
+            assert("resolved to right entity type").when(entityType).is(mod.B);
+            console.log(lastPath);
         });
         // TODO implement the .props property to clean any ambiguity
     });
@@ -2096,3 +2120,4 @@ describe('Db3 >', function () {
         });
     });
 });
+//# sourceMappingURL=Db3Tests.js.map

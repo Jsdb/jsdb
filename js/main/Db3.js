@@ -2340,7 +2340,12 @@ var Db;
             function MetaDescriptor() {
                 this.localName = null;
                 this.remoteName = null;
-                this.ctor = null;
+                /**
+                 * This could be either a class constructor (EntityType), or an anonymous function returning a costructor
+                 * (EntityTypeProducer). Code for resolving the producer is in the cotr getter. This producer stuff
+                 * is needed for https://github.com/Microsoft/TypeScript/issues/4888.
+                 */
+                this._ctor = null;
                 this.classMeta = null;
             }
             MetaDescriptor.prototype.getTreeChange = function (md) {
@@ -2352,8 +2357,26 @@ var Db;
                 return this.localName;
             };
             MetaDescriptor.prototype.setType = function (def) {
-                this.ctor = def;
+                this._ctor = def;
             };
+            Object.defineProperty(MetaDescriptor.prototype, "ctor", {
+                get: function () {
+                    if (this._ctor == null) {
+                        return null;
+                    }
+                    var ret = null;
+                    if (!Utils.findName(this._ctor)) {
+                        ret = this._ctor();
+                        this._ctor = ret;
+                    }
+                    else {
+                        ret = this._ctor;
+                    }
+                    return ret;
+                },
+                enumerable: true,
+                configurable: true
+            });
             MetaDescriptor.prototype.named = function (name) {
                 this.remoteName = name;
                 return this;
@@ -2601,7 +2624,7 @@ var Db;
                         return md;
                 }
                 var md = new Internal.ClassMetadata();
-                md.ctor = ctor;
+                md.setType(ctor);
                 // TODO parse here the manual static metadata
                 var hierarchy = Utils.findHierarchy(ctor);
                 for (var i = 0; i < hierarchy.length; i++) {

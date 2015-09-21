@@ -752,6 +752,32 @@ describe('Db3 >', () => {
 				}
 			}, 1);
 		});
+		
+		it('should report broken forward declarations', ()=>{
+			var threw = false;
+			try {
+				var mod = require('./Db3ForwardWrong');
+			} catch (e) {
+				console.log(e);
+				threw = true;
+			}
+			assert('should throw exception').when(threw).is(true);
+		});
+		
+		it.only('should support function based forward declarations', ()=>{
+			var mod = require('./Db3ForwardRight');
+			Db3.Internal.clearLastStack();
+			var we = new mod.A();
+			var sub = we.prop;
+			
+			var lastEntity = Db3.Internal.getLastEntity();
+			var lastPath = Db3.Internal.getLastMetaPath();
+			
+			var lastEle = lastPath[lastPath.length - 1];
+			var entityType = lastEle.ctor;
+			assert("resolved to right entity type").when(entityType).is(mod.B);
+			console.log(lastPath);
+		});
 		// TODO implement the .props property to clean any ambiguity
 		
 	});

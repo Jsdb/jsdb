@@ -74,3 +74,8 @@ are cached and managed, with a periodic pruning of unused children events.
 
 This would automatically grant the peristence of parent events as long as child events are active.
 
+
+Entity hooks
+------------
+
+
