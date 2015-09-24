@@ -44,7 +44,7 @@ module Db {
 	 * 
 	 * @return An initialized and configured db instance
 	 */
-	export function configure(conf :any) :Db.Internal.IDb3Static {
+	export function configure(conf :any) :Db.Api.IDb3Static {
 		if (!defaultDb) {
 			defaultDb = Db.Internal.createDb(conf);
 			return defaultDb;
@@ -53,7 +53,7 @@ module Db {
 		}
 	}
 	
-	export function of(e :Entity) :Db.Internal.IDb3Static {
+	export function of(e :Api.Entity) :Db.Api.IDb3Static {
 		var ge = entEvent.get(e);
 		if (!ge) return null;
 		return ge.state.db;
@@ -62,68 +62,27 @@ module Db {
 	/**
 	 * Return the {@link defaultDb} if any has been created.
 	 */
-	export function getDefaultDb() :Db.Internal.IDb3Static {
+	export function getDefaultDb() :Db.Api.IDb3Static {
 		return defaultDb;
 	}
 	
-	/**
-	 * Empty interface, and as such useless in typescript, just to name things.
-	 */
-	export interface Entity {}
-	
-	/**
-	 * Definition of an entity constructor, just to name things.
-	 */
-	export interface EntityType<T extends Entity> {
-		 new() :T;
-	}
-	
-	export interface EntityTypeProducer<T extends Entity> {
-		() :EntityType<T>;
-	}
-
-	/**
-	 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
-	 * they should never be used directly.
-	 */
-	export module Internal {
+	export module Api {
+		/**
+		 * Empty interface, and as such useless in typescript, just to name things.
+		 */
+		export interface Entity {}
 		
 		/**
-		 * Creates a Db based on the given configuration.
+		 * Definition of an entity constructor, just to name things.
 		 */
-		export function createDb(conf:any) :IDb3Static {
-			var state = new DbState();
-			state.configure(conf);
-			var db = <IDb3Static><any>function(param:any):any {
-				if (lastExpect === lastCantBe) {
-					if (param) clearLastStack();
-				} else if (param !== lastExpect) {
-					clearLastStack();
-				}
-				var e = lastEntity;
-				var stack = lastMetaPath;
-				clearLastStack();
-				
-				// if no arguments return operations
-				if (arguments.length == 0) {
-					return new DbOperations(state);
-				}
-				// Pass-thru for when db(something) is used also when not needed
-				if (param instanceof GenericEvent) return param;
-				
-				if (typeof param == 'function') {
-					return state.entityRoot(param);
-				} else if (!e) {
-					e = param;
-				}
-				
-				var ret = state.createEvent(e, stack);
-				return ret;
-			};
-			state.db = db;
-			return db;
+		export interface EntityType<T extends Entity> {
+			 new() :T;
 		}
 		
+		export interface EntityTypeProducer<T extends Entity> {
+			() :EntityType<T>;
+		}
+	
 		/**
 		 * A type that describes a native value, an array of native values, or a map of native values.
 		 */
@@ -145,7 +104,7 @@ module Db {
 			/**
 			 * Pass-thru for when db(something) is used also when not needed. 
 			 */
-			<E extends GenericEvent>(evt :E):E;
+			<E extends Internal.GenericEvent>(evt :E):E;
 			
 			/**
 			 * Access to an entity root given the entity class.
@@ -155,7 +114,9 @@ module Db {
 			/**
 			 * TBD
 			 */
+			/*
 			(meta :MetaDescriptor,entity :Entity):any;
+			*/
 
 			/**
 			 * Access to an {@link observable} value in an entity.
@@ -213,21 +174,579 @@ module Db {
 		}
 		
 		/**
+		 * Interface for sorting informations.
+		 */
+		export interface SortingData {
+			field :string;
+			desc?: boolean;
+		}
+		
+		/**
+		 * Interface implemented by all the elements that have an URL.
+		 */
+		export interface IUrled {
+			getUrl(evenIfIncomplete?:boolean) :string;
+		}
+		
+		/**
+		 * Various kind of events that can be triggered when using {@link EventDetails}.
+		 */
+		export enum EventType {
+			/**
+			 * Unknown event type.
+			 */
+			UNDEFINED,
+			
+			/**
+			 * The value has been updated, used on entities when there was a change and on collections when an elements
+			 * is changed or has been reordered.
+			 */
+			UPDATE,
+			
+			/**
+			 * The value has been removed, used on root entities when they are deleted, embedded and references when 
+			 * they are nulled, references also when the referenced entity has been deleted, and on collections when
+			 * an element has been removed from the collection.
+			 */
+			REMOVED,
+			
+			/**
+			 * The value has been added, used on collections when a new element has been added.
+			 */
+			ADDED,
+			
+			/**
+			 * Special event used on collection to notify that the collection has finished loading, and following 
+			 * events will be updates to the previous state and not initial population of the collection.
+			 */
+			LIST_END
+		}
+
+		/**
+		 * Class describing an event from the Db. It is used in every listener callback.
+		 */
+		export interface IEventDetails<T> {
+			/**
+			 * The type of the event, see {@link EventType}.
+			 */
+			type :Api.EventType;
+			
+			/**
+			 * The payload of the event.
+			 * 
+			 * For entities, it is an instance of the entity. In collections, it is the value that has been
+			 * added, removed or updated. 
+			 */
+			payload :T;
+			
+			/**
+			 * True during initial population of a collection, false when later updating the collection values.
+			 */
+			populating :boolean;
+			
+			/**
+			 * True if an entity has been populated only with projected values (see {@link reference}), false
+			 * if instead values are fresh from the main entry in the database.
+			 */
+			projected :boolean;
+			
+			/**
+			 * Original underlying database event.
+			 * 
+			 * TODO remove this, it exposes underlying informations that could not be stable
+			 */
+			originalEvent :string;
+			
+			/**
+			 * Original event url.
+			 * 
+			 * TODO maybe whe should remove this, as it exposes potentially dangerous informations
+			 */
+			originalUrl :string;
+			
+			/**
+			 * Key on which the event originated. On a root entity, it is the id of the entity; on an embedded
+			 * it's the name of the field; on a reference it could be the name of the field (if the
+			 * reference has changed) or the id (or field name) of the referenced entity; on a collection
+			 * it's the key that has been added, removed or changed.
+			 */
+			originalKey :string;
+			
+			/**
+			 * Preceding key in the current sorting order. This is useful only on collections, and it's mostly
+			 * useful when the order of the elements in the collection has changed.
+			 */
+			precedingKey :string;
+			
+			/**
+			 * Detaches the current listener, so that the listener will not receive further events
+			 * and resources can be released.
+			 */
+			offMe():void;
+			
+			/**
+			 * @returns true if {@link offMe} was called.
+			 */
+			wasOffed() :boolean;
+			
+		}
+		
+		/**
+		 * Database events for {@link embedded} or {@link reference}d entities.
+		 */
+		export interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
+			// Entity methods
+			
+			/**
+			 * Load the entity completely. 
+			 * 
+			 * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
+			 * 
+			 * Other references will be dereferenced but not loaded.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 */
+			load(ctx:Object) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * Registers a callback to get notified about updates to the entity.
+			 * 
+			 * The callback will be called when :
+			 * - a value on the entity get changed or removed
+			 * - a value on an {@link embedded} sub entity gets changed or removed
+			 * - a value in a collection ({@link map}, {@link set} or {ļink list}) is added, removed or modified
+			 * - the entity gets deleted
+			 * - a {@link reference} pointer is changed AND when a referenced entity value is changed
+			 * 
+			 * When the callback gets called, the local instance of the entity has been already updated with
+			 * the received database modifications.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			updated(ctx:Object,callback :(ed:IEventDetails<E>)=>void) :void;
+			
+			/**
+			 * Keeps the local instance of the entity updated in real time with changes from the db,
+			 * without registering a callback.
+			 * 
+			 * Technically, is equivalent to :
+			 * ```
+			 *   .updated(ctx, ()=>{});
+			 * ```
+			 * 
+			 * Note that on references, the live state involves both the reference pointer and the referenced
+			 * entity.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 */
+			live(ctx:Object) :void;
+			
+			
+			// Reference methods
+			/**
+			 * If the entity is a reference, this method only dereferences it, applying projections if
+			 * available, but not loading the target entity.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 */
+			dereference(ctx:Object) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * If the entity is a reference, registers a callback to get notified about a change
+			 * in the reference pointer.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			referenced(ctx:Object,callback :(ed:IEventDetails<E>)=>void) :void;
+			
+			/**
+			 * If the entity is a reference and has been loaded, this method retuns the url this reference is pointing at.
+			 */
+			getReferencedUrl() :string;
+			
+			// Handling methods
+			/**
+			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
+<			 * 
+			 * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced}, 
+			 * 		or used on operations like {@link load}, {@link live} etc.. 
+			 */
+			off(ctx:Object) :void;
+			
+			/**
+			 * Checks if this entity has been loaded from the database.
+			 * 
+			 * If this entity is a reference, this method returns true if the reference
+			 * pointer has been loaded, not necessarily the pointed entity. 
+			 * 
+			 * @return true if the entity or the reference pointer has been loaded.
+			 */
+			isLoaded():boolean;
+			
+			/**
+			 * Fails with an exception if {@link isLoaded} does not return true.
+			 */
+			assertLoaded():void;
+			
+			/**
+			 * If this entity is a new entity, not loaded and not yet persisted on the database,
+			 * and the entity is a {@link root} entity, this method assign an id and computes the
+			 * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
+			 */
+			assignUrl():void;
+			
+			/**
+			 * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
+			 * it will first call {@link assignUrl} and then persist the new entity. If the entity was loaded from the 
+			 * database or was already saved before, this method will perform an update of the existing entity.
+			 * 
+			 * The semantics of a save are that :
+			 * - all native (string, number, inline objects etc..) of the entity are saved/updated
+			 * - all {@link embedded} entities, new or already loaded, are recursively saved
+			 * - all collections ({@link map}, {@link set} or {@link list}), new or already loaded, are recursively saved
+			 * - {@link reference} pointers are saved; however, the save is not cascaded to referenced entities.
+			 * 
+			 * Saving an entity triggers all the callbacks registered with {@link updated} or {@link referenced} and 
+			 * the like, on this entity or embedded sub-entities and collections, if modifications happened in their 
+			 * respective scopes.
+			 * 
+			 * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
+			 * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
+			 */
+			save():Promise<any>;
+			
+			remove():Promise<any>;
+			
+			
+			/**
+			 * Creates a clone of this entity, using the most recent data from the database.
+			 * 
+			 * The entity must have been loaded (or saved if it's a new entity) before calling clone (that is,
+			 * {@link isLoaded} must return true).
+			 * 
+			 * The {@link embedded} sub-entities and the collections are also cloned in the new instance.
+			 * 
+			 * {@link reference} pointers are cloned, but not the referenced entities, which usually is the expected
+			 * behavior.
+			 */
+			clone() :E;
+		}
+		
+		
+		export interface IEntityRoot<E extends Entity> extends IUrled {
+			get(id:string):E;
+			query() :IQuery<E>;
+		}
+		
+		export interface IObservableEvent<E extends Entity> extends IUrled {
+			updated(ctx:Object,callback :(ed:IEventDetails<E>)=>void) :void;
+			live(ctx:Object) :void;
+			
+			// Handling methods
+			off(ctx:Object) :void;
+			isLoaded():boolean;
+			assertLoaded():void;
+		}
+		
+
+		/**
+		 * Interface implemented by collections that can be read. These are all the collections
+		 * but also {@link IQuery}.
+		 */
+		export interface IReadableCollection<E extends Entity> {
+			/**
+			 * Registers a callback to get notified about updates to the collection.
+			 * 
+			 * The callback will be called when :
+			 * - a value is added, removed, or reorded in the collection
+			 * - if the collection is of embedded entities, an entity in the collection is changed
+			 * - if the collection is of references, a reference or it's projections changed
+			 * 
+			 * When the callback gets called, the local (in ram) collection has been already updated with
+			 * the received database modifications.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			updated(ctx:Object,callback :(ed :IEventDetails<E>)=>void) :void;
+			
+			// Collection events
+			/**
+			 * Registers a callback to get notified when elements of the collection are loaded,
+			 * or later when a value is added to the collection.
+			 * 
+			 * The callback will be called :
+			 * - once for each entity found in the collection, in sorting order
+			 * - once with an {@link EventType.LIST_END} when finished loading the collection
+			 * - again for each further addition to the collection
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			added(ctx:Object,callback :(ed :IEventDetails<E>)=>void) :void;
+			/**
+			 * Registers a callback to get notified when a value is removed to the collection.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			removed(ctx:Object,callback :(ed :IEventDetails<E>)=>void) :void;
+			/**
+			 * Registers a callback to get notified when a value is changed to the collection.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			changed(ctx:Object,callback :(ed :IEventDetails<E>)=>void) :void;
+			/**
+			 * Registers a callback to get notified when a value is moved (reordered) to the collection.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @param callback the callback 
+			 */
+			moved(ctx:Object,callback :(ed :IEventDetails<E>)=>void) :void;
+
+			/**
+			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
+			 * 
+			 * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc.. 
+			 * 		or used on other operations. 
+			 */
+			off(ctx:Object) :void;
+		}
+		
+		/**
+		 * Interface implemented by collections that can also be written to and used 
+		 * as a field in an entity.
+		 * 
+		 * Methods that deal with keys accept the following :
+		 * - a string key, for maps that use string keys or for sets and lists using the {@link EventDetails.originalKey}
+		 * - a numeric key, which is simply converted to a string, it is *not* an array index on sets or lists.
+		 * - an entity, for maps that use entity references as keys or for sets, not supported on lists 
+		 */
+		export interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+			/**
+			 * Keeps the local instance of the collection updated in real time with changes from the db,
+			 * without registering a callback.
+			 * 
+			 * Technically, is equivalent to :
+			 * ```
+			 *   .updated(ctx, ()=>{});
+			 * ```
+			 * 
+			 * Note that, as opposed to {@link IEntityOrReferenceEvent.live}, on references the live state involves ONLY 
+			 * the reference pointer, and not the referenced entity.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 */
+			live(ctx:Object) :void;
+			
+			// Collection specific methods
+			/**
+			 * Removes the specified element from the collection.
+			 */
+			remove(key :string|number|Entity) :Promise<any>;
+			
+			/**
+			 * Fetch the specified key from the collection.  
+			 * 
+			 * TODO does this only dereference or also load the value?
+			 */
+			fetch(ctx:Object, key :string|number|E) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * Gives access to the database event for the given key.
+			 * 
+			 * TODO provide an example on why this is useful 
+			 */
+			with(key :string|number|Entity) :IEntityOrReferenceEvent<E>;
+			
+			/**
+			 * Initialize a query on this collection.
+			 */
+			query() :IQuery<E>;
+			
+			// Handling methods
+			/**
+			 * Checks if this collection has been loaded from the database.
+			 */
+			isLoaded():boolean;
+			
+			/**
+			 * Fails with an exception if {@link isLoaded} does not return true.
+			 */
+			assertLoaded():void;
+			
+			/**
+			 * Save this collection on the database. The collection must have been loaded 
+			 * ({@link isLoaded} must return true).
+			 * 
+			 * When saving a new entity, the {@link IEntityOrReferenceEvent.save} method takes care of 
+			 * saving the collection.
+			 *  
+			 * The semantics of a save are that :
+			 * - the local (ram) representation of the collection is used
+			 * - for each element in the collection, the relative {@link IEntityOrReferenceEvent.save} method is called
+			 * 
+			 * Saving a collection triggers all the callbacks registered with {@link updated}, {@link added} and 
+			 * the like on this collection.
+			 * 
+			 * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
+			 * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
+			 */
+			save():Promise<any>;
+			
+			/**
+			 * Loads this collection into the parent entity, and also returns the value in the promise.
+			 * 
+			 * If this is a collection of references, all the references are also loaded.
+			 */
+			load(ctx:Object) :Promise<any>;
+			
+			/**
+			 * Loads this collection into the parent entity, only deferencing the references and not
+			 * loading the referenced entity.
+			 */
+			dereference(ctx:Object) :Promise<any>;
+		}
+		
+		/**
+		 * Collection of type map, a map binds keys to values.
+		 * 
+		 * Keys can be :
+		 * - strings
+		 * - numbers, which simply get converted to strings
+		 * - entities
+		 * 
+		 * When using entities as keys, note that :
+		 * - the entity must be saved somewhere else, cause the key is actually a reference to the entity
+		 * - when looking up to find the entry, an entity loaded forom the same url must be used
+		 * - the key entity will not be saved when saving the collection, cause it's a reference
+		 * 
+		 * If no sorting if given, a map is implicitly sorted in key lexicographic order.
+		 */
+		export interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
+			/**
+			 * Adds a value to the map.
+			 */
+			add(key :string|number|Entity, value :E) :Promise<any>;
+
+			load(ctx:Object) :Promise<{[index:string]:E}>;
+			dereference(ctx:Object) :Promise<{[index:string]:E}>;
+		}
+
+		/**
+		 * Collection of type list or set.
+		 * 
+		 * Lists and sets can add entities to the collection without specifying a key, however
+		 * removal or direct retrival is still performed by key.
+		 * 
+		 * Lists and sets can also be used as queues, where {@link add} is equivalent to "push", 
+		 * using the {@link pop}, {@link shift} and {@link unshift} methods which are equivalent to 
+		 * JavaScript array methods, and {@link peekHead} and {@link peekTail}.
+		 */
+		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
+			
+			add(value :E) :Promise<any>;
+			
+			/**
+			 * Fetches and removes the last element of the collection, in current sorting order.
+			 */
+			pop(ctx:Object) :Promise<IEventDetails<E>>;
+			/**
+			 * Fetches the last element of the collection, in current sorting order, without removing it.
+			 */
+			peekTail(ctx:Object) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * Adds an element to the beginning of the collection, in *key lexicographic* order.
+			 */
+			unshift(value :E):Promise<any>;
+			/**
+			 * Fetches and removes the first element of the collection, in current sorting order.
+			 */
+			shift(ctx:Object) :Promise<IEventDetails<E>>;
+			/**
+			 * Fetches the first element of the collection, in current sorting order, without removing it.
+			 */
+			peekHead(ctx:Object) :Promise<IEventDetails<E>>;
+
+			load(ctx:Object) :Promise<E[]>;
+			dereference(ctx:Object) :Promise<E[]>;
+		}
+		
+		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
+			load(ctx:Object) :Promise<E[]>;
+			dereference(ctx:Object) :Promise<E[]>;
+			
+			onField(field :string, desc? :boolean):IQuery<E>;
+			limit(limit :number):IQuery<E>;
+			range(from :any, to :any):IQuery<E>;
+			equals(val :any):IQuery<E>;
+		}
+		
+	}
+	
+	/**
+	 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
+	 * they should never be used directly.
+	 */
+	export module Internal {
+		
+		/**
+		 * Creates a Db based on the given configuration.
+		 */
+		export function createDb(conf:any) :Api.IDb3Static {
+			var state = new DbState();
+			state.configure(conf);
+			var db = <Api.IDb3Static><any>function(param:any):any {
+				if (lastExpect === lastCantBe) {
+					if (param) clearLastStack();
+				} else if (param !== lastExpect) {
+					clearLastStack();
+				}
+				var e = lastEntity;
+				var stack = lastMetaPath;
+				clearLastStack();
+				
+				// if no arguments return operations
+				if (arguments.length == 0) {
+					return new DbOperations(state);
+				}
+				// Pass-thru for when db(something) is used also when not needed
+				if (param instanceof GenericEvent) return param;
+				
+				if (typeof param == 'function') {
+					return state.entityRoot(param);
+				} else if (!e) {
+					e = param;
+				}
+				
+				var ret = state.createEvent(e, stack);
+				return ret;
+			};
+			state.db = db;
+			return db;
+		}
+		
+		/**
 		 * Implementation of {@link IDbOperations}.
 		 */
-		export class DbOperations implements IDbOperations {
+		export class DbOperations implements Api.IDbOperations {
 			constructor(public state:DbState) {
 				
 			}
 			
-			fork(conf :any) :IDb3Static {
+			fork(conf :any) :Api.IDb3Static {
 				var nconf = {};
 				Utils.copyObj(this.state.conf, nconf);
 				Utils.copyObj(conf, nconf);
 				return createDb(nconf);
 			}
 			
-			load<T extends Entity>(url :string) :T {
+			load<T extends Api.Entity>(url :string) :T {
 				return <T>this.state.load(url);
 			}
 			
@@ -288,7 +807,7 @@ module Db {
 			 * @param state the db state to operate on
 			 * @param parent the parent entity instance
 			 */
-			startLoads(metadata :ClassMetadata, state :DbState, parent :Entity) :Promise<BindingState> {
+			startLoads(metadata :ClassMetadata, state :DbState, parent :Api.Entity) :Promise<BindingState> {
 				var proms :Thenable<any>[] = [];
 				var evts :GenericEvent[] = [];
 				for (var i = 0; i < this.keys.length; i++) {
@@ -302,7 +821,7 @@ module Db {
 					var evt = state.createEvent(parent, [descr]);
 					evts.push(evt);
 					if (evt['load']) {
-						proms.push((<IEntityOrReferenceEvent<any>><any>evt).load(parent));
+						proms.push((<Api.IEntityOrReferenceEvent<any>><any>evt).load(parent));
 					}
 					/*
 					var val = parent[k];
@@ -336,7 +855,7 @@ module Db {
 			 * trigger on reference change, so the value will be kept in sync.
 			 * 
 			 */
-			resolve(tgt:Entity, result :BindingState) {
+			resolve(tgt :Api.Entity, result :BindingState) {
 				var vals = result.vals;
 				var evts = result.evts;
 				//console.log("Done values ", vals);
@@ -351,7 +870,7 @@ module Db {
 						if (!evt['updated']) throw new Error('Cannot find an updated event to keep ' + k + ' live');
 						// Wrapping in closure for 'k'
 						((k:string) => {
-							(<IEntityOrReferenceEvent<any>><any>evt).updated(tgt,(updet) => {
+							(<Api.IEntityOrReferenceEvent<any>><any>evt).updated(tgt,(updet) => {
 								// TODO if the target event is a collection, updated payload will not contain the full collection
 								tgt[this.bindings[k]] = updet.payload;
 							});
@@ -363,54 +882,6 @@ module Db {
 			}
 		}
 		
-		/**
-		 * Interface for sorting informations.
-		 */
-		export interface SortingData {
-			field :string;
-			desc?: boolean;
-		}
-		
-		/**
-		 * Interface implemented by all the elements that have an URL.
-		 */
-		export interface IUrled {
-			getUrl(evenIfIncomplete?:boolean) :string;
-		}
-		
-		/**
-		 * Various kind of events that can be triggered when using {@link EventDetails}.
-		 */
-		export enum EventType {
-			/**
-			 * Unknown event type.
-			 */
-			UNDEFINED,
-			
-			/**
-			 * The value has been updated, used on entities when there was a change and on collections when an elements
-			 * is changed or has been reordered.
-			 */
-			UPDATE,
-			
-			/**
-			 * The value has been removed, used on root entities when they are deleted, embedded and references when 
-			 * they are nulled, references also when the referenced entity has been deleted, and on collections when
-			 * an element has been removed from the collection.
-			 */
-			REMOVED,
-			
-			/**
-			 * The value has been added, used on collections when a new element has been added.
-			 */
-			ADDED,
-			
-			/**
-			 * Special event used on collection to notify that the collection has finished loading, and following 
-			 * events will be updates to the previous state and not initial population of the collection.
-			 */
-			LIST_END
-		}
 		
 		/**
 		 * Class describing an event from the Db. It is used in every listener callback.
@@ -419,7 +890,7 @@ module Db {
 			/**
 			 * The type of the event, see {@link EventType}.
 			 */
-			type :EventType = EventType.UNDEFINED;
+			type :Api.EventType = Api.EventType.UNDEFINED;
 			
 			/**
 			 * The payload of the event.
@@ -676,9 +1147,9 @@ module Db {
 		 * Events are organized in a hierarchy, having multiple {@link EntityRoot} as roots.
 		 * 
 		 */
-		export class GenericEvent implements IUrled {
+		export class GenericEvent implements Api.IUrled {
 			/** The entity bound to this event. */
-			entity :Entity;
+			entity :Api.Entity;
 			
 			/** The url for the entity bound to this event. */
 			url :string;
@@ -709,7 +1180,7 @@ module Db {
 			 * 
 			 * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
 			 */
-			setEntity(entity :Entity) {
+			setEntity(entity :Api.Entity) {
 				this.entity = entity;
 				if (entity && typeof entity == 'object') {
 					this.state.bindEntity(this.entity, this);
@@ -993,149 +1464,6 @@ module Db {
 		}
 		
 		/**
-		 * Database events for {@link embedded} or {@link reference}d entities.
-		 */
-		export interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
-			// Entity methods
-			
-			/**
-			 * Load the entity completely. 
-			 * 
-			 * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
-			 * 
-			 * Other references will be dereferenced but not loaded.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 */
-			load(ctx:Object) :Promise<EventDetails<E>>;
-			
-			/**
-			 * Registers a callback to get notified about updates to the entity.
-			 * 
-			 * The callback will be called when :
-			 * - a value on the entity get changed or removed
-			 * - a value on an {@link embedded} sub entity gets changed or removed
-			 * - a value in a collection ({@link map}, {@link set} or {ļink list}) is added, removed or modified
-			 * - the entity gets deleted
-			 * - a {@link reference} pointer is changed AND when a referenced entity value is changed
-			 * 
-			 * When the callback gets called, the local instance of the entity has been already updated with
-			 * the received database modifications.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			
-			/**
-			 * Keeps the local instance of the entity updated in real time with changes from the db,
-			 * without registering a callback.
-			 * 
-			 * Technically, is equivalent to :
-			 * ```
-			 *   .updated(ctx, ()=>{});
-			 * ```
-			 * 
-			 * Note that on references, the live state involves both the reference pointer and the referenced
-			 * entity.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 */
-			live(ctx:Object) :void;
-			
-			
-			// Reference methods
-			/**
-			 * If the entity is a reference, this method only dereferences it, applying projections if
-			 * available, but not loading the target entity.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 */
-			dereference(ctx:Object) :Promise<EventDetails<E>>;
-			
-			/**
-			 * If the entity is a reference, registers a callback to get notified about a change
-			 * in the reference pointer.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			referenced(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			
-			/**
-			 * If the entity is a reference and has been loaded, this method retuns the url this reference is pointing at.
-			 */
-			getReferencedUrl() :string;
-			
-			// Handling methods
-			/**
-			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 * 
-			 * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced}, 
-			 * 		or used on operations like {@link load}, {@link live} etc.. 
-			 */
-			off(ctx:Object) :void;
-			
-			/**
-			 * Checks if this entity has been loaded from the database.
-			 * 
-			 * If this entity is a reference, this method returns true if the reference
-			 * pointer has been loaded, not necessarily the pointed entity. 
-			 * 
-			 * @return true if the entity or the reference pointer has been loaded.
-			 */
-			isLoaded():boolean;
-			
-			/**
-			 * Fails with an exception if {@link isLoaded} does not return true.
-			 */
-			assertLoaded():void;
-			
-			/**
-			 * If this entity is a new entity, not loaded and not yet persisted on the database,
-			 * and the entity is a {@link root} entity, this method assign an id and computes the
-			 * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
-			 */
-			assignUrl():void;
-			
-			/**
-			 * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
-			 * it will first call {@link assignUrl} and then persist the new entity. If the entity was loaded from the 
-			 * database or was already saved before, this method will perform an update of the existing entity.
-			 * 
-			 * The semantics of a save are that :
-			 * - all native (string, number, inline objects etc..) of the entity are saved/updated
-			 * - all {@link embedded} entities, new or already loaded, are recursively saved
-			 * - all collections ({@link map}, {@link set} or {@link list}), new or already loaded, are recursively saved
-			 * - {@link reference} pointers are saved; however, the save is not cascaded to referenced entities.
-			 * 
-			 * Saving an entity triggers all the callbacks registered with {@link updated} or {@link referenced} and 
-			 * the like, on this entity or embedded sub-entities and collections, if modifications happened in their 
-			 * respective scopes.
-			 * 
-			 * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
-			 * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
-			 */
-			save():Promise<any>;
-			
-			remove():Promise<any>;
-			
-			
-			/**
-			 * Creates a clone of this entity, using the most recent data from the database.
-			 * 
-			 * The entity must have been loaded (or saved if it's a new entity) before calling clone (that is,
-			 * {@link isLoaded} must return true).
-			 * 
-			 * The {@link embedded} sub-entities and the collections are also cloned in the new instance.
-			 * 
-			 * {@link reference} pointers are cloned, but not the referenced entities, which usually is the expected
-			 * behavior.
-			 */
-			clone() :E;
-		}
-		
-		/**
 		 * An utility base class for events that deal with a single databse reference.
 		 * 
 		 * It spawns a single {@link DbEventHandler} hooking database events to the {@link handleDbEvent} function.
@@ -1235,9 +1563,9 @@ module Db {
 			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
 				this.parseValue(ds);
 				var evd = new EventDetails<E>();
-				evd.type = EventType.UPDATE;
+				evd.type = Api.EventType.UPDATE;
 				if (this.entity == null) {
-					evd.type = EventType.REMOVED;
+					evd.type = Api.EventType.REMOVED;
 				}
 				evd.payload = <E>this.entity;
 				evd.originalEvent = 'value';
@@ -1269,7 +1597,7 @@ module Db {
 		 * - honour the {@link bind} directives using {@link BindingImpl}
 		 * - assign a generated id to {@link root} entities in {@link assignUrl}
 		 */
-		export class EntityEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
+		export class EntityEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
 			/**
 			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
 			 */
@@ -1293,7 +1621,7 @@ module Db {
 			/** a progressive counter used as a discriminator when registering the same callbacks more than once */
 			progDiscriminator = 1;
 			
-			setEntity(entity :Entity) {
+			setEntity(entity :Api.Entity) {
 				super.setEntity(entity);
 				// Update the local classMeta if entity type changed
 				if (this.entity) {
@@ -1515,7 +1843,7 @@ module Db {
 						if (k == 'constructor') continue;
 						var se = this.findCreateChildFor(k);
 						if (se && se['save']) {
-							proms.push((<IEntityOrReferenceEvent<any>><any>se).save());
+							proms.push((<Api.IEntityOrReferenceEvent<any>><any>se).save());
 						}
 					}
 					// Update local fields if any
@@ -1579,7 +1907,7 @@ module Db {
 		 * - when reading, it creates the pointedEvent and eventually forwards projections in {@link parseValue}
 		 * - when saving, it saves the pointed url, eventually annotated with the discriminator, and saves the projections, in {@link serialize}. 
 		 */
-		export class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
+		export class ReferenceEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
 			//classMeta :ClassMetadata = null;
 			/**
 			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
@@ -1604,7 +1932,7 @@ module Db {
 			progDiscriminator = 1;
 			
 			// Overridden to : 1) don't install this event 2) get pointedUrl
-			setEntity(entity :Entity) {
+			setEntity(entity :Api.Entity) {
 				this.entity = entity;
 				if (entity) {
 					this.pointedEvent = <EntityEvent<E>>this.state.createEvent(entity,[]);
@@ -1746,231 +2074,6 @@ module Db {
 			}
 		}
 		
-		/**
-		 * Interface implemented by collections that can be read. These are all the collections
-		 * but also {@link IQuery}.
-		 */
-		export interface IReadableCollection<E extends Entity> {
-			/**
-			 * Registers a callback to get notified about updates to the collection.
-			 * 
-			 * The callback will be called when :
-			 * - a value is added, removed, or reorded in the collection
-			 * - if the collection is of embedded entities, an entity in the collection is changed
-			 * - if the collection is of references, a reference or it's projections changed
-			 * 
-			 * When the callback gets called, the local (in ram) collection has been already updated with
-			 * the received database modifications.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			
-			// Collection events
-			/**
-			 * Registers a callback to get notified when elements of the collection are loaded,
-			 * or later when a value is added to the collection.
-			 * 
-			 * The callback will be called :
-			 * - once for each entity found in the collection, in sorting order
-			 * - once with an {@link EventType.LIST_END} when finished loading the collection
-			 * - again for each further addition to the collection
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			added(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			/**
-			 * Registers a callback to get notified when a value is removed to the collection.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			removed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			/**
-			 * Registers a callback to get notified when a value is changed to the collection.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			changed(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			/**
-			 * Registers a callback to get notified when a value is moved (reordered) to the collection.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 * @param callback the callback 
-			 */
-			moved(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-
-			/**
-			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
-			 * 
-			 * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc.. 
-			 * 		or used on other operations. 
-			 */
-			off(ctx:Object) :void;
-		}
-		
-		/**
-		 * Interface implemented by collections that can also be written to and used 
-		 * as a field in an entity.
-		 * 
-		 * Methods that deal with keys accept the following :
-		 * - a string key, for maps that use string keys or for sets and lists using the {@link EventDetails.originalKey}
-		 * - a numeric key, which is simply converted to a string, it is *not* an array index on sets or lists.
-		 * - an entity, for maps that use entity references as keys or for sets, not supported on lists 
-		 */
-		export interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
-			/**
-			 * Keeps the local instance of the collection updated in real time with changes from the db,
-			 * without registering a callback.
-			 * 
-			 * Technically, is equivalent to :
-			 * ```
-			 *   .updated(ctx, ()=>{});
-			 * ```
-			 * 
-			 * Note that, as opposed to {@link IEntityOrReferenceEvent.live}, on references the live state involves ONLY 
-			 * the reference pointer, and not the referenced entity.
-			 * 
-			 * @param ctx the context object, to use with {@link off}
-			 */
-			live(ctx:Object) :void;
-			
-			// Collection specific methods
-			/**
-			 * Removes the specified element from the collection.
-			 */
-			remove(key :string|number|Entity) :Promise<any>;
-			
-			/**
-			 * Fetch the specified key from the collection.  
-			 * 
-			 * TODO does this only dereference or also load the value?
-			 */
-			fetch(ctx:Object, key :string|number|E) :Promise<EventDetails<E>>;
-			
-			/**
-			 * Gives access to the database event for the given key.
-			 * 
-			 * TODO provide an example on why this is useful 
-			 */
-			with(key :string|number|Entity) :IEntityOrReferenceEvent<E>;
-			
-			/**
-			 * Initialize a query on this collection.
-			 */
-			query() :IQuery<E>;
-			
-			// Handling methods
-			/**
-			 * Checks if this collection has been loaded from the database.
-			 */
-			isLoaded():boolean;
-			
-			/**
-			 * Fails with an exception if {@link isLoaded} does not return true.
-			 */
-			assertLoaded():void;
-			
-			/**
-			 * Save this collection on the database. The collection must have been loaded 
-			 * ({@link isLoaded} must return true).
-			 * 
-			 * When saving a new entity, the {@link IEntityOrReferenceEvent.save} method takes care of 
-			 * saving the collection.
-			 *  
-			 * The semantics of a save are that :
-			 * - the local (ram) representation of the collection is used
-			 * - for each element in the collection, the relative {@link IEntityOrReferenceEvent.save} method is called
-			 * 
-			 * Saving a collection triggers all the callbacks registered with {@link updated}, {@link added} and 
-			 * the like on this collection.
-			 * 
-			 * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
-			 * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
-			 */
-			save():Promise<any>;
-			
-			/**
-			 * Loads this collection into the parent entity, and also returns the value in the promise.
-			 * 
-			 * If this is a collection of references, all the references are also loaded.
-			 */
-			load(ctx:Object) :Promise<any>;
-			
-			/**
-			 * Loads this collection into the parent entity, only deferencing the references and not
-			 * loading the referenced entity.
-			 */
-			dereference(ctx:Object) :Promise<any>;
-		}
-		
-		/**
-		 * Collection of type map, a map binds keys to values.
-		 * 
-		 * Keys can be :
-		 * - strings
-		 * - numbers, which simply get converted to strings
-		 * - entities
-		 * 
-		 * When using entities as keys, note that :
-		 * - the entity must be saved somewhere else, cause the key is actually a reference to the entity
-		 * - when looking up to find the entry, an entity loaded forom the same url must be used
-		 * - the key entity will not be saved when saving the collection, cause it's a reference
-		 * 
-		 * If no sorting if given, a map is implicitly sorted in key lexicographic order.
-		 */
-		export interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
-			/**
-			 * Adds a value to the map.
-			 */
-			add(key :string|number|Entity, value :E) :Promise<any>;
-
-			load(ctx:Object) :Promise<{[index:string]:E}>;
-			dereference(ctx:Object) :Promise<{[index:string]:E}>;
-		}
-
-		/**
-		 * Collection of type list or set.
-		 * 
-		 * Lists and sets can add entities to the collection without specifying a key, however
-		 * removal or direct retrival is still performed by key.
-		 * 
-		 * Lists and sets can also be used as queues, where {@link add} is equivalent to "push", 
-		 * using the {@link pop}, {@link shift} and {@link unshift} methods which are equivalent to 
-		 * JavaScript array methods, and {@link peekHead} and {@link peekTail}.
-		 */
-		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
-			
-			add(value :E) :Promise<any>;
-			
-			/**
-			 * Fetches and removes the last element of the collection, in current sorting order.
-			 */
-			pop(ctx:Object) :Promise<EventDetails<E>>;
-			/**
-			 * Fetches the last element of the collection, in current sorting order, without removing it.
-			 */
-			peekTail(ctx:Object) :Promise<EventDetails<E>>;
-			
-			/**
-			 * Adds an element to the beginning of the collection, in *key lexicographic* order.
-			 */
-			unshift(value :E):Promise<any>;
-			/**
-			 * Fetches and removes the first element of the collection, in current sorting order.
-			 */
-			shift(ctx:Object) :Promise<EventDetails<E>>;
-			/**
-			 * Fetches the first element of the collection, in current sorting order, without removing it.
-			 */
-			peekHead(ctx:Object) :Promise<EventDetails<E>>;
-
-			load(ctx:Object) :Promise<E[]>;
-			dereference(ctx:Object) :Promise<E[]>;
-		}
 		
 		/**
 		 * An event handler for collections. 
@@ -2007,17 +2110,17 @@ module Db {
 		/**
 		 * Default implementation of map.
 		 */
-		export class MapEvent<E extends Entity> extends GenericEvent implements IMapEvent<E> {
+		export class MapEvent<E extends Api.Entity> extends GenericEvent implements Api.IMapEvent<E> {
 			isReference :boolean = false;
 			nameOnParent :string = null;
 			project :string[] = null;
 			binding :BindingImpl = null;
-			sorting :SortingData = null;
+			sorting :Api.SortingData = null;
 			
 			realField :any = null;
 			loaded :boolean = false;
 			
-			setEntity(entity :Entity) {
+			setEntity(entity :Api.Entity) {
 				var preEntity = this.entity || {};
 				super.setEntity(entity);
 				this.realField = entity;
@@ -2065,7 +2168,7 @@ module Db {
 				return new Promise<any>((resolve,error) => {
 					var allProms :Promise<any>[] = [];
 					this.updated(ctx, (det) => {
-						if (det.type == EventType.LIST_END) {
+						if (det.type == Api.EventType.LIST_END) {
 							det.offMe();
 							if (allProms.length) {
 								Promise.all(allProms).then(() => {
@@ -2075,7 +2178,7 @@ module Db {
 								resolve(this.realField);
 							}
 						}
-						if (det.type != EventType.ADDED) return;
+						if (det.type != Api.EventType.ADDED) return;
 						if (this.isReference && deref) {
 							var evt = <ReferenceEvent<E>>this.findCreateChildFor(det.originalKey);
 							allProms.push(evt.load(ctx).then(()=>{}));
@@ -2130,7 +2233,7 @@ module Db {
 						this.loaded = true;
 					}
 					handler.ispopulating = false;
-					det.type = EventType.LIST_END;
+					det.type = Api.EventType.LIST_END;
 					handler.handle(det);
 					return;
 				}
@@ -2140,11 +2243,11 @@ module Db {
 				subev.parseValue(ds);
 				val = <E>subev.entity;
 				if (event == 'child_removed') {
-					det.type = EventType.REMOVED;
+					det.type = Api.EventType.REMOVED;
 				} else if (event == 'child_added') {
-					det.type = EventType.ADDED;
+					det.type = Api.EventType.ADDED;
 				} else {
-					det.type = EventType.UPDATE;
+					det.type = Api.EventType.UPDATE;
 				}
 				det.payload = val;
 				
@@ -2155,11 +2258,11 @@ module Db {
 				handler.handle(det);
 			}
 			
-			add(key :string|number|Entity, value? :Entity) :Promise<any> {
+			add(key :string|number|Api.Entity, value? :Api.Entity) :Promise<any> {
 				var k :string = null;
 				var v = value;
 				if (!v) {
-					v = <Entity>key;
+					v = <Api.Entity>key;
 					k = this.createKeyFor(v);
 				} else {
 					k = this.normalizeKey(key);
@@ -2180,17 +2283,17 @@ module Db {
 				//return (<IEntityOrReferenceEvent<E>><any>evt).save();
 			}
 			
-			createKeyFor(value :Entity) :string {
+			createKeyFor(value :Api.Entity) :string {
 				return Utils.IdGenerator.next();
 			}
 			
-			normalizeKey(key :string|number|Entity) :string {
+			normalizeKey(key :string|number|Api.Entity) :string {
 				if (typeof key === 'string') {
 					key = <string>key;
 				} else if (typeof key === 'number') {
 					key = key + '';
 				} else {
-					var enturl = this.state.createEvent(<Entity>key).getUrl();
+					var enturl = this.state.createEvent(<Api.Entity>key).getUrl();
 					if (!enturl) throw new Error("The entity used as a key in a map must be already saved elsewhere");
 					var entroot = this.state.entityRootFromUrl(enturl);
 					enturl = enturl.substr(entroot.getUrl().length);
@@ -2199,7 +2302,7 @@ module Db {
 				return <string>key;
 			}
 			
-			addToInternal(event :string, ds :FirebaseDataSnapshot, val :Entity, det :EventDetails<E>) {
+			addToInternal(event :string, ds :FirebaseDataSnapshot, val :Api.Entity, det :EventDetails<E>) {
 				if (event == 'child_removed') {
 					delete this.realField[ds.key()];
 				} else {
@@ -2210,7 +2313,7 @@ module Db {
 				}
 			}
 
-			remove(keyOrValue :string|number|Entity) :Promise<any> {
+			remove(keyOrValue :string|number|Api.Entity) :Promise<any> {
 				var key = this.normalizeKey(keyOrValue);
 				return new Promise<any>((ok,err) => {
 					var fb = new Firebase(this.getUrl() + key +'/');
@@ -2224,15 +2327,15 @@ module Db {
 				});
 			}
 			
-			fetch(ctx:Object, key :string|number|Entity) :Promise<EventDetails<E>> {
+			fetch(ctx:Object, key :string|number|Api.Entity) :Promise<EventDetails<E>> {
 				var k = this.normalizeKey(key);
 				var evt = this.findCreateChildFor(k);
-				return (<IEntityOrReferenceEvent<E>><any>evt).load(ctx);
+				return (<Api.IEntityOrReferenceEvent<E>><any>evt).load(ctx);
 			}
 			
-			with(key :string|number|Entity) :IEntityOrReferenceEvent<E> {
+			with(key :string|number|Api.Entity) :Api.IEntityOrReferenceEvent<E> {
 				var k = this.normalizeKey(key);
-				return <IEntityOrReferenceEvent<E>><any>this.findCreateChildFor(k);
+				return <Api.IEntityOrReferenceEvent<E>><any>this.findCreateChildFor(k);
 			}
 			
 			isLoaded() {
@@ -2278,7 +2381,7 @@ module Db {
 				}
 			}
 			
-			query() :IQuery<E> {
+			query() :Api.IQuery<E> {
 				var ret = new QueryImpl<E>(this);
 				ret.isReference = this.isReference;
 				ret.sorting = this.sorting;
@@ -2386,10 +2489,10 @@ module Db {
 			}
 		}
 		
-		export class ArrayCollectionEvent<E extends Entity> extends MapEvent<E> {
+		export class ArrayCollectionEvent<E extends Api.Entity> extends MapEvent<E> {
 			protected evarray = new EventedArray<E>(this);
 
-			setEntity(entity :Entity) {
+			setEntity(entity :Api.Entity) {
 				var preReal = this.realField || {};
 				super.setEntity(entity);
 				this.realField = preReal;
@@ -2397,14 +2500,14 @@ module Db {
 			}
 
 			
-			add(value? :Entity) :Promise<any> {
+			add(value? :Api.Entity) :Promise<any> {
 				if (arguments.length > 1) throw new Error("Cannot add to set or list specifying a key, add only the entity");
 				var v = value;
 				var k = this.createKeyFor(v);
 				return super.add(k,v);
 			}
 			
-			intSuperAdd(key :string|number|Entity, value? :Entity) :Promise<any> {
+			intSuperAdd(key :string|number|Api.Entity, value? :Api.Entity) :Promise<any> {
 				return super.add(key,value);
 			}
 
@@ -2425,8 +2528,8 @@ module Db {
 			
 		}
 		
-		export class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> implements IListSetEvent<E> {
-			createKeyFor(value :Entity) :string {
+		export class ListEvent<E extends Api.Entity> extends ArrayCollectionEvent<E> implements Api.IListSetEvent<E> {
+			createKeyFor(value :Api.Entity) :string {
 				if (this.isReference) return Utils.IdGenerator.next();
 				var enturl = this.state.createEvent(value).getUrl();
 				if (!enturl)  return Utils.IdGenerator.next();
@@ -2438,7 +2541,7 @@ module Db {
 				return enturl;
 			}
 			
-			normalizeKey(key :string|number|Entity) :string {
+			normalizeKey(key :string|number|Api.Entity) :string {
 				if (typeof key === 'string') {
 					key = <string>key;
 				} else if (typeof key === 'number') {
@@ -2452,8 +2555,8 @@ module Db {
 				return super.serialize(localsOnly, fields);
 			}
 			
-			intPeek(ctx:Object, dir :number) :Promise<EventDetails<E>> {
-				return new Promise<EventDetails<E>>((ok,err)=>{
+			intPeek(ctx:Object, dir :number) :Promise<Api.IEventDetails<E>> {
+				return new Promise<Api.IEventDetails<E>>((ok,err)=>{
 					this.query().limit(dir).added(ctx, (det)=>{
 						det.offMe();
 						ok(det);
@@ -2461,8 +2564,8 @@ module Db {
 				});
 			}
 			
-			intPeekRemove(ctx:Object, dir:number) :Promise<EventDetails<E>> {
-				var fnd :EventDetails<E>;
+			intPeekRemove(ctx:Object, dir:number) :Promise<Api.IEventDetails<E>> {
+				var fnd :Api.IEventDetails<E>;
 				return this.intPeek(ctx,dir).then((det)=>{
 					fnd = det;
 					return super.remove(det.originalKey);
@@ -2490,9 +2593,9 @@ module Db {
 			}
 		}
 		
-		export class SetEvent<E extends Entity> extends ArrayCollectionEvent<E> {
+		export class SetEvent<E extends Api.Entity> extends ArrayCollectionEvent<E> {
 			
-			createKeyFor(value :Entity) :string {
+			createKeyFor(value :Api.Entity) :string {
 				// get the url
 				var enturl = this.state.createEvent(value).getUrl();
 				if (this.isReference) {
@@ -2517,13 +2620,13 @@ module Db {
 				return enturl;
 			}
 			
-			normalizeKey(key :string|number|Entity) :string {
+			normalizeKey(key :string|number|Api.Entity) :string {
 				if (typeof key === 'string') {
 					key = <string>key;
 				} else if (typeof key === 'number') {
 					key = key + '';
 				} else {
-					return this.createKeyFor(<Entity>key);
+					return this.createKeyFor(<Api.Entity>key);
 				}
 				return <string>key;
 			}
@@ -2535,17 +2638,7 @@ module Db {
 			
 		}
 		
-		export interface IObservableEvent<E extends Entity> extends IUrled {
-			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void) :void;
-			live(ctx:Object) :void;
-			
-			// Handling methods
-			off(ctx:Object) :void;
-			isLoaded():boolean;
-			assertLoaded():void;
-		}
-		
-		export class IgnoreEvent<E extends Entity> extends GenericEvent {
+		export class IgnoreEvent<E extends Api.Entity> extends GenericEvent {
 			nameOnParent :string = null;
 			val :any;
 			
@@ -2566,7 +2659,7 @@ module Db {
 			}
 		}
 		
-		export class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
+		export class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
 			
 			nameOnParent :string = null;
 			
@@ -2609,12 +2702,7 @@ module Db {
 		}
 
 		
-		export interface IEntityRoot<E extends Entity> extends IUrled {
-			get(id:string):E;
-			query() :IQuery<E>;
-		}
-		
-		export class EntityRoot<E extends Entity> implements IEntityRoot<E> {
+		export class EntityRoot<E extends Api.Entity> implements Api.IEntityRoot<E> {
 			constructor(
 				private state :DbState,
 				private meta :ClassMetadata
@@ -2626,7 +2714,7 @@ module Db {
 				return <E>this.state.load(this.getUrl() + id, this.meta);
 			}
 			
-			query() :IQuery<E> {
+			query() :Api.IQuery<E> {
 				// TODO implement this
 				return null;
 			}
@@ -2637,17 +2725,7 @@ module Db {
 			
 		}
 		
-		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
-			load(ctx:Object) :Promise<E[]>;
-			dereference(ctx:Object) :Promise<E[]>;
-			
-			onField(field :string, desc? :boolean):IQuery<E>;
-			limit(limit :number):IQuery<E>;
-			range(from :any, to :any):IQuery<E>;
-			equals(val :any):IQuery<E>;
-		}
-		
-		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements IQuery<E> {
+		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
 			
 			private _limit :number = 0;
 			private _rangeFrom :any = null;
@@ -2748,7 +2826,7 @@ module Db {
 			cache :{[index:string]:GenericEvent} = {};
 			conf :any;
 			myMeta = allMetadata;
-			db :IDb3Static;
+			db :Api.IDb3Static;
 			
 			configure(conf :any) {
 				this.conf = conf;
@@ -2769,9 +2847,9 @@ module Db {
 				this.cache = {};
 			}
 			
-			entityRoot(ctor :EntityType<any>) :IEntityRoot<any>;
-			entityRoot(meta :ClassMetadata) :IEntityRoot<any>;
-			entityRoot(param :any) :IEntityRoot<any> {
+			entityRoot(ctor :Api.EntityType<any>) :Api.IEntityRoot<any>;
+			entityRoot(meta :ClassMetadata) :Api.IEntityRoot<any>;
+			entityRoot(param :any) :Api.IEntityRoot<any> {
 				var meta :ClassMetadata = null;
 				if (param instanceof ClassMetadata) {
 					meta = param;
@@ -2791,7 +2869,7 @@ module Db {
 				return new EntityRoot<any>(this, meta);
 			}
 			
-			entityRootFromUrl(url :string) :IEntityRoot<any> {
+			entityRootFromUrl(url :string) :Api.IEntityRoot<any> {
 				// Check if the given url pertains to me
 				if (url.indexOf(this.getUrl()) != 0) return null;
 				// Make the url relative
@@ -2805,12 +2883,12 @@ module Db {
 				return this.conf['baseUrl'];
 			}
 			
-			bindEntity(e :Entity, ev :GenericEvent) {
+			bindEntity(e :Api.Entity, ev :GenericEvent) {
 				// TODO probably we should check and raise an error is the entity was already bound
 				entEvent.set(e, ev);
 			}
 			
-			createEvent(e :Entity, stack :MetaDescriptor[] = []) :GenericEvent {
+			createEvent(e :Api.Entity, stack :MetaDescriptor[] = []) :GenericEvent {
 				//var roote = (<IDb3Annotated>e).__dbevent;
 				var roote = entEvent.get(e);
 				if (!roote) {
@@ -2894,7 +2972,7 @@ module Db {
 						}
 						var inst = <any>new meta.ctor();
 						if (inst.dbInit) {
-							(<IDb3Initable>inst).dbInit(url, this.db);
+							(<Api.IDb3Initable>inst).dbInit(url, this.db);
 						}
 						/*
 						Object.defineProperty(inst, '__dbevent', {readable:true, writable:true, enumerable:false});
@@ -2961,11 +3039,11 @@ module Db {
 				this._ctor = def;
 			}
 			
-			get ctor():EntityType<any> {
+			get ctor():Api.EntityType<any> {
 				if (this._ctor == null) {
 					return null;
 				}
-				var ret :EntityType<any> = null;
+				var ret :Api.EntityType<any> = null;
 				if (!Utils.findName(this._ctor)) {
 					ret = this._ctor();
 					this._ctor = ret;
@@ -3012,11 +3090,11 @@ module Db {
 				return Utils.findName(this.ctor);
 			}
 			
-			createInstance() :Entity {
+			createInstance() :Api.Entity {
 				return new this.ctor();
 			}
 			
-			rightInstance(entity :Entity) :boolean {
+			rightInstance(entity :Api.Entity) :boolean {
 				return entity && entity instanceof this.ctor;
 			}
 			
@@ -3100,7 +3178,7 @@ module Db {
 		
 		export class MapMetaDescriptor extends MetaDescriptor {
 			isReference = false;
-			sorting :Internal.SortingData = null;
+			sorting :Api.SortingData = null;
 			
 			
 			named(name :string) :MapMetaDescriptor {
@@ -3124,7 +3202,7 @@ module Db {
 		
 		export class SetMetaDescriptor extends MetaDescriptor {
 			isReference = false;
-			sorting :Internal.SortingData = null;
+			sorting :Api.SortingData = null;
 			
 			
 			named(name :string) :SetMetaDescriptor {
@@ -3148,7 +3226,7 @@ module Db {
 
 		export class ListMetaDescriptor extends MetaDescriptor {
 			isReference = false;
-			sorting :Internal.SortingData = null;
+			sorting :Api.SortingData = null;
 			
 			
 			named(name :string) :SetMetaDescriptor {
@@ -3195,12 +3273,12 @@ module Db {
 		export class Metadata {
 			classes :Internal.ClassMetadata[] = [];
 			
-			findMeta(param :EntityType<any>|Entity) {
-				var ctor :EntityType<any> = null;
+			findMeta(param :Api.EntityType<any>|Api.Entity) {
+				var ctor :Api.EntityType<any> = null;
 				if (typeof param !== 'function') {
-					ctor = <EntityType<any>>param.constructor;
+					ctor = <Api.EntityType<any>>param.constructor;
 				} else {
-					ctor = <EntityType<any>>param;
+					ctor = <Api.EntityType<any>>param;
 				}
 				for (var i = 0; i < this.classes.length; i++) {
 					var md = this.classes[i];
@@ -3236,7 +3314,7 @@ module Db {
 			return allMetadata;
 		}
 		
-		export function getLastEntity() :Entity {
+		export function getLastEntity() :Api.Entity {
 			return lastEntity;
 		}
 		
@@ -3255,7 +3333,7 @@ module Db {
 	export module Utils {
 		export function findName(o :any) {
 			var firstCtor = o;
-			var acproto = (<EntityType<any>>o).prototype;
+			var acproto = (<Api.EntityType<any>>o).prototype;
 			if (!acproto) {
 				acproto = Object.getPrototypeOf(o);
 				firstCtor = o.constructor;
@@ -3266,15 +3344,15 @@ module Db {
 			return (results && results.length > 1) ? results[1] : null;
 		}
 		
-		export function findHierarchy(o :Entity|EntityType<any>) : EntityType<any>[] {
+		export function findHierarchy(o :Api.Entity|Api.EntityType<any>) : Api.EntityType<any>[] {
 			var firstCtor = o;
-			var acproto = (<EntityType<any>>o).prototype;
+			var acproto = (<Api.EntityType<any>>o).prototype;
 			if (!acproto) {
 				acproto = Object.getPrototypeOf(o);
-				firstCtor = <Entity>o.constructor;
+				firstCtor = <Api.Entity>o.constructor;
 			}
 			if (!acproto) throw new Error("Cannot reconstruct hierarchy following prototype chain of " + o);
-			var ret :EntityType<any>[] = [];
+			var ret :Api.EntityType<any>[] = [];
 			while (acproto) {
 				var acctor = acproto.constructor; 
 				if (acctor === Object) break;
@@ -3469,7 +3547,7 @@ module Db {
 		return ret;
 	}
 	
-	export function sortBy(field :string, desc = false) : Internal.SortingData {
+	export function sortBy(field :string, desc = false) : Api.SortingData {
 		return {
 			field: field,
 			desc :desc
@@ -3477,7 +3555,7 @@ module Db {
 	}
 	
 	// --- Annotations
-	export function embedded(def :EntityType<any>|EntityTypeProducer<any>, binding? :Internal.IBinding) :PropertyDecorator {
+	export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, binding? :Internal.IBinding) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find embedded class for " + propertyKey.toString());
 			var ret = meta.embedded(def, binding);
@@ -3486,7 +3564,7 @@ module Db {
 		}
 	}
 	
-	export function reference(def :EntityType<any>|EntityTypeProducer<any>, project? :string[]) :PropertyDecorator {
+	export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
 			var ret = meta.reference(def, project);
@@ -3495,7 +3573,7 @@ module Db {
 		}
 	}
 	
-	export function map(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function map(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find map value type for " + propertyKey.toString());
 			var ret = meta.map(valueType, reference, sorting);
@@ -3504,7 +3582,7 @@ module Db {
 		}
 	}
 	
-	export function set(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function set(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find set value type for " + propertyKey.toString());
 			var ret = meta.set(valueType, reference, sorting);
@@ -3513,7 +3591,7 @@ module Db {
 		}
 	}
 
-	export function list(valueType :EntityType<any>|EntityTypeProducer<any>, reference :boolean = false, sorting? :Internal.SortingData) :PropertyDecorator {
+	export function list(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find list value type for " + propertyKey.toString());
 			var ret = meta.list(valueType, reference, sorting);
@@ -3530,19 +3608,19 @@ module Db {
 				myname = myname.charAt(0).toLowerCase() + myname.slice(1);
 				if (myname.charAt(myname.length - 1) != 's') myname += 's';
 			}
-			meta.define(<EntityType<any>><any>target, myname, null, override);
+			meta.define(<Api.EntityType<any>><any>target, myname, null, override);
 		}
 	}
 	
 	export function discriminator(disc :string) :ClassDecorator {
 		return function (target: Function) {
-			meta.define(<EntityType<any>><any>target, null, disc);
+			meta.define(<Api.EntityType<any>><any>target, null, disc);
 		}
 	}
 	
 	export function override(override :string = 'server') :ClassDecorator {
 		return function (target: Function) {
-			meta.define(<EntityType<any>><any>target, null, null, override);
+			meta.define(<Api.EntityType<any>><any>target, null, null, override);
 		}
 	}
 	
@@ -3563,14 +3641,14 @@ module Db {
 	
 	function addDescriptor(target: Object, propertyKey: string | symbol, ret :Internal.MetaDescriptor) {
 		ret.setLocalName(propertyKey.toString());
-		var clmeta = allMetadata.findMeta(<EntityType<any>><any>target.constructor);
+		var clmeta = allMetadata.findMeta(<Api.EntityType<any>><any>target.constructor);
 		clmeta.add(ret);
 	}
 	
 	// --- Metadata stuff
 	var allMetadata = new Internal.Metadata();
 	
-	var lastEntity :Entity = null;
+	var lastEntity :Api.Entity = null;
 	var lastMetaPath :Internal.MetaDescriptor[] = [];
 	var lastCantBe = 'ciao';
 	var lastExpect :any = null;
@@ -3607,7 +3685,7 @@ module Db {
 
 	
 	export module meta {
-		export function embedded(def :EntityType<any>|EntityTypeProducer<any>, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
 			if (!def) throw new Error("Cannot find embedded class");
 			var ret = new Db.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
@@ -3615,7 +3693,7 @@ module Db {
 			return ret;
 		}
 		
-		export function reference(def :EntityType<any>|EntityTypeProducer<any>, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
 			if (!def) throw new Error("Cannot find referenced class");
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
@@ -3623,7 +3701,7 @@ module Db {
 			return ret;
 		}
 		
-		export function map(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.MapMetaDescriptor {
+		export function map(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.MapMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find map value type");
 			var ret = new Db.Internal.MapMetaDescriptor();
 			ret.setType(valuetype);
@@ -3632,7 +3710,7 @@ module Db {
 			return ret;
 		}
 		
-		export function set(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.SetMetaDescriptor {
+		export function set(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.SetMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find set value type");
 			var ret = new Db.Internal.SetMetaDescriptor();
 			ret.setType(valuetype);
@@ -3641,7 +3719,7 @@ module Db {
 			return ret;
 		}
 		
-		export function list(valuetype: EntityType<any>|EntityTypeProducer<any>, reference = false, sorting? :Internal.SortingData) :Db.Internal.ListMetaDescriptor {
+		export function list(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.ListMetaDescriptor {
 			if (!valuetype) throw new Error("Cannot find list value type");
 			var ret = new Db.Internal.ListMetaDescriptor();
 			ret.setType(valuetype);
@@ -3660,7 +3738,7 @@ module Db {
 			return ret;
 		}
 		
-		export function define(ctor :EntityType<any>, root? :string, discriminator? :string, override? :string) {
+		export function define(ctor :Api.EntityType<any>, root? :string, discriminator? :string, override? :string) {
 			var meta = allMetadata.findMeta(ctor);
 			if (root) {
 				meta.root = root;
@@ -3679,7 +3757,7 @@ module Db {
 /**
  * The default db, will be the first database created, handy since most projects will only use one db.
  */
-var defaultDb :Db.Internal.IDb3Static = null;
+var defaultDb :Db.Api.IDb3Static = null;
 
 /**
  * Weak association between entities and their database events. Each entity instance can be 

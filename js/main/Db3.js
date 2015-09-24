@@ -1,16 +1,15 @@
 /**
- * TSDB version : VERSION_TAG
+ * TSDB version : 20150924_222714_master_1.0.0_17ca0ad
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    __.prototype = b.prototype;
-    d.prototype = new __();
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = 'VERSION_TAG';
+var Version = '20150924_222714_master_1.0.0_17ca0ad';
 /**
  * The main Db module.
  */
@@ -48,6 +47,39 @@ var Db;
         return defaultDb;
     }
     Db.getDefaultDb = getDefaultDb;
+    var Api;
+    (function (Api) {
+        /**
+         * Various kind of events that can be triggered when using {@link EventDetails}.
+         */
+        (function (EventType) {
+            /**
+             * Unknown event type.
+             */
+            EventType[EventType["UNDEFINED"] = 0] = "UNDEFINED";
+            /**
+             * The value has been updated, used on entities when there was a change and on collections when an elements
+             * is changed or has been reordered.
+             */
+            EventType[EventType["UPDATE"] = 1] = "UPDATE";
+            /**
+             * The value has been removed, used on root entities when they are deleted, embedded and references when
+             * they are nulled, references also when the referenced entity has been deleted, and on collections when
+             * an element has been removed from the collection.
+             */
+            EventType[EventType["REMOVED"] = 2] = "REMOVED";
+            /**
+             * The value has been added, used on collections when a new element has been added.
+             */
+            EventType[EventType["ADDED"] = 3] = "ADDED";
+            /**
+             * Special event used on collection to notify that the collection has finished loading, and following
+             * events will be updates to the previous state and not initial population of the collection.
+             */
+            EventType[EventType["LIST_END"] = 4] = "LIST_END";
+        })(Api.EventType || (Api.EventType = {}));
+        var EventType = Api.EventType;
+    })(Api = Db.Api || (Db.Api = {}));
     /**
      * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
      * they should never be used directly.
@@ -215,36 +247,6 @@ var Db;
         })();
         Internal.BindingImpl = BindingImpl;
         /**
-         * Various kind of events that can be triggered when using {@link EventDetails}.
-         */
-        (function (EventType) {
-            /**
-             * Unknown event type.
-             */
-            EventType[EventType["UNDEFINED"] = 0] = "UNDEFINED";
-            /**
-             * The value has been updated, used on entities when there was a change and on collections when an elements
-             * is changed or has been reordered.
-             */
-            EventType[EventType["UPDATE"] = 1] = "UPDATE";
-            /**
-             * The value has been removed, used on root entities when they are deleted, embedded and references when
-             * they are nulled, references also when the referenced entity has been deleted, and on collections when
-             * an element has been removed from the collection.
-             */
-            EventType[EventType["REMOVED"] = 2] = "REMOVED";
-            /**
-             * The value has been added, used on collections when a new element has been added.
-             */
-            EventType[EventType["ADDED"] = 3] = "ADDED";
-            /**
-             * Special event used on collection to notify that the collection has finished loading, and following
-             * events will be updates to the previous state and not initial population of the collection.
-             */
-            EventType[EventType["LIST_END"] = 4] = "LIST_END";
-        })(Internal.EventType || (Internal.EventType = {}));
-        var EventType = Internal.EventType;
-        /**
          * Class describing an event from the Db. It is used in every listener callback.
          */
         var EventDetails = (function () {
@@ -252,7 +254,7 @@ var Db;
                 /**
                  * The type of the event, see {@link EventType}.
                  */
-                this.type = EventType.UNDEFINED;
+                this.type = Api.EventType.UNDEFINED;
                 /**
                  * The payload of the event.
                  *
@@ -880,9 +882,9 @@ var Db;
             SingleDbHandlerEvent.prototype.handleDbEvent = function (ds, prevName) {
                 this.parseValue(ds);
                 var evd = new EventDetails();
-                evd.type = EventType.UPDATE;
+                evd.type = Api.EventType.UPDATE;
                 if (this.entity == null) {
-                    evd.type = EventType.REMOVED;
+                    evd.type = Api.EventType.REMOVED;
                 }
                 evd.payload = this.entity;
                 evd.originalEvent = 'value';
@@ -1495,7 +1497,7 @@ var Db;
                 return new Promise(function (resolve, error) {
                     var allProms = [];
                     _this.updated(ctx, function (det) {
-                        if (det.type == EventType.LIST_END) {
+                        if (det.type == Api.EventType.LIST_END) {
                             det.offMe();
                             if (allProms.length) {
                                 Promise.all(allProms).then(function () {
@@ -1506,7 +1508,7 @@ var Db;
                                 resolve(_this.realField);
                             }
                         }
-                        if (det.type != EventType.ADDED)
+                        if (det.type != Api.EventType.ADDED)
                             return;
                         if (_this.isReference && deref) {
                             var evt = _this.findCreateChildFor(det.originalKey);
@@ -1561,7 +1563,7 @@ var Db;
                         this.loaded = true;
                     }
                     handler.ispopulating = false;
-                    det.type = EventType.LIST_END;
+                    det.type = Api.EventType.LIST_END;
                     handler.handle(det);
                     return;
                 }
@@ -1570,13 +1572,13 @@ var Db;
                 subev.parseValue(ds);
                 val = subev.entity;
                 if (event == 'child_removed') {
-                    det.type = EventType.REMOVED;
+                    det.type = Api.EventType.REMOVED;
                 }
                 else if (event == 'child_added') {
-                    det.type = EventType.ADDED;
+                    det.type = Api.EventType.ADDED;
                 }
                 else {
-                    det.type = EventType.UPDATE;
+                    det.type = Api.EventType.UPDATE;
                 }
                 det.payload = val;
                 if (handler.istracking) {
@@ -3109,4 +3111,3 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
-//# sourceMappingURL=Db3.js.map

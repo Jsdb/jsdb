@@ -1546,15 +1546,15 @@ describe('Db3 >', () => {
 		describe('Map >', ()=>{
 			it('should notify simple adds for each element',(done)=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				var recvs :Db3.Api.IEventDetails<any>[] = [];
 				Db(wm1.embedMap).added(this, (det) => {
-					if (det.type != Db3.Internal.EventType.LIST_END) {
+					if (det.type != Db3.Api.EventType.LIST_END) {
 						recvs.push(det);
 						return;
 					}
 					assert("received 3 events").when(recvs).is(M.withLength(3));
 					assert("event 0 is right").when(recvs[0]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: M.aFalsey,
 						originalKey: 'a',
@@ -1563,7 +1563,7 @@ describe('Db3 >', () => {
 						}
 					}));
 					assert("event 1 is right").when(recvs[1]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: 'a',
 						originalKey: 'b',
@@ -1572,7 +1572,7 @@ describe('Db3 >', () => {
 						}
 					}));
 					assert("event 2 is right").when(recvs[2]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: 'b',
 						originalKey: 'c',
@@ -1581,7 +1581,7 @@ describe('Db3 >', () => {
 						}))
 					}));
 					assert("end event is right").when(det).is(M.objectMatching({
-						type: Db3.Internal.EventType.LIST_END,
+						type: Db3.Api.EventType.LIST_END,
 						populating: true,
 					}));
 					
@@ -1594,36 +1594,36 @@ describe('Db3 >', () => {
 
 			it('should notify simple adds for each element on references',(done)=>{
 				var wm1 = Db(WithMap).get('wm2');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				var recvs :Db3.Api.IEventDetails<any>[] = [];
 				Db(wm1.refMap).added(this, (det) => {
-					if (det.type != Db3.Internal.EventType.LIST_END) {
+					if (det.type != Db3.Api.EventType.LIST_END) {
 						recvs.push(det);
 						return;
 					}
 					assert("received 3 events").when(recvs).is(M.withLength(3));
 					assert("event 0 is right").when(recvs[0]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: M.aFalsey,
 						originalKey: 'a',
 						payload: M.instanceOf(WithProps)
 					}));
 					assert("event 1 is right").when(recvs[1]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: 'a',
 						originalKey: 'b',
 						payload: M.instanceOf(WithProps)
 					}));
 					assert("event 2 is right").when(recvs[2]).is(M.objectMatching({
-						type: Db3.Internal.EventType.ADDED,
+						type: Db3.Api.EventType.ADDED,
 						populating: true,
 						precedingKey: 'b',
 						originalKey: 'c',
 						payload: M.instanceOf(WithMoreProps)
 					}));
 					assert("end event is right").when(det).is(M.objectMatching({
-						type: Db3.Internal.EventType.LIST_END,
+						type: Db3.Api.EventType.LIST_END,
 						populating: true,
 					}));
 					
@@ -1636,7 +1636,7 @@ describe('Db3 >', () => {
 
 			it('should notify elements removal',(done)=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				var recvs :Db3.Api.IEventDetails<any>[] = [];
 				Db(wm1.embedMap).removed(this, (det) => {
 					recvs.push(det);
 					det.offMe();
@@ -1646,7 +1646,7 @@ describe('Db3 >', () => {
 					wm1Fb.child('embedMap/b').remove();
 					assert("received one event").when(recvs).is(M.withLength(1));
 					assert("event was right").when(recvs[0]).is(M.objectMatching({
-						type: Db3.Internal.EventType.REMOVED,
+						type: Db3.Api.EventType.REMOVED,
 						populating: false,
 						originalKey: 'b',
 						payload: {
@@ -1659,7 +1659,7 @@ describe('Db3 >', () => {
 
 			it('should notify elements modification',(done)=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				var recvs :Db3.Api.IEventDetails<any>[] = [];
 				Db(wm1.embedMap).changed(this, (det) => {
 					recvs.push(det);
 					det.offMe();
@@ -1669,7 +1669,7 @@ describe('Db3 >', () => {
 					wm1Fb.child('embedMap/b/str').set('modified');
 					assert("received one event").when(recvs).is(M.withLength(1));
 					assert("event was right").when(recvs[0]).is(M.objectMatching({
-						type: Db3.Internal.EventType.UPDATE,
+						type: Db3.Api.EventType.UPDATE,
 						populating: false,
 						originalKey: 'b',
 						payload: {
@@ -1682,9 +1682,9 @@ describe('Db3 >', () => {
 			
 			it('should keep the field in sync when using update',(done)=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
+				var recvs :Db3.Api.IEventDetails<any>[] = [];
 				Db(wm1.embedMap).updated(this, (det) => {
-					if (det.type != Db3.Internal.EventType.LIST_END) {
+					if (det.type != Db3.Api.EventType.LIST_END) {
 						recvs.push(det);
 						return;
 					}
@@ -1836,7 +1836,7 @@ describe('Db3 >', () => {
 				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
-						type: Db3.Internal.EventType.UPDATE,
+						type: Db3.Api.EventType.UPDATE,
 						populating: false,
 						originalKey: 'b',
 						payload: {
@@ -1850,7 +1850,7 @@ describe('Db3 >', () => {
 				var wm1 = Db(WithMap).get('wm2');
 				return Db(wm1.refMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
-						type: Db3.Internal.EventType.UPDATE,
+						type: Db3.Api.EventType.UPDATE,
 						populating: false,
 						// Note : the reference is dereferenced AND loaded, so the key is not the one in the map
 						originalKey: 'wp2',

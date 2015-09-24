@@ -10,35 +10,27 @@ declare module Db {
      *
      * @return An initialized and configured db instance
      */
-    function configure(conf: any): Db.Internal.IDb3Static;
-    function of(e: Entity): Db.Internal.IDb3Static;
+    function configure(conf: any): Db.Api.IDb3Static;
+    function of(e: Api.Entity): Db.Api.IDb3Static;
     /**
      * Return the {@link defaultDb} if any has been created.
      */
-    function getDefaultDb(): Db.Internal.IDb3Static;
-    /**
-     * Empty interface, and as such useless in typescript, just to name things.
-     */
-    interface Entity {
-    }
-    /**
-     * Definition of an entity constructor, just to name things.
-     */
-    interface EntityType<T extends Entity> {
-        new (): T;
-    }
-    interface EntityTypeProducer<T extends Entity> {
-        (): EntityType<T>;
-    }
-    /**
-     * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
-     * they should never be used directly.
-     */
-    module Internal {
+    function getDefaultDb(): Db.Api.IDb3Static;
+    module Api {
         /**
-         * Creates a Db based on the given configuration.
+         * Empty interface, and as such useless in typescript, just to name things.
          */
-        function createDb(conf: any): IDb3Static;
+        interface Entity {
+        }
+        /**
+         * Definition of an entity constructor, just to name things.
+         */
+        interface EntityType<T extends Entity> {
+            new (): T;
+        }
+        interface EntityTypeProducer<T extends Entity> {
+            (): EntityType<T>;
+        }
         /**
          * A type that describes a native value, an array of native values, or a map of native values.
          */
@@ -58,7 +50,7 @@ declare module Db {
             /**
              * Pass-thru for when db(something) is used also when not needed.
              */
-            <E extends GenericEvent>(evt: E): E;
+            <E extends Internal.GenericEvent>(evt: E): E;
             /**
              * Access to an entity root given the entity class.
              */
@@ -66,7 +58,6 @@ declare module Db {
             /**
              * TBD
              */
-            (meta: MetaDescriptor, entity: Entity): any;
             /**
              * Access to an {@link observable} value in an entity.
              */
@@ -114,13 +105,473 @@ declare module Db {
             erase(): any;
         }
         /**
+         * Interface for sorting informations.
+         */
+        interface SortingData {
+            field: string;
+            desc?: boolean;
+        }
+        /**
+         * Interface implemented by all the elements that have an URL.
+         */
+        interface IUrled {
+            getUrl(evenIfIncomplete?: boolean): string;
+        }
+        /**
+         * Various kind of events that can be triggered when using {@link EventDetails}.
+         */
+        enum EventType {
+            /**
+             * Unknown event type.
+             */
+            UNDEFINED = 0,
+            /**
+             * The value has been updated, used on entities when there was a change and on collections when an elements
+             * is changed or has been reordered.
+             */
+            UPDATE = 1,
+            /**
+             * The value has been removed, used on root entities when they are deleted, embedded and references when
+             * they are nulled, references also when the referenced entity has been deleted, and on collections when
+             * an element has been removed from the collection.
+             */
+            REMOVED = 2,
+            /**
+             * The value has been added, used on collections when a new element has been added.
+             */
+            ADDED = 3,
+            /**
+             * Special event used on collection to notify that the collection has finished loading, and following
+             * events will be updates to the previous state and not initial population of the collection.
+             */
+            LIST_END = 4,
+        }
+        /**
+         * Class describing an event from the Db. It is used in every listener callback.
+         */
+        interface IEventDetails<T> {
+            /**
+             * The type of the event, see {@link EventType}.
+             */
+            type: Api.EventType;
+            /**
+             * The payload of the event.
+             *
+             * For entities, it is an instance of the entity. In collections, it is the value that has been
+             * added, removed or updated.
+             */
+            payload: T;
+            /**
+             * True during initial population of a collection, false when later updating the collection values.
+             */
+            populating: boolean;
+            /**
+             * True if an entity has been populated only with projected values (see {@link reference}), false
+             * if instead values are fresh from the main entry in the database.
+             */
+            projected: boolean;
+            /**
+             * Original underlying database event.
+             *
+             * TODO remove this, it exposes underlying informations that could not be stable
+             */
+            originalEvent: string;
+            /**
+             * Original event url.
+             *
+             * TODO maybe whe should remove this, as it exposes potentially dangerous informations
+             */
+            originalUrl: string;
+            /**
+             * Key on which the event originated. On a root entity, it is the id of the entity; on an embedded
+             * it's the name of the field; on a reference it could be the name of the field (if the
+             * reference has changed) or the id (or field name) of the referenced entity; on a collection
+             * it's the key that has been added, removed or changed.
+             */
+            originalKey: string;
+            /**
+             * Preceding key in the current sorting order. This is useful only on collections, and it's mostly
+             * useful when the order of the elements in the collection has changed.
+             */
+            precedingKey: string;
+            /**
+             * Detaches the current listener, so that the listener will not receive further events
+             * and resources can be released.
+             */
+            offMe(): void;
+            /**
+             * @returns true if {@link offMe} was called.
+             */
+            wasOffed(): boolean;
+        }
+        /**
+         * Database events for {@link embedded} or {@link reference}d entities.
+         */
+        interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
+            /**
+             * Load the entity completely.
+             *
+             * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
+             *
+             * Other references will be dereferenced but not loaded.
+             *
+             * @param ctx the context object, to use with {@link off}
+             */
+            load(ctx: Object): Promise<IEventDetails<E>>;
+            /**
+             * Registers a callback to get notified about updates to the entity.
+             *
+             * The callback will be called when :
+             * - a value on the entity get changed or removed
+             * - a value on an {@link embedded} sub entity gets changed or removed
+             * - a value in a collection ({@link map}, {@link set} or {ļink list}) is added, removed or modified
+             * - the entity gets deleted
+             * - a {@link reference} pointer is changed AND when a referenced entity value is changed
+             *
+             * When the callback gets called, the local instance of the entity has been already updated with
+             * the received database modifications.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            updated(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Keeps the local instance of the entity updated in real time with changes from the db,
+             * without registering a callback.
+             *
+             * Technically, is equivalent to :
+             * ```
+             *   .updated(ctx, ()=>{});
+             * ```
+             *
+             * Note that on references, the live state involves both the reference pointer and the referenced
+             * entity.
+             *
+             * @param ctx the context object, to use with {@link off}
+             */
+            live(ctx: Object): void;
+            /**
+             * If the entity is a reference, this method only dereferences it, applying projections if
+             * available, but not loading the target entity.
+             *
+             * @param ctx the context object, to use with {@link off}
+             */
+            dereference(ctx: Object): Promise<IEventDetails<E>>;
+            /**
+             * If the entity is a reference, registers a callback to get notified about a change
+             * in the reference pointer.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            referenced(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * If the entity is a reference and has been loaded, this method retuns the url this reference is pointing at.
+             */
+            getReferencedUrl(): string;
+            /**
+             * Unregisters all callbacks and stops all undergoing operations started with the given context.
+<			 *
+             * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced},
+             * 		or used on operations like {@link load}, {@link live} etc..
+             */
+            off(ctx: Object): void;
+            /**
+             * Checks if this entity has been loaded from the database.
+             *
+             * If this entity is a reference, this method returns true if the reference
+             * pointer has been loaded, not necessarily the pointed entity.
+             *
+             * @return true if the entity or the reference pointer has been loaded.
+             */
+            isLoaded(): boolean;
+            /**
+             * Fails with an exception if {@link isLoaded} does not return true.
+             */
+            assertLoaded(): void;
+            /**
+             * If this entity is a new entity, not loaded and not yet persisted on the database,
+             * and the entity is a {@link root} entity, this method assign an id and computes the
+             * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
+             */
+            assignUrl(): void;
+            /**
+             * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
+             * it will first call {@link assignUrl} and then persist the new entity. If the entity was loaded from the
+             * database or was already saved before, this method will perform an update of the existing entity.
+             *
+             * The semantics of a save are that :
+             * - all native (string, number, inline objects etc..) of the entity are saved/updated
+             * - all {@link embedded} entities, new or already loaded, are recursively saved
+             * - all collections ({@link map}, {@link set} or {@link list}), new or already loaded, are recursively saved
+             * - {@link reference} pointers are saved; however, the save is not cascaded to referenced entities.
+             *
+             * Saving an entity triggers all the callbacks registered with {@link updated} or {@link referenced} and
+             * the like, on this entity or embedded sub-entities and collections, if modifications happened in their
+             * respective scopes.
+             *
+             * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
+             * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
+             */
+            save(): Promise<any>;
+            remove(): Promise<any>;
+            /**
+             * Creates a clone of this entity, using the most recent data from the database.
+             *
+             * The entity must have been loaded (or saved if it's a new entity) before calling clone (that is,
+             * {@link isLoaded} must return true).
+             *
+             * The {@link embedded} sub-entities and the collections are also cloned in the new instance.
+             *
+             * {@link reference} pointers are cloned, but not the referenced entities, which usually is the expected
+             * behavior.
+             */
+            clone(): E;
+        }
+        interface IEntityRoot<E extends Entity> extends IUrled {
+            get(id: string): E;
+            query(): IQuery<E>;
+        }
+        interface IObservableEvent<E extends Entity> extends IUrled {
+            updated(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            live(ctx: Object): void;
+            off(ctx: Object): void;
+            isLoaded(): boolean;
+            assertLoaded(): void;
+        }
+        /**
+         * Interface implemented by collections that can be read. These are all the collections
+         * but also {@link IQuery}.
+         */
+        interface IReadableCollection<E extends Entity> {
+            /**
+             * Registers a callback to get notified about updates to the collection.
+             *
+             * The callback will be called when :
+             * - a value is added, removed, or reorded in the collection
+             * - if the collection is of embedded entities, an entity in the collection is changed
+             * - if the collection is of references, a reference or it's projections changed
+             *
+             * When the callback gets called, the local (in ram) collection has been already updated with
+             * the received database modifications.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            updated(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Registers a callback to get notified when elements of the collection are loaded,
+             * or later when a value is added to the collection.
+             *
+             * The callback will be called :
+             * - once for each entity found in the collection, in sorting order
+             * - once with an {@link EventType.LIST_END} when finished loading the collection
+             * - again for each further addition to the collection
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            added(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Registers a callback to get notified when a value is removed to the collection.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            removed(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Registers a callback to get notified when a value is changed to the collection.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            changed(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Registers a callback to get notified when a value is moved (reordered) to the collection.
+             *
+             * @param ctx the context object, to use with {@link off}
+             * @param callback the callback
+             */
+            moved(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
+            /**
+             * Unregisters all callbacks and stops all undergoing operations started with the given context.
+             *
+             * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc..
+             * 		or used on other operations.
+             */
+            off(ctx: Object): void;
+        }
+        /**
+         * Interface implemented by collections that can also be written to and used
+         * as a field in an entity.
+         *
+         * Methods that deal with keys accept the following :
+         * - a string key, for maps that use string keys or for sets and lists using the {@link EventDetails.originalKey}
+         * - a numeric key, which is simply converted to a string, it is *not* an array index on sets or lists.
+         * - an entity, for maps that use entity references as keys or for sets, not supported on lists
+         */
+        interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
+            /**
+             * Keeps the local instance of the collection updated in real time with changes from the db,
+             * without registering a callback.
+             *
+             * Technically, is equivalent to :
+             * ```
+             *   .updated(ctx, ()=>{});
+             * ```
+             *
+             * Note that, as opposed to {@link IEntityOrReferenceEvent.live}, on references the live state involves ONLY
+             * the reference pointer, and not the referenced entity.
+             *
+             * @param ctx the context object, to use with {@link off}
+             */
+            live(ctx: Object): void;
+            /**
+             * Removes the specified element from the collection.
+             */
+            remove(key: string | number | Entity): Promise<any>;
+            /**
+             * Fetch the specified key from the collection.
+             *
+             * TODO does this only dereference or also load the value?
+             */
+            fetch(ctx: Object, key: string | number | E): Promise<IEventDetails<E>>;
+            /**
+             * Gives access to the database event for the given key.
+             *
+             * TODO provide an example on why this is useful
+             */
+            with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
+            /**
+             * Initialize a query on this collection.
+             */
+            query(): IQuery<E>;
+            /**
+             * Checks if this collection has been loaded from the database.
+             */
+            isLoaded(): boolean;
+            /**
+             * Fails with an exception if {@link isLoaded} does not return true.
+             */
+            assertLoaded(): void;
+            /**
+             * Save this collection on the database. The collection must have been loaded
+             * ({@link isLoaded} must return true).
+             *
+             * When saving a new entity, the {@link IEntityOrReferenceEvent.save} method takes care of
+             * saving the collection.
+             *
+             * The semantics of a save are that :
+             * - the local (ram) representation of the collection is used
+             * - for each element in the collection, the relative {@link IEntityOrReferenceEvent.save} method is called
+             *
+             * Saving a collection triggers all the callbacks registered with {@link updated}, {@link added} and
+             * the like on this collection.
+             *
+             * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
+             * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
+             */
+            save(): Promise<any>;
+            /**
+             * Loads this collection into the parent entity, and also returns the value in the promise.
+             *
+             * If this is a collection of references, all the references are also loaded.
+             */
+            load(ctx: Object): Promise<any>;
+            /**
+             * Loads this collection into the parent entity, only deferencing the references and not
+             * loading the referenced entity.
+             */
+            dereference(ctx: Object): Promise<any>;
+        }
+        /**
+         * Collection of type map, a map binds keys to values.
+         *
+         * Keys can be :
+         * - strings
+         * - numbers, which simply get converted to strings
+         * - entities
+         *
+         * When using entities as keys, note that :
+         * - the entity must be saved somewhere else, cause the key is actually a reference to the entity
+         * - when looking up to find the entry, an entity loaded forom the same url must be used
+         * - the key entity will not be saved when saving the collection, cause it's a reference
+         *
+         * If no sorting if given, a map is implicitly sorted in key lexicographic order.
+         */
+        interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
+            /**
+             * Adds a value to the map.
+             */
+            add(key: string | number | Entity, value: E): Promise<any>;
+            load(ctx: Object): Promise<{
+                [index: string]: E;
+            }>;
+            dereference(ctx: Object): Promise<{
+                [index: string]: E;
+            }>;
+        }
+        /**
+         * Collection of type list or set.
+         *
+         * Lists and sets can add entities to the collection without specifying a key, however
+         * removal or direct retrival is still performed by key.
+         *
+         * Lists and sets can also be used as queues, where {@link add} is equivalent to "push",
+         * using the {@link pop}, {@link shift} and {@link unshift} methods which are equivalent to
+         * JavaScript array methods, and {@link peekHead} and {@link peekTail}.
+         */
+        interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
+            add(value: E): Promise<any>;
+            /**
+             * Fetches and removes the last element of the collection, in current sorting order.
+             */
+            pop(ctx: Object): Promise<IEventDetails<E>>;
+            /**
+             * Fetches the last element of the collection, in current sorting order, without removing it.
+             */
+            peekTail(ctx: Object): Promise<IEventDetails<E>>;
+            /**
+             * Adds an element to the beginning of the collection, in *key lexicographic* order.
+             */
+            unshift(value: E): Promise<any>;
+            /**
+             * Fetches and removes the first element of the collection, in current sorting order.
+             */
+            shift(ctx: Object): Promise<IEventDetails<E>>;
+            /**
+             * Fetches the first element of the collection, in current sorting order, without removing it.
+             */
+            peekHead(ctx: Object): Promise<IEventDetails<E>>;
+            load(ctx: Object): Promise<E[]>;
+            dereference(ctx: Object): Promise<E[]>;
+        }
+        interface IQuery<E extends Entity> extends IReadableCollection<E> {
+            load(ctx: Object): Promise<E[]>;
+            dereference(ctx: Object): Promise<E[]>;
+            onField(field: string, desc?: boolean): IQuery<E>;
+            limit(limit: number): IQuery<E>;
+            range(from: any, to: any): IQuery<E>;
+            equals(val: any): IQuery<E>;
+        }
+    }
+    /**
+     * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
+     * they should never be used directly.
+     */
+    module Internal {
+        /**
+         * Creates a Db based on the given configuration.
+         */
+        function createDb(conf: any): Api.IDb3Static;
+        /**
          * Implementation of {@link IDbOperations}.
          */
-        class DbOperations implements IDbOperations {
+        class DbOperations implements Api.IDbOperations {
             state: DbState;
             constructor(state: DbState);
-            fork(conf: any): IDb3Static;
-            load<T extends Entity>(url: string): T;
+            fork(conf: any): Api.IDb3Static;
+            load<T extends Api.Entity>(url: string): T;
             reset(): void;
             erase(): void;
         }
@@ -167,7 +618,7 @@ declare module Db {
              * @param state the db state to operate on
              * @param parent the parent entity instance
              */
-            startLoads(metadata: ClassMetadata, state: DbState, parent: Entity): Promise<BindingState>;
+            startLoads(metadata: ClassMetadata, state: DbState, parent: Api.Entity): Promise<BindingState>;
             /**
              * Completes the binding once the target entity completed loading and the Promise returned by
              * {@link startLoads} completes.
@@ -177,49 +628,7 @@ declare module Db {
              * trigger on reference change, so the value will be kept in sync.
              *
              */
-            resolve(tgt: Entity, result: BindingState): void;
-        }
-        /**
-         * Interface for sorting informations.
-         */
-        interface SortingData {
-            field: string;
-            desc?: boolean;
-        }
-        /**
-         * Interface implemented by all the elements that have an URL.
-         */
-        interface IUrled {
-            getUrl(evenIfIncomplete?: boolean): string;
-        }
-        /**
-         * Various kind of events that can be triggered when using {@link EventDetails}.
-         */
-        enum EventType {
-            /**
-             * Unknown event type.
-             */
-            UNDEFINED = 0,
-            /**
-             * The value has been updated, used on entities when there was a change and on collections when an elements
-             * is changed or has been reordered.
-             */
-            UPDATE = 1,
-            /**
-             * The value has been removed, used on root entities when they are deleted, embedded and references when
-             * they are nulled, references also when the referenced entity has been deleted, and on collections when
-             * an element has been removed from the collection.
-             */
-            REMOVED = 2,
-            /**
-             * The value has been added, used on collections when a new element has been added.
-             */
-            ADDED = 3,
-            /**
-             * Special event used on collection to notify that the collection has finished loading, and following
-             * events will be updates to the previous state and not initial population of the collection.
-             */
-            LIST_END = 4,
+            resolve(tgt: Api.Entity, result: BindingState): void;
         }
         /**
          * Class describing an event from the Db. It is used in every listener callback.
@@ -228,7 +637,7 @@ declare module Db {
             /**
              * The type of the event, see {@link EventType}.
              */
-            type: EventType;
+            type: Api.EventType;
             /**
              * The payload of the event.
              *
@@ -395,9 +804,9 @@ declare module Db {
          * Events are organized in a hierarchy, having multiple {@link EntityRoot} as roots.
          *
          */
-        class GenericEvent implements IUrled {
+        class GenericEvent implements Api.IUrled {
             /** The entity bound to this event. */
-            entity: Entity;
+            entity: Api.Entity;
             /** The url for the entity bound to this event. */
             url: string;
             /** The db state this event works in */
@@ -419,7 +828,7 @@ declare module Db {
              *
              * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
              */
-            setEntity(entity: Entity): void;
+            setEntity(entity: Api.Entity): void;
             /**
              * Get the {@link _classMeta} this event works on.
              */
@@ -567,130 +976,6 @@ declare module Db {
             isLocal(): boolean;
         }
         /**
-         * Database events for {@link embedded} or {@link reference}d entities.
-         */
-        interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
-            /**
-             * Load the entity completely.
-             *
-             * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
-             *
-             * Other references will be dereferenced but not loaded.
-             *
-             * @param ctx the context object, to use with {@link off}
-             */
-            load(ctx: Object): Promise<EventDetails<E>>;
-            /**
-             * Registers a callback to get notified about updates to the entity.
-             *
-             * The callback will be called when :
-             * - a value on the entity get changed or removed
-             * - a value on an {@link embedded} sub entity gets changed or removed
-             * - a value in a collection ({@link map}, {@link set} or {ļink list}) is added, removed or modified
-             * - the entity gets deleted
-             * - a {@link reference} pointer is changed AND when a referenced entity value is changed
-             *
-             * When the callback gets called, the local instance of the entity has been already updated with
-             * the received database modifications.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Keeps the local instance of the entity updated in real time with changes from the db,
-             * without registering a callback.
-             *
-             * Technically, is equivalent to :
-             * ```
-             *   .updated(ctx, ()=>{});
-             * ```
-             *
-             * Note that on references, the live state involves both the reference pointer and the referenced
-             * entity.
-             *
-             * @param ctx the context object, to use with {@link off}
-             */
-            live(ctx: Object): void;
-            /**
-             * If the entity is a reference, this method only dereferences it, applying projections if
-             * available, but not loading the target entity.
-             *
-             * @param ctx the context object, to use with {@link off}
-             */
-            dereference(ctx: Object): Promise<EventDetails<E>>;
-            /**
-             * If the entity is a reference, registers a callback to get notified about a change
-             * in the reference pointer.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            referenced(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * If the entity is a reference and has been loaded, this method retuns the url this reference is pointing at.
-             */
-            getReferencedUrl(): string;
-            /**
-             * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 *
-             * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced},
-             * 		or used on operations like {@link load}, {@link live} etc..
-             */
-            off(ctx: Object): void;
-            /**
-             * Checks if this entity has been loaded from the database.
-             *
-             * If this entity is a reference, this method returns true if the reference
-             * pointer has been loaded, not necessarily the pointed entity.
-             *
-             * @return true if the entity or the reference pointer has been loaded.
-             */
-            isLoaded(): boolean;
-            /**
-             * Fails with an exception if {@link isLoaded} does not return true.
-             */
-            assertLoaded(): void;
-            /**
-             * If this entity is a new entity, not loaded and not yet persisted on the database,
-             * and the entity is a {@link root} entity, this method assign an id and computes the
-             * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
-             */
-            assignUrl(): void;
-            /**
-             * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
-             * it will first call {@link assignUrl} and then persist the new entity. If the entity was loaded from the
-             * database or was already saved before, this method will perform an update of the existing entity.
-             *
-             * The semantics of a save are that :
-             * - all native (string, number, inline objects etc..) of the entity are saved/updated
-             * - all {@link embedded} entities, new or already loaded, are recursively saved
-             * - all collections ({@link map}, {@link set} or {@link list}), new or already loaded, are recursively saved
-             * - {@link reference} pointers are saved; however, the save is not cascaded to referenced entities.
-             *
-             * Saving an entity triggers all the callbacks registered with {@link updated} or {@link referenced} and
-             * the like, on this entity or embedded sub-entities and collections, if modifications happened in their
-             * respective scopes.
-             *
-             * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
-             * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
-             */
-            save(): Promise<any>;
-            remove(): Promise<any>;
-            /**
-             * Creates a clone of this entity, using the most recent data from the database.
-             *
-             * The entity must have been loaded (or saved if it's a new entity) before calling clone (that is,
-             * {@link isLoaded} must return true).
-             *
-             * The {@link embedded} sub-entities and the collections are also cloned in the new instance.
-             *
-             * {@link reference} pointers are cloned, but not the referenced entities, which usually is the expected
-             * behavior.
-             */
-            clone(): E;
-        }
-        /**
          * An utility base class for events that deal with a single databse reference.
          *
          * It spawns a single {@link DbEventHandler} hooking database events to the {@link handleDbEvent} function.
@@ -763,7 +1048,7 @@ declare module Db {
          * - honour the {@link bind} directives using {@link BindingImpl}
          * - assign a generated id to {@link root} entities in {@link assignUrl}
          */
-        class EntityEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
+        class EntityEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
             /**
              * Local (ram, javascript) name of the entity represented by this event on the parent entity.
              */
@@ -782,7 +1067,7 @@ declare module Db {
             lastDs: FirebaseDataSnapshot;
             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
             progDiscriminator: number;
-            setEntity(entity: Entity): void;
+            setEntity(entity: Api.Entity): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
             /**
@@ -837,7 +1122,7 @@ declare module Db {
          * - when reading, it creates the pointedEvent and eventually forwards projections in {@link parseValue}
          * - when saving, it saves the pointed url, eventually annotated with the discriminator, and saves the projections, in {@link serialize}.
          */
-        class ReferenceEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IEntityOrReferenceEvent<E> {
+        class ReferenceEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
             /**
              * Local (ram, javascript) name of the entity represented by this event on the parent entity.
              */
@@ -856,7 +1141,7 @@ declare module Db {
             prevPointedEvent: EntityEvent<E>;
             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
             progDiscriminator: number;
-            setEntity(entity: Entity): void;
+            setEntity(entity: Api.Entity): void;
             /**
              * Load this reference AND the pointed entity.
              */
@@ -882,213 +1167,6 @@ declare module Db {
             clone(): E;
         }
         /**
-         * Interface implemented by collections that can be read. These are all the collections
-         * but also {@link IQuery}.
-         */
-        interface IReadableCollection<E extends Entity> {
-            /**
-             * Registers a callback to get notified about updates to the collection.
-             *
-             * The callback will be called when :
-             * - a value is added, removed, or reorded in the collection
-             * - if the collection is of embedded entities, an entity in the collection is changed
-             * - if the collection is of references, a reference or it's projections changed
-             *
-             * When the callback gets called, the local (in ram) collection has been already updated with
-             * the received database modifications.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Registers a callback to get notified when elements of the collection are loaded,
-             * or later when a value is added to the collection.
-             *
-             * The callback will be called :
-             * - once for each entity found in the collection, in sorting order
-             * - once with an {@link EventType.LIST_END} when finished loading the collection
-             * - again for each further addition to the collection
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Registers a callback to get notified when a value is removed to the collection.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Registers a callback to get notified when a value is changed to the collection.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Registers a callback to get notified when a value is moved (reordered) to the collection.
-             *
-             * @param ctx the context object, to use with {@link off}
-             * @param callback the callback
-             */
-            moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            /**
-             * Unregisters all callbacks and stops all undergoing operations started with the given context.
-             *
-             * @param ctx the context object used to register callbacks using {@link updated}, {@link added} etc..
-             * 		or used on other operations.
-             */
-            off(ctx: Object): void;
-        }
-        /**
-         * Interface implemented by collections that can also be written to and used
-         * as a field in an entity.
-         *
-         * Methods that deal with keys accept the following :
-         * - a string key, for maps that use string keys or for sets and lists using the {@link EventDetails.originalKey}
-         * - a numeric key, which is simply converted to a string, it is *not* an array index on sets or lists.
-         * - an entity, for maps that use entity references as keys or for sets, not supported on lists
-         */
-        interface IGenericCollection<E extends Entity> extends IReadableCollection<E> {
-            /**
-             * Keeps the local instance of the collection updated in real time with changes from the db,
-             * without registering a callback.
-             *
-             * Technically, is equivalent to :
-             * ```
-             *   .updated(ctx, ()=>{});
-             * ```
-             *
-             * Note that, as opposed to {@link IEntityOrReferenceEvent.live}, on references the live state involves ONLY
-             * the reference pointer, and not the referenced entity.
-             *
-             * @param ctx the context object, to use with {@link off}
-             */
-            live(ctx: Object): void;
-            /**
-             * Removes the specified element from the collection.
-             */
-            remove(key: string | number | Entity): Promise<any>;
-            /**
-             * Fetch the specified key from the collection.
-             *
-             * TODO does this only dereference or also load the value?
-             */
-            fetch(ctx: Object, key: string | number | E): Promise<EventDetails<E>>;
-            /**
-             * Gives access to the database event for the given key.
-             *
-             * TODO provide an example on why this is useful
-             */
-            with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
-            /**
-             * Initialize a query on this collection.
-             */
-            query(): IQuery<E>;
-            /**
-             * Checks if this collection has been loaded from the database.
-             */
-            isLoaded(): boolean;
-            /**
-             * Fails with an exception if {@link isLoaded} does not return true.
-             */
-            assertLoaded(): void;
-            /**
-             * Save this collection on the database. The collection must have been loaded
-             * ({@link isLoaded} must return true).
-             *
-             * When saving a new entity, the {@link IEntityOrReferenceEvent.save} method takes care of
-             * saving the collection.
-             *
-             * The semantics of a save are that :
-             * - the local (ram) representation of the collection is used
-             * - for each element in the collection, the relative {@link IEntityOrReferenceEvent.save} method is called
-             *
-             * Saving a collection triggers all the callbacks registered with {@link updated}, {@link added} and
-             * the like on this collection.
-             *
-             * The returned Promise will be fulfilled when data has been persisted in the database, which could potentially
-             * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
-             */
-            save(): Promise<any>;
-            /**
-             * Loads this collection into the parent entity, and also returns the value in the promise.
-             *
-             * If this is a collection of references, all the references are also loaded.
-             */
-            load(ctx: Object): Promise<any>;
-            /**
-             * Loads this collection into the parent entity, only deferencing the references and not
-             * loading the referenced entity.
-             */
-            dereference(ctx: Object): Promise<any>;
-        }
-        /**
-         * Collection of type map, a map binds keys to values.
-         *
-         * Keys can be :
-         * - strings
-         * - numbers, which simply get converted to strings
-         * - entities
-         *
-         * When using entities as keys, note that :
-         * - the entity must be saved somewhere else, cause the key is actually a reference to the entity
-         * - when looking up to find the entry, an entity loaded forom the same url must be used
-         * - the key entity will not be saved when saving the collection, cause it's a reference
-         *
-         * If no sorting if given, a map is implicitly sorted in key lexicographic order.
-         */
-        interface IMapEvent<E extends Entity> extends IGenericCollection<E> {
-            /**
-             * Adds a value to the map.
-             */
-            add(key: string | number | Entity, value: E): Promise<any>;
-            load(ctx: Object): Promise<{
-                [index: string]: E;
-            }>;
-            dereference(ctx: Object): Promise<{
-                [index: string]: E;
-            }>;
-        }
-        /**
-         * Collection of type list or set.
-         *
-         * Lists and sets can add entities to the collection without specifying a key, however
-         * removal or direct retrival is still performed by key.
-         *
-         * Lists and sets can also be used as queues, where {@link add} is equivalent to "push",
-         * using the {@link pop}, {@link shift} and {@link unshift} methods which are equivalent to
-         * JavaScript array methods, and {@link peekHead} and {@link peekTail}.
-         */
-        interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
-            add(value: E): Promise<any>;
-            /**
-             * Fetches and removes the last element of the collection, in current sorting order.
-             */
-            pop(ctx: Object): Promise<EventDetails<E>>;
-            /**
-             * Fetches the last element of the collection, in current sorting order, without removing it.
-             */
-            peekTail(ctx: Object): Promise<EventDetails<E>>;
-            /**
-             * Adds an element to the beginning of the collection, in *key lexicographic* order.
-             */
-            unshift(value: E): Promise<any>;
-            /**
-             * Fetches and removes the first element of the collection, in current sorting order.
-             */
-            shift(ctx: Object): Promise<EventDetails<E>>;
-            /**
-             * Fetches the first element of the collection, in current sorting order, without removing it.
-             */
-            peekHead(ctx: Object): Promise<EventDetails<E>>;
-            load(ctx: Object): Promise<E[]>;
-            dereference(ctx: Object): Promise<E[]>;
-        }
-        /**
          * An event handler for collections.
          *
          * It extends the DbEventHandler :
@@ -1106,15 +1184,15 @@ declare module Db {
         /**
          * Default implementation of map.
          */
-        class MapEvent<E extends Entity> extends GenericEvent implements IMapEvent<E> {
+        class MapEvent<E extends Api.Entity> extends GenericEvent implements Api.IMapEvent<E> {
             isReference: boolean;
             nameOnParent: string;
             project: string[];
             binding: BindingImpl;
-            sorting: SortingData;
+            sorting: Api.SortingData;
             realField: any;
             loaded: boolean;
-            setEntity(entity: Entity): void;
+            setEntity(entity: Api.Entity): void;
             added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
@@ -1126,18 +1204,18 @@ declare module Db {
             init(h: EventHandler): void;
             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
             handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: FirebaseDataSnapshot, prevKey: string): void;
-            add(key: string | number | Entity, value?: Entity): Promise<any>;
-            createKeyFor(value: Entity): string;
-            normalizeKey(key: string | number | Entity): string;
-            addToInternal(event: string, ds: FirebaseDataSnapshot, val: Entity, det: EventDetails<E>): void;
-            remove(keyOrValue: string | number | Entity): Promise<any>;
-            fetch(ctx: Object, key: string | number | Entity): Promise<EventDetails<E>>;
-            with(key: string | number | Entity): IEntityOrReferenceEvent<E>;
+            add(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
+            createKeyFor(value: Api.Entity): string;
+            normalizeKey(key: string | number | Api.Entity): string;
+            addToInternal(event: string, ds: FirebaseDataSnapshot, val: Api.Entity, det: EventDetails<E>): void;
+            remove(keyOrValue: string | number | Api.Entity): Promise<any>;
+            fetch(ctx: Object, key: string | number | Api.Entity): Promise<EventDetails<E>>;
+            with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
             isLoaded(): boolean;
             assertLoaded(): void;
             save(): Promise<any>;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
-            query(): IQuery<E>;
+            query(): Api.IQuery<E>;
         }
         class EventedArray<E> {
             collection: MapEvent<E>;
@@ -1150,40 +1228,33 @@ declare module Db {
             prepareSerializeSet(): void;
             prepareSerializeList(): void;
         }
-        class ArrayCollectionEvent<E extends Entity> extends MapEvent<E> {
+        class ArrayCollectionEvent<E extends Api.Entity> extends MapEvent<E> {
             protected evarray: EventedArray<E>;
-            setEntity(entity: Entity): void;
-            add(value?: Entity): Promise<any>;
-            intSuperAdd(key: string | number | Entity, value?: Entity): Promise<any>;
+            setEntity(entity: Api.Entity): void;
+            add(value?: Api.Entity): Promise<any>;
+            intSuperAdd(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
             addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
             load(ctx: Object): Promise<E[]>;
             dereference(ctx: Object): Promise<E[]>;
         }
-        class ListEvent<E extends Entity> extends ArrayCollectionEvent<E> implements IListSetEvent<E> {
-            createKeyFor(value: Entity): string;
-            normalizeKey(key: string | number | Entity): string;
+        class ListEvent<E extends Api.Entity> extends ArrayCollectionEvent<E> implements Api.IListSetEvent<E> {
+            createKeyFor(value: Api.Entity): string;
+            normalizeKey(key: string | number | Api.Entity): string;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
-            intPeek(ctx: Object, dir: number): Promise<EventDetails<E>>;
-            intPeekRemove(ctx: Object, dir: number): Promise<EventDetails<E>>;
+            intPeek(ctx: Object, dir: number): Promise<Api.IEventDetails<E>>;
+            intPeekRemove(ctx: Object, dir: number): Promise<Api.IEventDetails<E>>;
             pop(ctx: Object): Promise<EventDetails<E>>;
             peekTail(ctx: Object): Promise<EventDetails<E>>;
             unshift(value: E): Promise<any>;
             shift(ctx: Object): Promise<EventDetails<E>>;
             peekHead(ctx: Object): Promise<EventDetails<E>>;
         }
-        class SetEvent<E extends Entity> extends ArrayCollectionEvent<E> {
-            createKeyFor(value: Entity): string;
-            normalizeKey(key: string | number | Entity): string;
+        class SetEvent<E extends Api.Entity> extends ArrayCollectionEvent<E> {
+            createKeyFor(value: Api.Entity): string;
+            normalizeKey(key: string | number | Api.Entity): string;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
         }
-        interface IObservableEvent<E extends Entity> extends IUrled {
-            updated(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
-            live(ctx: Object): void;
-            off(ctx: Object): void;
-            isLoaded(): boolean;
-            assertLoaded(): void;
-        }
-        class IgnoreEvent<E extends Entity> extends GenericEvent {
+        class IgnoreEvent<E extends Api.Entity> extends GenericEvent {
             nameOnParent: string;
             val: any;
             setEntity(): void;
@@ -1191,7 +1262,7 @@ declare module Db {
             serialize(): any;
             isLocal(): boolean;
         }
-        class ObservableEvent<E extends Entity> extends SingleDbHandlerEvent<E> implements IObservableEvent<E> {
+        class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
             nameOnParent: string;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             live(ctx: Object): void;
@@ -1199,30 +1270,18 @@ declare module Db {
             parseValue(ds: FirebaseDataSnapshot): void;
             isLoaded(): boolean;
             assertLoaded(): void;
-            serialize(): Entity;
+            serialize(): Api.Entity;
             isLocal(): boolean;
         }
-        interface IEntityRoot<E extends Entity> extends IUrled {
-            get(id: string): E;
-            query(): IQuery<E>;
-        }
-        class EntityRoot<E extends Entity> implements IEntityRoot<E> {
+        class EntityRoot<E extends Api.Entity> implements Api.IEntityRoot<E> {
             private state;
             private meta;
             constructor(state: DbState, meta: ClassMetadata);
             get(id: string): E;
-            query(): IQuery<E>;
+            query(): Api.IQuery<E>;
             getUrl(): string;
         }
-        interface IQuery<E extends Entity> extends IReadableCollection<E> {
-            load(ctx: Object): Promise<E[]>;
-            dereference(ctx: Object): Promise<E[]>;
-            onField(field: string, desc?: boolean): IQuery<E>;
-            limit(limit: number): IQuery<E>;
-            range(from: any, to: any): IQuery<E>;
-            equals(val: any): IQuery<E>;
-        }
-        class QueryImpl<E> extends ArrayCollectionEvent<E> implements IQuery<E> {
+        class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
             private _limit;
             private _rangeFrom;
             private _rangeTo;
@@ -1243,15 +1302,15 @@ declare module Db {
             };
             conf: any;
             myMeta: Metadata;
-            db: IDb3Static;
+            db: Api.IDb3Static;
             configure(conf: any): void;
             reset(): void;
-            entityRoot(ctor: EntityType<any>): IEntityRoot<any>;
-            entityRoot(meta: ClassMetadata): IEntityRoot<any>;
-            entityRootFromUrl(url: string): IEntityRoot<any>;
+            entityRoot(ctor: Api.EntityType<any>): Api.IEntityRoot<any>;
+            entityRoot(meta: ClassMetadata): Api.IEntityRoot<any>;
+            entityRootFromUrl(url: string): Api.IEntityRoot<any>;
             getUrl(): string;
-            bindEntity(e: Entity, ev: GenericEvent): void;
-            createEvent(e: Entity, stack?: MetaDescriptor[]): GenericEvent;
+            bindEntity(e: Api.Entity, ev: GenericEvent): void;
+            createEvent(e: Api.Entity, stack?: MetaDescriptor[]): GenericEvent;
             loadEvent(url: string, meta?: ClassMetadata): GenericEvent;
             storeInCache(evt: GenericEvent): void;
             loadEventWithInstance(url: string, meta?: ClassMetadata): GenericEvent;
@@ -1270,7 +1329,7 @@ declare module Db {
             getTreeChange(md: Metadata): ClassMetadata;
             getRemoteName(): string;
             setType(def: any): void;
-            ctor: EntityType<any>;
+            ctor: Api.EntityType<any>;
             named(name: string): MetaDescriptor;
             setLocalName(name: string): void;
             createEvent(allMetadata: Metadata): GenericEvent;
@@ -1286,8 +1345,8 @@ declare module Db {
             subMeta: ClassMetadata[];
             add(descr: MetaDescriptor): void;
             getName(): string;
-            createInstance(): Entity;
-            rightInstance(entity: Entity): boolean;
+            createInstance(): Api.Entity;
+            rightInstance(entity: Api.Entity): boolean;
             mergeSuper(sup: ClassMetadata): void;
             addSubclass(sub: ClassMetadata): void;
             findForDiscriminator(disc: string): ClassMetadata;
@@ -1305,19 +1364,19 @@ declare module Db {
         }
         class MapMetaDescriptor extends MetaDescriptor {
             isReference: boolean;
-            sorting: Internal.SortingData;
+            sorting: Api.SortingData;
             named(name: string): MapMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
         class SetMetaDescriptor extends MetaDescriptor {
             isReference: boolean;
-            sorting: Internal.SortingData;
+            sorting: Api.SortingData;
             named(name: string): SetMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
         class ListMetaDescriptor extends MetaDescriptor {
             isReference: boolean;
-            sorting: Internal.SortingData;
+            sorting: Api.SortingData;
             named(name: string): SetMetaDescriptor;
             createEvent(allMetadata: Metadata): GenericEvent;
         }
@@ -1329,18 +1388,18 @@ declare module Db {
         }
         class Metadata {
             classes: Internal.ClassMetadata[];
-            findMeta(param: EntityType<any> | Entity): ClassMetadata;
+            findMeta(param: Api.EntityType<any> | Api.Entity): ClassMetadata;
             findRooted(relurl: string): ClassMetadata;
             findDiscriminated(base: ClassMetadata, dis: string): ClassMetadata;
         }
         function getAllMetadata(): Metadata;
-        function getLastEntity(): Entity;
+        function getLastEntity(): Api.Entity;
         function getLastMetaPath(): MetaDescriptor[];
         function clearLastStack(): void;
     }
     module Utils {
         function findName(o: any): string;
-        function findHierarchy(o: Entity | EntityType<any>): EntityType<any>[];
+        function findHierarchy(o: Api.Entity | Api.EntityType<any>): Api.EntityType<any>[];
         function isInlineObject(o: any): boolean;
         function isEmpty(obj: any): boolean;
         function copyObj(from: Object, to: Object): void;
@@ -1365,26 +1424,26 @@ declare module Db {
         }
     }
     function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
-    function sortBy(field: string, desc?: boolean): Internal.SortingData;
-    function embedded(def: EntityType<any> | EntityTypeProducer<any>, binding?: Internal.IBinding): PropertyDecorator;
-    function reference(def: EntityType<any> | EntityTypeProducer<any>, project?: string[]): PropertyDecorator;
-    function map(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
-    function set(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
-    function list(valueType: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): PropertyDecorator;
+    function sortBy(field: string, desc?: boolean): Api.SortingData;
+    function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, binding?: Internal.IBinding): PropertyDecorator;
+    function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, project?: string[]): PropertyDecorator;
+    function map(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
+    function set(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
+    function list(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
     function root(name?: string, override?: string): ClassDecorator;
     function discriminator(disc: string): ClassDecorator;
     function override(override?: string): ClassDecorator;
     function observable(): PropertyDecorator;
     function ignore(): PropertyDecorator;
     module meta {
-        function embedded(def: EntityType<any> | EntityTypeProducer<any>, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
-        function reference(def: EntityType<any> | EntityTypeProducer<any>, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
-        function map(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.MapMetaDescriptor;
-        function set(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.SetMetaDescriptor;
-        function list(valuetype: EntityType<any> | EntityTypeProducer<any>, reference?: boolean, sorting?: Internal.SortingData): Db.Internal.ListMetaDescriptor;
+        function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
+        function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
+        function map(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.MapMetaDescriptor;
+        function set(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.SetMetaDescriptor;
+        function list(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.ListMetaDescriptor;
         function observable(): Db.Internal.ObservableMetaDescriptor;
         function ignore(): Db.Internal.IgnoreMetaDescriptor;
-        function define(ctor: EntityType<any>, root?: string, discriminator?: string, override?: string): void;
+        function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;
     }
 }
 export = Db;
