@@ -1,7 +1,8 @@
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    __.prototype = b.prototype;
+    d.prototype = new __();
 };
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
@@ -33,6 +34,9 @@ var WithProps = (function () {
     WithProps.prototype.localCall = function () {
         lastLocalCallArgs = arguments;
         return 'localCallAck';
+    };
+    WithProps.prototype.postUpdate = function (ed) {
+        this._lastUpdateEv = ed;
     };
     __decorate([
         Db3.observable()
@@ -778,7 +782,7 @@ describe('Db3 >', function () {
             }
             assert('should throw exception').when(threw).is(true);
         });
-        it.only('should support function based forward declarations', function () {
+        it('should support function based forward declarations', function () {
             var mod = require('./Db3ForwardRight');
             Db3.Internal.clearLastStack();
             var we = new mod.A();
@@ -806,9 +810,9 @@ describe('Db3 >', function () {
             M.assert("Same instance").when(wp2).is(M.exactly(wp1));
             M.assert("Has right url").when(Db(wp1).getUrl()).is(baseUrl + 'withProps/wp1/');
         });
-        it('should load simple entities', function (done) {
+        it('should load simple entities', function () {
             var wp1 = Db(WithProps).get('wp1');
-            Db(wp1).load(_this)
+            return Db(wp1).load(_this)
                 .then(function (det) {
                 M.assert('Data loaded').when(wp1).is(M.objectMatching({
                     str: 'String 1',
@@ -819,11 +823,14 @@ describe('Db3 >', function () {
                     },
                     ignored: 'ignored'
                 }));
+                M.assert("Entity hook respected").when(wp1._lastUpdateEv).is(M.objectMatching({
+                    type: Db3.Api.EventType.LOAD,
+                    payload: M.exactly(wp1)
+                }));
                 return 1;
             })
                 .then(function (n) {
                 M.assert('Chained correctly').when(n).is(1);
-                done();
             });
         });
         it('should load more times if needed', function (done) {
@@ -1755,7 +1762,7 @@ describe('Db3 >', function () {
                 var wm1 = Db(WithMap).get('wm1');
                 return Db(wm1.embedMap).fetch(_this, 'b').then(function (det) {
                     assert("event is right").when(det).is(M.objectMatching({
-                        type: Db3.Api.EventType.UPDATE,
+                        type: Db3.Api.EventType.LOAD,
                         populating: false,
                         originalKey: 'b',
                         payload: {
@@ -2119,3 +2126,4 @@ describe('Db3 >', function () {
         });
     });
 });
+//# sourceMappingURL=Db3Tests.js.map

@@ -1,15 +1,16 @@
 /**
- * TSDB version : 20150924_222714_master_1.0.0_17ca0ad
+ * TSDB version : VERSION_TAG
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    __.prototype = b.prototype;
+    d.prototype = new __();
 };
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20150924_222714_master_1.0.0_17ca0ad';
+var Version = 'VERSION_TAG';
 /**
  * The main Db module.
  */
@@ -58,25 +59,29 @@ var Db;
              */
             EventType[EventType["UNDEFINED"] = 0] = "UNDEFINED";
             /**
+             * The value has been loaded, used on entities and on collections on first loading of an entity.
+             */
+            EventType[EventType["LOAD"] = 1] = "LOAD";
+            /**
              * The value has been updated, used on entities when there was a change and on collections when an elements
              * is changed or has been reordered.
              */
-            EventType[EventType["UPDATE"] = 1] = "UPDATE";
+            EventType[EventType["UPDATE"] = 2] = "UPDATE";
             /**
              * The value has been removed, used on root entities when they are deleted, embedded and references when
              * they are nulled, references also when the referenced entity has been deleted, and on collections when
              * an element has been removed from the collection.
              */
-            EventType[EventType["REMOVED"] = 2] = "REMOVED";
+            EventType[EventType["REMOVED"] = 3] = "REMOVED";
             /**
              * The value has been added, used on collections when a new element has been added.
              */
-            EventType[EventType["ADDED"] = 3] = "ADDED";
+            EventType[EventType["ADDED"] = 4] = "ADDED";
             /**
              * Special event used on collection to notify that the collection has finished loading, and following
              * events will be updates to the previous state and not initial population of the collection.
              */
-            EventType[EventType["LIST_END"] = 4] = "LIST_END";
+            EventType[EventType["LIST_END"] = 5] = "LIST_END";
         })(Api.EventType || (Api.EventType = {}));
         var EventType = Api.EventType;
     })(Api = Db.Api || (Db.Api = {}));
@@ -879,10 +884,14 @@ var Db;
              * Upon receiving data from the database, it creates an {@link EventDetails} object
              * based on current state and received data, and {@link broadcast}s it.
              */
-            SingleDbHandlerEvent.prototype.handleDbEvent = function (ds, prevName) {
-                this.parseValue(ds);
+            SingleDbHandlerEvent.prototype.handleDbEvent = function (ds, prevName, projected) {
+                if (projected === void 0) { projected = false; }
                 var evd = new EventDetails();
                 evd.type = Api.EventType.UPDATE;
+                if (!this.loaded) {
+                    evd.type = Api.EventType.LOAD;
+                }
+                this.parseValue(ds);
                 if (this.entity == null) {
                     evd.type = Api.EventType.REMOVED;
                 }
@@ -891,7 +900,9 @@ var Db;
                 evd.originalUrl = ds.ref().toString();
                 evd.originalKey = ds.key();
                 evd.precedingKey = prevName;
-                evd.projected = !this.loaded;
+                evd.projected = projected;
+                if (!projected)
+                    this.loaded = true;
                 this.lastDetail = evd;
                 this.broadcast(this.lastDetail);
             };
@@ -950,10 +961,6 @@ var Db;
                 var h = new EventHandler(ctx, callback, discriminator);
                 _super.prototype.on.call(this, h);
             };
-            EntityEvent.prototype.handleDbEvent = function (ds, prevName) {
-                this.loaded = true;
-                _super.prototype.handleDbEvent.call(this, ds, prevName);
-            };
             /**
              * Used to receive the projections when {@link ReferenceEvent} is loading the arget
              * event and has found some projections.
@@ -961,7 +968,7 @@ var Db;
             EntityEvent.prototype.handleProjection = function (ds) {
                 if (this.loaded)
                     return;
-                _super.prototype.handleDbEvent.call(this, ds, null);
+                _super.prototype.handleDbEvent.call(this, ds, null, true);
             };
             EntityEvent.prototype.init = function (h) {
                 if (this.dbhandler == null) {
@@ -975,15 +982,22 @@ var Db;
                 }
                 _super.prototype.init.call(this, h);
             };
+            EntityEvent.prototype.applyHooks = function (ed) {
+                if (this.entity && this.entity['postUpdate']) {
+                    this.entity.postUpdate(ed);
+                }
+            };
             EntityEvent.prototype.broadcast = function (ed) {
                 var _this = this;
                 if (!this.bindingPromise) {
+                    this.applyHooks(ed);
                     _super.prototype.broadcast.call(this, ed);
                     return;
                 }
                 // wait here for resolution of the binding, if any
                 this.bindingPromise.then(function (state) {
                     _this.binding.resolve(ed.payload, state);
+                    _this.applyHooks(ed);
                     _super.prototype.broadcast.call(_this, ed);
                 });
             };
@@ -1145,6 +1159,9 @@ var Db;
                 var _this = this;
                 // If this entity was previously loaded or saved, then perform a serialize and save
                 if (this.loaded) {
+                    if (this.entity && this.entity['prePersist']) {
+                        this.entity.prePersist();
+                    }
                     return new Promise(function (ok, err) {
                         var fb = new Firebase(_this.getUrl());
                         fb.set(_this.serialize(false), function (fberr) {
@@ -1326,10 +1343,6 @@ var Db;
                 if (discriminator === void 0) { discriminator = null; }
                 var h = new EventHandler(ctx, callback, discriminator);
                 _super.prototype.on.call(this, h);
-            };
-            ReferenceEvent.prototype.handleDbEvent = function (ds, prevName) {
-                this.loaded = true;
-                _super.prototype.handleDbEvent.call(this, ds, prevName);
             };
             ReferenceEvent.prototype.parseValue = function (ds) {
                 var val = ds.val();
@@ -2008,22 +2021,11 @@ var Db;
             ObservableEvent.prototype.live = function (ctx) {
                 this.updated(ctx, function () { });
             };
-            ObservableEvent.prototype.handleDbEvent = function (ds, prevName) {
-                this.loaded = true;
-                _super.prototype.handleDbEvent.call(this, ds, prevName);
-            };
             ObservableEvent.prototype.parseValue = function (ds) {
                 this.setEntity(ds.val());
                 if (this.parent && this.nameOnParent) {
                     this.parent.entity[this.nameOnParent] = this.entity;
                 }
-            };
-            ObservableEvent.prototype.isLoaded = function () {
-                return this.loaded;
-            };
-            ObservableEvent.prototype.assertLoaded = function () {
-                if (!this.loaded)
-                    throw new Error("Entity at url " + this.getUrl() + " is not loaded");
             };
             ObservableEvent.prototype.serialize = function () {
                 return this.entity;
@@ -3111,3 +3113,4 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
+//# sourceMappingURL=Db3.js.map

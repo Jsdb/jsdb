@@ -31,6 +31,11 @@ declare module Db {
         interface EntityTypeProducer<T extends Entity> {
             (): EntityType<T>;
         }
+        interface IEntityHooks {
+            postUpdate?(evd?: IEventDetails<any>): void;
+            prePersist?(): void;
+            preEvict?(): boolean;
+        }
         /**
          * A type that describes a native value, an array of native values, or a map of native values.
          */
@@ -126,25 +131,29 @@ declare module Db {
              */
             UNDEFINED = 0,
             /**
+             * The value has been loaded, used on entities and on collections on first loading of an entity.
+             */
+            LOAD = 1,
+            /**
              * The value has been updated, used on entities when there was a change and on collections when an elements
              * is changed or has been reordered.
              */
-            UPDATE = 1,
+            UPDATE = 2,
             /**
              * The value has been removed, used on root entities when they are deleted, embedded and references when
              * they are nulled, references also when the referenced entity has been deleted, and on collections when
              * an element has been removed from the collection.
              */
-            REMOVED = 2,
+            REMOVED = 3,
             /**
              * The value has been added, used on collections when a new element has been added.
              */
-            ADDED = 3,
+            ADDED = 4,
             /**
              * Special event used on collection to notify that the collection has finished loading, and following
              * events will be updates to the previous state and not initial population of the collection.
              */
-            LIST_END = 4,
+            LIST_END = 5,
         }
         /**
          * Class describing an event from the Db. It is used in every listener callback.
@@ -633,7 +642,7 @@ declare module Db {
         /**
          * Class describing an event from the Db. It is used in every listener callback.
          */
-        class EventDetails<T> {
+        class EventDetails<T> implements Api.IEventDetails<T> {
             /**
              * The type of the event, see {@link EventType}.
              */
@@ -1034,7 +1043,7 @@ declare module Db {
              * Upon receiving data from the database, it creates an {@link EventDetails} object
              * based on current state and received data, and {@link broadcast}s it.
              */
-            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
+            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string, projected?: boolean): void;
             isLoaded(): boolean;
             assertLoaded(): void;
         }
@@ -1069,13 +1078,13 @@ declare module Db {
             progDiscriminator: number;
             setEntity(entity: Api.Entity): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
-            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
             /**
              * Used to receive the projections when {@link ReferenceEvent} is loading the arget
              * event and has found some projections.
              */
             handleProjection(ds: FirebaseDataSnapshot): void;
             init(h: EventHandler): void;
+            private applyHooks(ed);
             protected broadcast(ed: EventDetails<E>): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             load(ctx: Object): Promise<EventDetails<E>>;
@@ -1157,7 +1166,6 @@ declare module Db {
             live(ctx: Object): void;
             dereference(ctx: Object): Promise<EventDetails<E>>;
             referenced(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
-            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             getReferencedUrl(): string;
             serialize(localsOnly?: boolean): Object;
@@ -1266,10 +1274,7 @@ declare module Db {
             nameOnParent: string;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             live(ctx: Object): void;
-            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string): void;
             parseValue(ds: FirebaseDataSnapshot): void;
-            isLoaded(): boolean;
-            assertLoaded(): void;
             serialize(): Api.Entity;
             isLocal(): boolean;
         }

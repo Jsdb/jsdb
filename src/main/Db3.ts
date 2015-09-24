@@ -83,6 +83,11 @@ module Db {
 			() :EntityType<T>;
 		}
 	
+		export interface IEntityHooks {
+			postUpdate?(evd? :IEventDetails<any>):void
+			prePersist?():void
+			preEvict?():boolean;
+		}
 		/**
 		 * A type that describes a native value, an array of native values, or a map of native values.
 		 */
@@ -195,7 +200,12 @@ module Db {
 			/**
 			 * Unknown event type.
 			 */
-			UNDEFINED,
+			UNDEFINED = 0,
+			
+			/**
+			 * The value has been loaded, used on entities and on collections on first loading of an entity.
+			 */
+			LOAD,
 			
 			/**
 			 * The value has been updated, used on entities when there was a change and on collections when an elements
@@ -886,7 +896,7 @@ module Db {
 		/**
 		 * Class describing an event from the Db. It is used in every listener callback.
 		 */
-		export class EventDetails<T> {
+		export class EventDetails<T> implements Api.IEventDetails<T> {
 			/**
 			 * The type of the event, see {@link EventType}.
 			 */
@@ -1560,19 +1570,23 @@ module Db {
 			 * Upon receiving data from the database, it creates an {@link EventDetails} object
 			 * based on current state and received data, and {@link broadcast}s it.
 			 */
-			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
-				this.parseValue(ds);
+			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string, projected = false) {
 				var evd = new EventDetails<E>();
 				evd.type = Api.EventType.UPDATE;
+				if (!this.loaded) {
+					evd.type = Api.EventType.LOAD;
+				}
+				this.parseValue(ds);
 				if (this.entity == null) {
 					evd.type = Api.EventType.REMOVED;
-				}
+				} 
 				evd.payload = <E>this.entity;
 				evd.originalEvent = 'value';
 				evd.originalUrl = ds.ref().toString();
 				evd.originalKey = ds.key();
 				evd.precedingKey = prevName;
-				evd.projected = !this.loaded;
+				evd.projected = projected;
+				if (!projected) this.loaded = true;
 				this.lastDetail = evd;
 				this.broadcast(this.lastDetail);
 			}
@@ -1634,18 +1648,13 @@ module Db {
 				super.on(h);
 			}
 			
-			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
-				this.loaded = true;
-				super.handleDbEvent(ds,prevName);
-			}
-			
 			/**
 			 * Used to receive the projections when {@link ReferenceEvent} is loading the arget 
 			 * event and has found some projections.
 			 */
 			handleProjection(ds :FirebaseDataSnapshot) {
 				if (this.loaded) return;
-				super.handleDbEvent(ds, null);
+				super.handleDbEvent(ds, null, true);
 			}
 			
 			init(h :EventHandler) {
@@ -1659,15 +1668,23 @@ module Db {
 				}
 				super.init(h);
 			}
+
+			private applyHooks(ed :EventDetails<E>) {
+				if (this.entity && this.entity['postUpdate']) {
+					(<Api.IEntityHooks>this.entity).postUpdate(ed);
+				}
+			}
 			
 			protected broadcast(ed :EventDetails<E>) {
 				if (!this.bindingPromise) {
+					this.applyHooks(ed);
 					super.broadcast(ed);
 					return;
 				}
 				// wait here for resolution of the binding, if any
 				this.bindingPromise.then((state) => {
 					this.binding.resolve(ed.payload, state);
+					this.applyHooks(ed);
 					super.broadcast(ed);
 				});
 			}
@@ -1825,6 +1842,9 @@ module Db {
 			save():Promise<any> {
 				// If this entity was previously loaded or saved, then perform a serialize and save
 				if (this.loaded) {
+					if (this.entity && this.entity['prePersist']) {
+						(<Api.IEntityHooks>this.entity).prePersist();
+					}
 					return new Promise<any>((ok,err) => {
 						var fb = new Firebase(this.getUrl());
 						fb.set(this.serialize(false), (fberr) => {
@@ -1996,11 +2016,6 @@ module Db {
 			referenced(ctx:Object, callback :(ed:EventDetails<E>)=>void, discriminator :any = null) :void {
 				var h = new EventHandler(ctx, callback, discriminator);
 				super.on(h);
-			}
-			
-			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
-				this.loaded = true;
-				super.handleDbEvent(ds,prevName);
 			}
 			
 			parseValue(ds :FirebaseDataSnapshot) {
@@ -2672,24 +2687,11 @@ module Db {
 				this.updated(ctx,()=>{});
 			}
 			
-			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string) {
-				this.loaded = true;
-				super.handleDbEvent(ds,prevName);
-			}
-			
 			parseValue(ds :FirebaseDataSnapshot) {
 				this.setEntity(ds.val());
 				if (this.parent && this.nameOnParent) {
 					this.parent.entity[this.nameOnParent] = this.entity;
 				}
-			}
-			
-			isLoaded() {
-				return this.loaded;
-			}
-			
-			assertLoaded() {
-				if (!this.loaded) throw new Error("Entity at url " + this.getUrl() + " is not loaded");
 			}
 			
 			serialize() {

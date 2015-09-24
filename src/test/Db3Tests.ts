@@ -12,8 +12,9 @@ var Db = Db3.configure({baseUrl:baseUrl});
 var lastLocalCallArgs :IArguments = null;
 
 @Db3.root()
-class WithProps {
+class WithProps implements Db3.Api.IEntityHooks {
 	_local :number = 1;
+	_lastUpdateEv :Db3.Api.IEventDetails<WithProps>;
 	str :string = 'useless';
 	@Db3.observable()
 	num :number = 0;
@@ -28,6 +29,10 @@ class WithProps {
 	localCall() {
 		lastLocalCallArgs = arguments;
 		return 'localCallAck';
+	}
+	
+	postUpdate(ed :Db3.Api.IEventDetails<WithProps>) {
+		this._lastUpdateEv = ed;
 	}
 }
 
@@ -764,7 +769,7 @@ describe('Db3 >', () => {
 			assert('should throw exception').when(threw).is(true);
 		});
 		
-		it.only('should support function based forward declarations', ()=>{
+		it('should support function based forward declarations', ()=>{
 			var mod = require('./Db3ForwardRight');
 			Db3.Internal.clearLastStack();
 			var we = new mod.A();
@@ -799,9 +804,9 @@ describe('Db3 >', () => {
 			M.assert("Has right url").when(Db(wp1).getUrl()).is(baseUrl + 'withProps/wp1/');
 		});
 		
-		it('should load simple entities', (done) => {
+		it('should load simple entities', () => {
 			var wp1 = Db(WithProps).get('wp1');
-			Db(wp1).load(this)
+			return Db(wp1).load(this)
 			.then((det) => {
 				M.assert('Data loaded').when(wp1).is(M.objectMatching({
 					str: 'String 1',
@@ -812,11 +817,14 @@ describe('Db3 >', () => {
 					},
 					ignored: 'ignored'
 				}));
+				M.assert("Entity hook respected").when(wp1._lastUpdateEv).is(M.objectMatching({
+					type: Db3.Api.EventType.LOAD,
+					payload: M.exactly(wp1)
+				}));
 				return 1;
 			})
 			.then((n) => {
 				M.assert('Chained correctly').when(n).is(1);
-				done();
 			});
 		});
 		
@@ -1836,7 +1844,7 @@ describe('Db3 >', () => {
 				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
-						type: Db3.Api.EventType.UPDATE,
+						type: Db3.Api.EventType.LOAD,
 						populating: false,
 						originalKey: 'b',
 						payload: {
