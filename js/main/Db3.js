@@ -1,16 +1,15 @@
 /**
- * TSDB version : VERSION_TAG
+ * TSDB version : 20151008_145422_master_1.0.0_5dc3307
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    __.prototype = b.prototype;
-    d.prototype = new __();
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = 'VERSION_TAG';
+var Version = '20151008_145422_master_1.0.0_5dc3307';
 /**
  * The main Db module.
  */
@@ -231,6 +230,7 @@ var Db;
                     if (val instanceof EventDetails) {
                         val = val.payload;
                     }
+                    tgt[this.bindings[k]] = val;
                     if (this.live[k]) {
                         var evt = evts[i];
                         if (!evt['updated'])
@@ -242,9 +242,6 @@ var Db;
                                 tgt[_this.bindings[k]] = updet.payload;
                             });
                         })(k);
-                    }
-                    else {
-                        tgt[this.bindings[k]] = val;
                     }
                 }
             };
@@ -747,6 +744,11 @@ var Db;
             GenericEvent.prototype.parseValue = function (ds) {
                 throw new Error("Please override parseValue in subclasses of GenericEvent");
             };
+            GenericEvent.prototype.applyHooks = function (ed) {
+                for (var k in this.children) {
+                    this.children[k].applyHooks(ed);
+                }
+            };
             /**
              * Return true if this event creates a logica "traversal" on the normal tree structure
              * of events. For example, a reference will traverse to another branch of the tree, so it's
@@ -986,6 +988,8 @@ var Db;
                 if (this.entity && this.entity['postUpdate']) {
                     this.entity.postUpdate(ed);
                 }
+                // cascade hooks to sub entities
+                _super.prototype.applyHooks.call(this, ed);
             };
             EntityEvent.prototype.broadcast = function (ed) {
                 var _this = this;
@@ -1021,7 +1025,7 @@ var Db;
                         this.classMeta = this.originalClassMeta;
                     }
                     // TODO?? disciminator : change here then this.classMeta
-                    // If we do't have created the entity instance yet, or the entity we have is not the right
+                    // If we haven't yet created the entity instance, or the entity we have is not the right
                     // type (which could happen if this is an updated and the discriminator changed,
                     // create an instance of the right type.
                     if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
@@ -1563,7 +1567,6 @@ var Db;
                 return _super.prototype.findCreateChildFor.call(this, meta, force);
             };
             MapEvent.prototype.handleDbEvent = function (handler, event, ds, prevKey) {
-                console.log("Got event " + event, " prev " + prevKey + " key " + ds.key(), ds.val());
                 var det = new EventDetails();
                 det.originalEvent = event;
                 det.originalKey = ds.key();
@@ -1594,6 +1597,7 @@ var Db;
                     det.type = Api.EventType.UPDATE;
                 }
                 det.payload = val;
+                subev.applyHooks(det);
                 if (handler.istracking) {
                     this.addToInternal(event, ds, val, det);
                 }
@@ -1765,7 +1769,6 @@ var Db;
                 }
                 this.collection.realField[ds.key()] = val;
                 var newpos = this.findPositionAfter(det.precedingKey);
-                console.log("cur " + curpos + " newpos " + newpos);
                 if (curpos == newpos) {
                     this.arrayValue[curpos] = val;
                     return;
@@ -2045,6 +2048,14 @@ var Db;
             }
             EntityRoot.prototype.get = function (id) {
                 return this.state.load(this.getUrl() + id, this.meta);
+            };
+            EntityRoot.prototype.idOf = function (entity) {
+                var ev = this.state.createEvent(entity);
+                var eu = ev.getUrl();
+                if (!eu) {
+                    return null;
+                }
+                return eu.substr(this.getUrl().length).replace('/', '');
             };
             EntityRoot.prototype.query = function () {
                 // TODO implement this
@@ -3113,4 +3124,3 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
-//# sourceMappingURL=Db3.js.map

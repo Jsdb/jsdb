@@ -1,8 +1,7 @@
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    __.prototype = b.prototype;
-    d.prototype = new __();
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
@@ -75,6 +74,9 @@ var SubEntity = (function () {
     }
     SubEntity.prototype.getSomething = function () {
         return "something";
+    };
+    SubEntity.prototype.postUpdate = function (ed) {
+        this._lastUpdateEv = ed;
     };
     return SubEntity;
 })();
@@ -912,6 +914,7 @@ describe('Db3 >', function () {
                     M.assert("Loaded main").when(ws1.str).is('String 1');
                     M.assert("Sub has right type").when(ws1.sub).is(M.instanceOf(SubEntity));
                     M.assert("Loaded subentity").when(ws1.sub.str).is('Sub String 1');
+                    M.assert("Called sub entity postUpdate").when(ws1.sub._lastUpdateEv).is(M.aTruthy);
                 });
             });
             it('should load sub sub entities with the main one', function () {
@@ -922,6 +925,7 @@ describe('Db3 >', function () {
                     M.assert("Loaded subentity").when(ws1.nested.str).is('Sub String 3');
                     M.assert("Sub has right type").when(ws1.nested.sub).is(M.instanceOf(SubEntity));
                     M.assert("Loaded subsubentity").when(ws1.nested.sub.str).is('Sub Sub String 3');
+                    M.assert("Called subsubentity postUpdate").when(ws1.nested.sub._lastUpdateEv).is(M.aTruthy);
                 });
             });
             it('should load sub sub entities discriminating the type', function () {
@@ -937,6 +941,7 @@ describe('Db3 >', function () {
                     M.assert("NOT Loaded main").when(ws2.str).is(M.aFalsey);
                     M.assert("Sub has right type").when(ws2.sub).is(M.instanceOf(SubEntity));
                     M.assert("Loaded subentity").when(ws2.sub.str).is('Sub String 1');
+                    M.assert("Called sub entity postUpdate").when(ws2.sub._lastUpdateEv).is(M.aTruthy);
                 });
             });
             it('should handle null sub entities when loading withOUT the main one', function () {
@@ -2126,4 +2131,3 @@ describe('Db3 >', function () {
         });
     });
 });
-//# sourceMappingURL=Db3Tests.js.map

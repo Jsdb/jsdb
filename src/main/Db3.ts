@@ -379,7 +379,7 @@ module Db {
 			// Handling methods
 			/**
 			 * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 * 
+			 * 
 			 * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced}, 
 			 * 		or used on operations like {@link load}, {@link live} etc.. 
 			 */
@@ -447,6 +447,7 @@ module Db {
 		
 		export interface IEntityRoot<E extends Entity> extends IUrled {
 			get(id:string):E;
+			idOf(instance :E) :string;
 			query() :IQuery<E>;
 		}
 		
@@ -875,6 +876,7 @@ module Db {
 					if (val instanceof EventDetails) {
 						val = (<EventDetails<any>>val).payload;
 					}
+					tgt[this.bindings[k]]= val;
 					if (this.live[k]) {
 						var evt = evts[i];
 						if (!evt['updated']) throw new Error('Cannot find an updated event to keep ' + k + ' live');
@@ -885,8 +887,6 @@ module Db {
 								tgt[this.bindings[k]] = updet.payload;
 							});
 						})(k);
-					} else {
-						tgt[this.bindings[k]]= val;
 					}
 				}
 			}
@@ -1430,6 +1430,12 @@ module Db {
 				throw new Error("Please override parseValue in subclasses of GenericEvent");
 			}
 			
+			applyHooks(ed :EventDetails<any>) {
+				for (var k in this.children) {
+					this.children[k].applyHooks(ed);
+				}
+			}
+				
 			/**
 			 * Return true if this event creates a logica "traversal" on the normal tree structure 
 			 * of events. For example, a reference will traverse to another branch of the tree, so it's
@@ -1669,10 +1675,12 @@ module Db {
 				super.init(h);
 			}
 
-			private applyHooks(ed :EventDetails<E>) {
+			applyHooks(ed :EventDetails<E>) {
 				if (this.entity && this.entity['postUpdate']) {
 					(<Api.IEntityHooks>this.entity).postUpdate(ed);
 				}
+				// cascade hooks to sub entities
+				super.applyHooks(ed);
 			}
 			
 			protected broadcast(ed :EventDetails<E>) {
@@ -1709,7 +1717,7 @@ module Db {
 						this.classMeta = this.originalClassMeta;
 					}
 					// TODO?? disciminator : change here then this.classMeta
-					// If we do't have created the entity instance yet, or the entity we have is not the right
+					// If we haven't yet created the entity instance, or the entity we have is not the right
 					// type (which could happen if this is an updated and the discriminator changed,
 					// create an instance of the right type.
 					if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
@@ -2235,7 +2243,6 @@ module Db {
 
 			
 			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :FirebaseDataSnapshot, prevKey :string) {
-				console.log("Got event " + event, " prev " + prevKey + " key " + ds.key(), ds.val());
 				var det = new EventDetails<E>();
 				det.originalEvent = event;
 				det.originalKey = ds.key();
@@ -2265,6 +2272,7 @@ module Db {
 					det.type = Api.EventType.UPDATE;
 				}
 				det.payload = val;
+				subev.applyHooks(det);
 				
 				if (handler.istracking) {
 					this.addToInternal(event,ds,val,det);
@@ -2442,8 +2450,6 @@ module Db {
 				this.collection.realField[ds.key()] = val;
 
 				var newpos = this.findPositionAfter(det.precedingKey);
-				
-				console.log("cur " + curpos + " newpos " + newpos);
 				
 				if (curpos == newpos) {
 					this.arrayValue[curpos] = val;
@@ -2714,6 +2720,15 @@ module Db {
 			
 			get(id:string) :E {
 				return <E>this.state.load(this.getUrl() + id, this.meta);
+			}
+			
+			idOf(entity :E) :string {
+				var ev = this.state.createEvent(entity);
+				var eu = ev.getUrl();
+				if (!eu) {
+					return null;
+				}
+				return eu.substr(this.getUrl().length).replace('/','');
 			}
 			
 			query() :Api.IQuery<E> {

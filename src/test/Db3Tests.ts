@@ -47,14 +47,21 @@ class WithMoreProps extends WithProps {
 }
 
 class SubEntity {
+	_lastUpdateEv :Db3.Api.IEventDetails<WithProps>;
 	str :string;
 	getSomething() {
 		return "something";
 	}
+	
+	postUpdate(ed :Db3.Api.IEventDetails<WithProps>) {
+		this._lastUpdateEv = ed;
+	}
+	
 }
 
 @Db3.discriminator('oth')
 class SubEntityOth extends SubEntity {
+	
 	otherData = 1;
 	
 	@Db3.embedded(SubEntity)
@@ -907,6 +914,7 @@ describe('Db3 >', () => {
 					M.assert("Loaded main").when(ws1.str).is('String 1');
 					M.assert("Sub has right type").when(ws1.sub).is(M.instanceOf(SubEntity));
 					M.assert("Loaded subentity").when(ws1.sub.str).is('Sub String 1');
+					M.assert("Called sub entity postUpdate").when(ws1.sub._lastUpdateEv).is(M.aTruthy);
 				});
 			});
 			
@@ -918,6 +926,7 @@ describe('Db3 >', () => {
 					M.assert("Loaded subentity").when(ws1.nested.str).is('Sub String 3');
 					M.assert("Sub has right type").when(ws1.nested.sub).is(M.instanceOf(SubEntity));
 					M.assert("Loaded subsubentity").when(ws1.nested.sub.str).is('Sub Sub String 3');
+					M.assert("Called subsubentity postUpdate").when(ws1.nested.sub._lastUpdateEv).is(M.aTruthy);
 				});
 			});
 			
@@ -935,6 +944,7 @@ describe('Db3 >', () => {
 					M.assert("NOT Loaded main").when(ws2.str).is(M.aFalsey);
 					M.assert("Sub has right type").when(ws2.sub).is(M.instanceOf(SubEntity));
 					M.assert("Loaded subentity").when(ws2.sub.str).is('Sub String 1');
+					M.assert("Called sub entity postUpdate").when(ws2.sub._lastUpdateEv).is(M.aTruthy);
 				});
 			});
 			

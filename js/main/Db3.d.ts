@@ -280,7 +280,7 @@ declare module Db {
             getReferencedUrl(): string;
             /**
              * Unregisters all callbacks and stops all undergoing operations started with the given context.
-<			 *
+             *
              * @param ctx the context object used to register callbacks using {@link updated} or {@link referenced},
              * 		or used on operations like {@link load}, {@link live} etc..
              */
@@ -339,6 +339,7 @@ declare module Db {
         }
         interface IEntityRoot<E extends Entity> extends IUrled {
             get(id: string): E;
+            idOf(instance: E): string;
             query(): IQuery<E>;
         }
         interface IObservableEvent<E extends Entity> extends IUrled {
@@ -953,6 +954,7 @@ declare module Db {
              * the {@link entity} this event is working on.
              */
             parseValue(ds: FirebaseDataSnapshot): void;
+            applyHooks(ed: EventDetails<any>): void;
             /**
              * Return true if this event creates a logica "traversal" on the normal tree structure
              * of events. For example, a reference will traverse to another branch of the tree, so it's
@@ -1084,7 +1086,7 @@ declare module Db {
              */
             handleProjection(ds: FirebaseDataSnapshot): void;
             init(h: EventHandler): void;
-            private applyHooks(ed);
+            applyHooks(ed: EventDetails<E>): void;
             protected broadcast(ed: EventDetails<E>): void;
             parseValue(ds: FirebaseDataSnapshot): void;
             load(ctx: Object): Promise<EventDetails<E>>;
@@ -1283,6 +1285,7 @@ declare module Db {
             private meta;
             constructor(state: DbState, meta: ClassMetadata);
             get(id: string): E;
+            idOf(entity: E): string;
             query(): Api.IQuery<E>;
             getUrl(): string;
         }
