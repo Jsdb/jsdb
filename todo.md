@@ -15,6 +15,54 @@ emb :TheType
 ref :TheType
 ```
 
+> There is currently a bug that prevents completely supporting it. If the type is declared later in the file
+> (let alone in another file with circular dependency), it will not be resolved. It's already a problem with
+> the normal annotations, but there we can replace it with a function returning the type as late as poassible 
+> (already done), while here we have to wait for the language to support it properly.
+
+
+TEST Support binding and prjections on collections
+---------------------------------------------
+
+Basic support should already be there, since it's built into the events.
+
+
+Support automatic pre-resolving for references
+--------------------------------------------
+
+Sometimes we might want a reference to be automatically resolved on load, like
+a binding is but the other way around.
+
+To explain it better in code :
+```typescript
+class Ship {
+	@Tsdb.reference()
+	clazz :ShipClass;
+
+	name: string;
+
+	getTag() {
+		return "Ship " + this.name + ", class " + this.clazz.name; 
+	}	
+}
+
+var sh = Db(Ship).get('s1');
+sh.load(this).then(()=>console.log(sh.getTag()));
+// Will log "Ship xyz, class undefined", because clazz has not been resolved
+// So we have to write (tedious) 
+sh.load(this).then(()=>{
+	return Db(sh.clazz).load(this);
+})
+.then(()=>console.log(sh.getTag()));
+```
+
+We could instead have the sh.clazz resolved as soon as possible without user
+intervention, cause we know it is used a lot in the code so we always want it 
+to be resolved, like binding does.
+
+This is somehow an alternative to projections, which are used for the same reason
+but with better data access.
+
 
 Un-evented unboxing
 -------------------
@@ -29,34 +77,6 @@ Eventually, if emitDecoratorMetadata could emit metadata for all the properties 
 also non annotated, then we could automatically do the right unboxing for all the non-annotated,
 non-primitive types.
 
-
-Move IDbOperations on the hybrid type itself
---------------------------------------------
-
-Currently, to load from a url, we have to write :
-
-```
-Db().load(str);
-```
-
-Also, if the db is obtained with the ``of``, we have to write the following (horrible) stuff:
-
-```
-Tsdb.of(this)().load(str);
-```
-
-Since it's a hybrid type, IDbOperations could be directly implemented by the static db type.
-
-Add another static method for getting the db 
---------------------------------------------
-
-To avoid this:
-```
-Tsdb.of(this)(this).updated(...);
-```
-
-Another method similar to Tsdb.of (could be Tsdb.when(this), about(this) or similar) should
-return the db event instead of the db itself. 
 
 
 Write an interface for database configuration
@@ -87,6 +107,11 @@ This would automatically grant the peristence of parent events as long as child 
 Support for calling server side methods
 --------------------------------------
 
+> !! Need to clarify the semantics a bit, what can be passed, what is serialized and how etc..
+
+> Depends on "Complete loading by url"
+
+ 
 
 Auto-binding
 ------------
@@ -160,3 +185,8 @@ of the programmer, the instance should be a new one.
 
 This stems from the fact that embeddeds don't have a key to differentiate, when saving
 and then when updating, between two different instances.
+
+> It could be resolved adding some more saved metadata (we already have 
+> the discriminator). Ad additional "instid" could be created for each newly created instance,
+> and when loading the instance could be completely replaced if the instid changed.
+

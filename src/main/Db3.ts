@@ -53,10 +53,8 @@ module Db {
 		}
 	}
 	
-	export function of(e :Api.Entity) :Db.Api.IDb3Static {
-		var ge = entEvent.get(e);
-		if (!ge) return null;
-		return ge.state.db;
+	export function of<E extends Api.Entity>(e :E) :Db.Api.IEntityOrReferenceEvent<E> {
+		return entEvent.get(e);
 	}
 	
 	/**
@@ -184,6 +182,13 @@ module Db {
 		export interface SortingData {
 			field :string;
 			desc?: boolean;
+		}
+		
+		/**
+		 * Binding between parent and {@link embedded} entities.
+		 */
+		export interface IBinding {
+			bind(localName :string, targetName :string, live? :boolean);
 		}
 		
 		/**
@@ -688,6 +693,9 @@ module Db {
 			dereference(ctx:Object) :Promise<E[]>;
 		}
 		
+		/**
+		 * A query, performed on a collection or on an entity root.
+		 */
 		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
 			load(ctx:Object) :Promise<E[]>;
 			dereference(ctx:Object) :Promise<E[]>;
@@ -697,7 +705,87 @@ module Db {
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
 		}
+				
+		/**
+		 * Database configuration, use one subclass like {@link FirebaseConf}.
+		 */
+		export interface DatabaseConf {
+			
+		}
 		
+		/**
+		 * Database configuration for Firebase backend.
+		 */
+		export interface FirebaseConf extends DatabaseConf {
+			/**
+			 * Url of the Firebase server.
+			 */
+			baseUrl :string;
+		}
+		
+		/**
+		 * Parameters for an entity declaration.
+		 */
+		export interface EntityParams {
+			/**
+			 * If the entity is rooted, the root name.
+			 */
+			root? :string;
+		}
+		
+		/**
+		 * Parameters for embedded entity declaration.
+		 */
+		export interface EmbeddedParams {
+			/**
+			 * Type of the embedded entity.
+			 */
+			type :Api.EntityType<any>|Api.EntityTypeProducer<any>;
+			/**
+			 * Binding to the embedded entity.
+			 */
+			binding? :Api.IBinding;
+		}
+
+		/**
+		 * Parameters for referenced entity declaration.
+		 */
+		export interface ReferenceParams {
+			/**
+			 * Type of the referenced entity.
+			 */
+			type :Api.EntityType<any>|Api.EntityTypeProducer<any>;
+			/**
+			 * Projections of the entity to save embedded in the parent entity document.
+			 */
+			projections? :string[];
+		}
+		
+		/**
+		 * Parameters for defition of a collection.
+		 */
+		export interface CollectionParams {
+			/**
+			 * Type of the entities in the collection.
+			 */
+			type: Api.EntityType<any>|Api.EntityTypeProducer<any>;
+			/**
+			 * true if this is a collection of references, false (default) for a collection of embedded entities.
+			 */
+			reference?: boolean;
+			/**
+			 * Default sort order of the collection
+			 */
+			sorting? :Api.SortingData
+			/**
+			 * Binding on the embedded entities of this collection.
+			 */
+			binding? :Api.IBinding;
+			/**
+			 * Projections of the referenced entities of this collection.
+			 */
+			projections? :string[];
+		}
 	}
 	
 	/**
@@ -772,13 +860,6 @@ module Db {
 		}
 		
 		/**
-		 * Binding between parent and {@link embedded} entities.
-		 */
-		export interface IBinding {
-			bind(localName :string, targetName :string, live? :boolean);
-		}
-		
-		/**
 		 * Current state of an ongoing binding.
 		 */
 		export interface BindingState {
@@ -791,11 +872,11 @@ module Db {
 		/**
 		 * Implementation of {@link IBinding}.
 		 */
-		export class BindingImpl implements IBinding {
+		export class BindingImpl implements Api.IBinding {
 			keys :string[] = [];
 			bindings : {[index:string]:string} = {};
 			live : {[index:string]:boolean} = {};
-			bind(local :string, remote :string, live :boolean = true):IBinding {
+			bind(local :string, remote :string, live :boolean = true):Api.IBinding {
 				this.keys.push(local);
 				this.bindings[local] = remote;
 				this.live[local] = live;
@@ -1192,9 +1273,6 @@ module Db {
 			 */
 			setEntity(entity :Api.Entity) {
 				this.entity = entity;
-				if (entity && typeof entity == 'object') {
-					this.state.bindEntity(this.entity, this);
-				}
 				// TODO clean the children if entity changed? they could be pointing to old instance data
 			}
 			
@@ -1219,6 +1297,10 @@ module Db {
 			 */
 			get originalClassMeta() :ClassMetadata {
 				return this._originalClassMeta;
+			}
+			
+			get db() {
+				return this.state.db;
 			}
 			
 			/**
@@ -1646,6 +1728,9 @@ module Db {
 				// Update the local classMeta if entity type changed
 				if (this.entity) {
 					this.classMeta = this.state.myMeta.findMeta(this.entity);
+				}
+				if (this.entity) {
+					this.state.bindEntity(this.entity, this);
 				}
 			}
 			
@@ -2900,14 +2985,14 @@ module Db {
 				return this.conf['baseUrl'];
 			}
 			
-			bindEntity(e :Api.Entity, ev :GenericEvent) {
+			bindEntity(e :Api.Entity, ev :EntityEvent<any>) {
 				// TODO probably we should check and raise an error is the entity was already bound
 				entEvent.set(e, ev);
 			}
 			
 			createEvent(e :Api.Entity, stack :MetaDescriptor[] = []) :GenericEvent {
 				//var roote = (<IDb3Annotated>e).__dbevent;
-				var roote = entEvent.get(e);
+				var roote :GenericEvent = entEvent.get(e);
 				if (!roote) {
 					var clmeta = this.myMeta.findMeta(e);
 					var nre = new EntityEvent();
@@ -2916,7 +3001,7 @@ module Db {
 					nre.classMeta = clmeta;
 					roote = nre;
 					//(<IDb3Annotated>e).__dbevent = roote;
-					entEvent.set(e, roote);
+					entEvent.set(e, <EntityEvent<any>>roote);
 				} else {
 					if (roote.state != this) throw new Error("The entity " + roote.getUrl(true) + " is already attached to another database, not to " + this.getUrl());
 				}
@@ -3149,7 +3234,7 @@ module Db {
 
 		
 		export class EmbeddedMetaDescriptor extends MetaDescriptor {
-			binding: IBinding = null;
+			binding: Api.IBinding = null;
 			
 			named(name :string) :EmbeddedMetaDescriptor {
 				super.named(name);
@@ -3167,7 +3252,7 @@ module Db {
 				return ret;
 			}
 			
-			setBinding(binding :IBinding) {
+			setBinding(binding :Api.IBinding) {
 				this.binding = binding;
 			}
 		}
@@ -3193,76 +3278,57 @@ module Db {
 			
 		}
 		
-		export class MapMetaDescriptor extends MetaDescriptor {
+		export class CollectionMetaDescriptor extends MetaDescriptor {
 			isReference = false;
 			sorting :Api.SortingData = null;
+			project :string[];
+			binding :Api.IBinding;
 			
-			
+			configure(allMetadata :Metadata, ret :MapEvent<any>) :MapEvent<any> {
+				ret.url = this.getRemoteName();
+				// TODO i need this search? can't i cache this?
+				// TODO maybe we should assert here that there is a metadata for this type
+				ret.classMeta = allMetadata.findMeta(this.ctor);
+				ret.nameOnParent = this.localName;
+				ret.isReference = this.isReference;
+				ret.sorting = this.sorting;
+				ret.project = this.project;
+				ret.binding = <BindingImpl>this.binding;
+				return ret;
+			}
+		}
+		
+		export class MapMetaDescriptor extends CollectionMetaDescriptor {
 			named(name :string) :MapMetaDescriptor {
 				super.named(name);
 				return this;
 			}
 			
 			createEvent(allMetadata :Metadata) :GenericEvent {
-				var ret = new MapEvent();
-				ret.url = this.getRemoteName();
-				// TODO i need this search? can't i cache this?
-				// TODO maybe we should assert here that there is a metadata for this type
-				ret.classMeta = allMetadata.findMeta(this.ctor);
-				ret.nameOnParent = this.localName;
-				ret.isReference = this.isReference;
-				ret.sorting = this.sorting;
-				return ret;
+				return super.configure(allMetadata, new MapEvent());
 			}
-			
 		}
 		
-		export class SetMetaDescriptor extends MetaDescriptor {
-			isReference = false;
-			sorting :Api.SortingData = null;
-			
-			
+		export class SetMetaDescriptor extends CollectionMetaDescriptor {
 			named(name :string) :SetMetaDescriptor {
 				super.named(name);
 				return this;
 			}
 			
 			createEvent(allMetadata :Metadata) :GenericEvent {
-				var ret = new SetEvent();
-				ret.url = this.getRemoteName();
-				// TODO i need this search? can't i cache this?
-				// TODO maybe we should assert here that there is a metadata for this type
-				ret.classMeta = allMetadata.findMeta(this.ctor);
-				ret.nameOnParent = this.localName;
-				ret.isReference = this.isReference;
-				ret.sorting = this.sorting;
-				return ret;
+				return super.configure(allMetadata, new SetEvent());
 			}
-			
 		}
 
-		export class ListMetaDescriptor extends MetaDescriptor {
-			isReference = false;
-			sorting :Api.SortingData = null;
-			
-			
+		export class ListMetaDescriptor extends CollectionMetaDescriptor {
 			named(name :string) :SetMetaDescriptor {
 				super.named(name);
 				return this;
 			}
 			
 			createEvent(allMetadata :Metadata) :GenericEvent {
-				var ret = new ListEvent();
-				ret.url = this.getRemoteName();
-				// TODO i need this search? can't i cache this?
-				// TODO maybe we should assert here that there is a metadata for this type
-				ret.classMeta = allMetadata.findMeta(this.ctor);
-				ret.nameOnParent = this.localName;
-				ret.isReference = this.isReference;
-				ret.sorting = this.sorting;
-				return ret;
+				return super.configure(allMetadata, new ListEvent());
 			}
-			
 		}
 		
 		export class ObservableMetaDescriptor extends MetaDescriptor {
@@ -3510,7 +3576,6 @@ module Db {
 		}
 		
 		
-		
 		export class WeakWrap<V> {
 			private wm :WeakMap<any,V> = null;
 			private id :string;
@@ -3553,12 +3618,13 @@ module Db {
 				var obj = this.getOrMake(k);
 				delete obj[this.id];
 			}
-			
 		}
+		
+		
 
 	}
 	
-	export function bind(localName :string, targetName :string, live :boolean = true) :Internal.IBinding {
+	export function bind(localName :string, targetName :string, live :boolean = true) :Api.IBinding {
 		var ret = new Internal.BindingImpl();
 		ret.bind(localName, targetName,live);
 		return ret;
@@ -3572,7 +3638,7 @@ module Db {
 	}
 	
 	// --- Annotations
-	export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, binding? :Internal.IBinding) :PropertyDecorator {
+	export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.EmbeddedParams, binding? :Api.IBinding) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find embedded class for " + propertyKey.toString());
 			var ret = meta.embedded(def, binding);
@@ -3581,7 +3647,7 @@ module Db {
 		}
 	}
 	
-	export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, project? :string[]) :PropertyDecorator {
+	export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
 			var ret = meta.reference(def, project);
@@ -3590,28 +3656,28 @@ module Db {
 		}
 	}
 	
-	export function map(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
+	export function map(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference :boolean = false) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find map value type for " + propertyKey.toString());
-			var ret = meta.map(valueType, reference, sorting);
+			var ret = meta.map(valueType, reference);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
 		}
 	}
 	
-	export function set(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
+	export function set(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference :boolean = false) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find set value type for " + propertyKey.toString());
-			var ret = meta.set(valueType, reference, sorting);
+			var ret = meta.set(valueType, reference);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
 		}
 	}
 
-	export function list(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>, reference :boolean = false, sorting? :Api.SortingData) :PropertyDecorator {
+	export function list(valueType :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference :boolean = false) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
 			if (!valueType) throw new Error("Cannot find list value type for " + propertyKey.toString());
-			var ret = meta.list(valueType, reference, sorting);
+			var ret = meta.list(valueType, reference);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
 		}
@@ -3702,7 +3768,11 @@ module Db {
 
 	
 	export module meta {
-		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, binding? :Internal.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.EmbeddedParams, binding? :Api.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+			if ((<Api.EmbeddedParams>def).type) {
+				binding = binding || (<Api.EmbeddedParams>def).binding;
+				def = (<Api.EmbeddedParams>def).type;
+			}
 			if (!def) throw new Error("Cannot find embedded class");
 			var ret = new Db.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
@@ -3710,7 +3780,11 @@ module Db {
 			return ret;
 		}
 		
-		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+			if ((<Api.ReferenceParams>def).type) {
+				project = project || (<Api.ReferenceParams>def).projections;
+				def = (<Api.ReferenceParams>def).type;
+			}
 			if (!def) throw new Error("Cannot find referenced class");
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
@@ -3718,31 +3792,36 @@ module Db {
 			return ret;
 		}
 		
-		export function map(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.MapMetaDescriptor {
-			if (!valuetype) throw new Error("Cannot find map value type");
-			var ret = new Db.Internal.MapMetaDescriptor();
-			ret.setType(valuetype);
+		function configureCollectionMeta<X extends Db.Internal.CollectionMetaDescriptor>(ret :X, def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :X {
+			var sorting :Api.SortingData;
+			var project :string[];
+			var binding :Api.IBinding;
+			if ((<Api.CollectionParams>def).type) {
+				reference = typeof reference !== 'undefined' ? reference : (<Api.CollectionParams>def).reference;
+				sorting = (<Api.CollectionParams>def).sorting;
+				project = (<Api.CollectionParams>def).projections;
+				binding = (<Api.CollectionParams>def).binding;
+				def = (<Api.CollectionParams>def).type;
+			}
+			if (!def) throw new Error("Cannot find map value type");
+			ret.setType(def);
 			ret.isReference = reference;
 			ret.sorting = sorting;
+			ret.project = project;
+			ret.binding = binding;
 			return ret;
 		}
 		
-		export function set(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.SetMetaDescriptor {
-			if (!valuetype) throw new Error("Cannot find set value type");
-			var ret = new Db.Internal.SetMetaDescriptor();
-			ret.setType(valuetype);
-			ret.isReference = reference;
-			ret.sorting = sorting;
-			return ret;
+		export function map(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.MapMetaDescriptor {
+			return configureCollectionMeta(new Db.Internal.MapMetaDescriptor(), def, reference);
 		}
 		
-		export function list(valuetype: Api.EntityType<any>|Api.EntityTypeProducer<any>, reference = false, sorting? :Api.SortingData) :Db.Internal.ListMetaDescriptor {
-			if (!valuetype) throw new Error("Cannot find list value type");
-			var ret = new Db.Internal.ListMetaDescriptor();
-			ret.setType(valuetype);
-			ret.isReference = reference;
-			ret.sorting = sorting;
-			return ret;
+		export function set(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.SetMetaDescriptor {
+			return configureCollectionMeta(new Db.Internal.SetMetaDescriptor(), def, reference);
+		}
+		
+		export function list(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.ListMetaDescriptor {
+			return configureCollectionMeta(new Db.Internal.ListMetaDescriptor(), def, reference);
 		}
 		
 		export function observable() :Db.Internal.ObservableMetaDescriptor {
@@ -3780,7 +3859,7 @@ var defaultDb :Db.Api.IDb3Static = null;
  * Weak association between entities and their database events. Each entity instance can be 
  * connected only to a single database event, and as such to a single database.
  */
-var entEvent = new Db.Utils.WeakWrap<Db.Internal.GenericEvent>();
+var entEvent = new Db.Utils.WeakWrap<Db.Internal.EntityEvent<any>>();
 
 
 export = Db;

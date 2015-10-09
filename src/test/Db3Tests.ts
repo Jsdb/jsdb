@@ -153,7 +153,7 @@ class WithSet {
 	@Db3.set(WithProps, true)
 	refSet :WithProps[] = [];
 	
-	@Db3.set(SubEntity, false, Db3.sortBy('str'))
+	@Db3.set({type:SubEntity, sorting: Db3.sortBy('str')})
 	sortedSet :SubEntity[] = [];
 	
 }
