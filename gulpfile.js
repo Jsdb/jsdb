@@ -12,12 +12,15 @@ var gulp = require("gulp");
 var merge = require('merge2');
 var gutil = require("gulp-util");
 var ts = require("gulp-typescript");
+var sourcemaps = require('gulp-sourcemaps');
+var path = require('path');
 var dts = require('dts-bundle');
 var tslint = require("gulp-tslint");
 var typedoc = require("gulp-typedoc");
 // Other Modules
 var runSequence = require("run-sequence");
 var mocha = require("gulp-mocha");
+var spawnMocha = require("gulp-spawn-mocha");
 var istanbul = require('gulp-istanbul');
 var replace = require('gulp-replace');
 var moment = require('moment');
@@ -37,12 +40,12 @@ var CODENAME = gulpdata.codeName || packg.name || 'project';
 
 
 var paths = {
-	tests: ['./js/test/*.js'],
+	tests: ['./js/test/**/*.js'],
 	mainDts: './js/main/index.d.ts',
 	ts: ['./src/**/*.ts'],
 	js: ['./js/**/*.js'],
-	jsApp: ['./js/main/*.js'],
-	jsTest: ['.js/test/*.js'],
+	jsApp: ['./js/main/**/*.js'],
+	jsTest: ['.js/test/**/*.js'],
 	tsout: './js',
 	tsoutApp: './js/main',
 	tsApp: ['./src/main/**/*.ts'],
@@ -195,6 +198,8 @@ gulp.task("lint", function (cb) {
  */
 gulp.task("test", ["ts"], function (cb) {
 	gulp.src(paths.jsApp)
+		.pipe(replace('var __decorate =','/* istanbul ignore next */ var __decorate ='))
+		.pipe(replace('var __extends =','/* istanbul ignore next */ var __extends ='))
 		.pipe(istanbul()) // Covering files
 		.pipe(istanbul.hookRequire()) // Force `require` to return covered files
 		.on('finish', function () {
@@ -204,6 +209,24 @@ gulp.task("test", ["ts"], function (cb) {
 			.pipe(istanbul.enforceThresholds({ thresholds: { global: 70 } })) // Enforce a coverage of at least 90%
 			.on('end', cb);
 		});
+});
+
+/**
+ * Run mocha with debug on, without other things active
+ */
+gulp.task("test:debug", ["ts"], function (cb) {
+	gulp.src(paths.tests)
+		.pipe(spawnMocha({debugBrk:true}))
+		.on('end', cb);
+});
+
+/**
+ * Run mocha without coverage instrumentation
+ */
+gulp.task("test:clean", ["ts"], function (cb) {
+	gulp.src(paths.tests)
+		.pipe(spawnMocha())
+		.on('end', cb);
 });
 
 /**
@@ -272,11 +295,28 @@ gulp.task("ts", ["ts:src"], function () {
 		typescript: require('typescript')
 	});
 	var tsResult = gulp.src(paths.ts, {base:'./src'})
+		.pipe(sourcemaps.init())
 		.pipe(ts(tsProject));
 	
+	var srcRoot = process.cwd() + '/src/';
 	return merge([
 	tsResult.js
 		.pipe(replace('VERSION_TAG', versionTag()))
+		.pipe(sourcemaps.write('.',{
+			includeContent:false,
+			sourceRoot: function(file) {
+				//console.log(process.cwd());
+				//console.log(file.relative);
+				//console.log(file.base);
+				//console.log(file.cwd);
+				var jsdir = process.cwd() + '/js/' + file.relative;
+				jsdir = path.resolve(jsdir, '..');
+				//console.log(jsdir);
+				var relroot = path.relative(jsdir, srcRoot); 
+				//console.log(relroot);
+				return relroot;
+			}
+		}))
 		.pipe(gulp.dest(paths.tsout))
 	,
 	tsResult.dts
