@@ -7,7 +7,7 @@
     ],
     "tasks": [
         {
-            "taskName": "test",
+            "taskName": "test:clean",
             "args": [],
             "isTestCommand": true,
             "problemMatcher": "$gulp-tsc"
