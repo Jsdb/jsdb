@@ -933,3 +933,5 @@ describe('Db2 Tests', function () {
     // --- Needed
     // TODO binding and live update for collections
 });
+
+//# sourceMappingURL=Db2Tests.js.map

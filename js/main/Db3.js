@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151008_145422_master_1.0.0_5dc3307
+ * TSDB version : 20151009_030628_master_1.0.0_b59a46f
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151008_145422_master_1.0.0_5dc3307';
+var Version = '20151009_030628_master_1.0.0_b59a46f';
 /**
  * The main Db module.
  */
@@ -34,10 +34,7 @@ var Db;
     }
     Db.configure = configure;
     function of(e) {
-        var ge = entEvent.get(e);
-        if (!ge)
-            return null;
-        return ge.state.db;
+        return entEvent.get(e);
     }
     Db.of = of;
     /**
@@ -500,9 +497,6 @@ var Db;
              */
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
-                if (entity && typeof entity == 'object') {
-                    this.state.bindEntity(this.entity, this);
-                }
                 // TODO clean the children if entity changed? they could be pointing to old instance data
             };
             Object.defineProperty(GenericEvent.prototype, "classMeta", {
@@ -530,6 +524,13 @@ var Db;
                  */
                 get: function () {
                     return this._originalClassMeta;
+                },
+                enumerable: true,
+                configurable: true
+            });
+            Object.defineProperty(GenericEvent.prototype, "db", {
+                get: function () {
+                    return this.state.db;
                 },
                 enumerable: true,
                 configurable: true
@@ -956,6 +957,9 @@ var Db;
                 // Update the local classMeta if entity type changed
                 if (this.entity) {
                     this.classMeta = this.state.myMeta.findMeta(this.entity);
+                }
+                if (this.entity) {
+                    this.state.bindEntity(this.entity, this);
                 }
             };
             EntityEvent.prototype.updated = function (ctx, callback, discriminator) {
@@ -2518,80 +2522,72 @@ var Db;
             return ReferenceMetaDescriptor;
         })(MetaDescriptor);
         Internal.ReferenceMetaDescriptor = ReferenceMetaDescriptor;
+        var CollectionMetaDescriptor = (function (_super) {
+            __extends(CollectionMetaDescriptor, _super);
+            function CollectionMetaDescriptor() {
+                _super.apply(this, arguments);
+                this.isReference = false;
+                this.sorting = null;
+            }
+            CollectionMetaDescriptor.prototype.configure = function (allMetadata, ret) {
+                ret.url = this.getRemoteName();
+                // TODO i need this search? can't i cache this?
+                // TODO maybe we should assert here that there is a metadata for this type
+                ret.classMeta = allMetadata.findMeta(this.ctor);
+                ret.nameOnParent = this.localName;
+                ret.isReference = this.isReference;
+                ret.sorting = this.sorting;
+                ret.project = this.project;
+                ret.binding = this.binding;
+                return ret;
+            };
+            return CollectionMetaDescriptor;
+        })(MetaDescriptor);
+        Internal.CollectionMetaDescriptor = CollectionMetaDescriptor;
         var MapMetaDescriptor = (function (_super) {
             __extends(MapMetaDescriptor, _super);
             function MapMetaDescriptor() {
                 _super.apply(this, arguments);
-                this.isReference = false;
-                this.sorting = null;
             }
             MapMetaDescriptor.prototype.named = function (name) {
                 _super.prototype.named.call(this, name);
                 return this;
             };
             MapMetaDescriptor.prototype.createEvent = function (allMetadata) {
-                var ret = new MapEvent();
-                ret.url = this.getRemoteName();
-                // TODO i need this search? can't i cache this?
-                // TODO maybe we should assert here that there is a metadata for this type
-                ret.classMeta = allMetadata.findMeta(this.ctor);
-                ret.nameOnParent = this.localName;
-                ret.isReference = this.isReference;
-                ret.sorting = this.sorting;
-                return ret;
+                return _super.prototype.configure.call(this, allMetadata, new MapEvent());
             };
             return MapMetaDescriptor;
-        })(MetaDescriptor);
+        })(CollectionMetaDescriptor);
         Internal.MapMetaDescriptor = MapMetaDescriptor;
         var SetMetaDescriptor = (function (_super) {
             __extends(SetMetaDescriptor, _super);
             function SetMetaDescriptor() {
                 _super.apply(this, arguments);
-                this.isReference = false;
-                this.sorting = null;
             }
             SetMetaDescriptor.prototype.named = function (name) {
                 _super.prototype.named.call(this, name);
                 return this;
             };
             SetMetaDescriptor.prototype.createEvent = function (allMetadata) {
-                var ret = new SetEvent();
-                ret.url = this.getRemoteName();
-                // TODO i need this search? can't i cache this?
-                // TODO maybe we should assert here that there is a metadata for this type
-                ret.classMeta = allMetadata.findMeta(this.ctor);
-                ret.nameOnParent = this.localName;
-                ret.isReference = this.isReference;
-                ret.sorting = this.sorting;
-                return ret;
+                return _super.prototype.configure.call(this, allMetadata, new SetEvent());
             };
             return SetMetaDescriptor;
-        })(MetaDescriptor);
+        })(CollectionMetaDescriptor);
         Internal.SetMetaDescriptor = SetMetaDescriptor;
         var ListMetaDescriptor = (function (_super) {
             __extends(ListMetaDescriptor, _super);
             function ListMetaDescriptor() {
                 _super.apply(this, arguments);
-                this.isReference = false;
-                this.sorting = null;
             }
             ListMetaDescriptor.prototype.named = function (name) {
                 _super.prototype.named.call(this, name);
                 return this;
             };
             ListMetaDescriptor.prototype.createEvent = function (allMetadata) {
-                var ret = new ListEvent();
-                ret.url = this.getRemoteName();
-                // TODO i need this search? can't i cache this?
-                // TODO maybe we should assert here that there is a metadata for this type
-                ret.classMeta = allMetadata.findMeta(this.ctor);
-                ret.nameOnParent = this.localName;
-                ret.isReference = this.isReference;
-                ret.sorting = this.sorting;
-                return ret;
+                return _super.prototype.configure.call(this, allMetadata, new ListEvent());
             };
             return ListMetaDescriptor;
-        })(MetaDescriptor);
+        })(CollectionMetaDescriptor);
         Internal.ListMetaDescriptor = ListMetaDescriptor;
         var ObservableMetaDescriptor = (function (_super) {
             __extends(ObservableMetaDescriptor, _super);
@@ -2922,34 +2918,34 @@ var Db;
         };
     }
     Db.reference = reference;
-    function map(valueType, reference, sorting) {
+    function map(valueType, reference) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
             if (!valueType)
                 throw new Error("Cannot find map value type for " + propertyKey.toString());
-            var ret = meta.map(valueType, reference, sorting);
+            var ret = meta.map(valueType, reference);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
         };
     }
     Db.map = map;
-    function set(valueType, reference, sorting) {
+    function set(valueType, reference) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
             if (!valueType)
                 throw new Error("Cannot find set value type for " + propertyKey.toString());
-            var ret = meta.set(valueType, reference, sorting);
+            var ret = meta.set(valueType, reference);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
         };
     }
     Db.set = set;
-    function list(valueType, reference, sorting) {
+    function list(valueType, reference) {
         if (reference === void 0) { reference = false; }
         return function (target, propertyKey) {
             if (!valueType)
                 throw new Error("Cannot find list value type for " + propertyKey.toString());
-            var ret = meta.list(valueType, reference, sorting);
+            var ret = meta.list(valueType, reference);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
         };
@@ -3039,6 +3035,10 @@ var Db;
     var meta;
     (function (meta_1) {
         function embedded(def, binding) {
+            if (def.type) {
+                binding = binding || def.binding;
+                def = def.type;
+            }
             if (!def)
                 throw new Error("Cannot find embedded class");
             var ret = new Db.Internal.EmbeddedMetaDescriptor();
@@ -3048,6 +3048,10 @@ var Db;
         }
         meta_1.embedded = embedded;
         function reference(def, project) {
+            if (def.type) {
+                project = project || def.projections;
+                def = def.type;
+            }
             if (!def)
                 throw new Error("Cannot find referenced class");
             var ret = new Db.Internal.ReferenceMetaDescriptor();
@@ -3056,37 +3060,36 @@ var Db;
             return ret;
         }
         meta_1.reference = reference;
-        function map(valuetype, reference, sorting) {
-            if (reference === void 0) { reference = false; }
-            if (!valuetype)
+        function configureCollectionMeta(ret, def, reference) {
+            var sorting;
+            var project;
+            var binding;
+            if (def.type) {
+                reference = typeof reference !== 'undefined' ? reference : def.reference;
+                sorting = def.sorting;
+                project = def.projections;
+                binding = def.binding;
+                def = def.type;
+            }
+            if (!def)
                 throw new Error("Cannot find map value type");
-            var ret = new Db.Internal.MapMetaDescriptor();
-            ret.setType(valuetype);
+            ret.setType(def);
             ret.isReference = reference;
             ret.sorting = sorting;
+            ret.project = project;
+            ret.binding = binding;
             return ret;
+        }
+        function map(def, reference) {
+            return configureCollectionMeta(new Db.Internal.MapMetaDescriptor(), def, reference);
         }
         meta_1.map = map;
-        function set(valuetype, reference, sorting) {
-            if (reference === void 0) { reference = false; }
-            if (!valuetype)
-                throw new Error("Cannot find set value type");
-            var ret = new Db.Internal.SetMetaDescriptor();
-            ret.setType(valuetype);
-            ret.isReference = reference;
-            ret.sorting = sorting;
-            return ret;
+        function set(def, reference) {
+            return configureCollectionMeta(new Db.Internal.SetMetaDescriptor(), def, reference);
         }
         meta_1.set = set;
-        function list(valuetype, reference, sorting) {
-            if (reference === void 0) { reference = false; }
-            if (!valuetype)
-                throw new Error("Cannot find list value type");
-            var ret = new Db.Internal.ListMetaDescriptor();
-            ret.setType(valuetype);
-            ret.isReference = reference;
-            ret.sorting = sorting;
-            return ret;
+        function list(def, reference) {
+            return configureCollectionMeta(new Db.Internal.ListMetaDescriptor(), def, reference);
         }
         meta_1.list = list;
         function observable() {
@@ -3124,3 +3127,5 @@ var defaultDb = null;
  */
 var entEvent = new Db.Utils.WeakWrap();
 module.exports = Db;
+
+//# sourceMappingURL=Db3.js.map

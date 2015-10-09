@@ -14,7 +14,7 @@ declare module 'jsdb' {
                 * @return An initialized and configured db instance
                 */
             function configure(conf: any): Db.Api.IDb3Static;
-            function of(e: Api.Entity): Db.Api.IDb3Static;
+            function of<E extends Api.Entity>(e: E): Db.Api.IEntityOrReferenceEvent<E>;
             /**
                 * Return the {@link defaultDb} if any has been created.
                 */
@@ -115,6 +115,12 @@ declare module 'jsdb' {
                     interface SortingData {
                             field: string;
                             desc?: boolean;
+                    }
+                    /**
+                        * Binding between parent and {@link embedded} entities.
+                        */
+                    interface IBinding {
+                            bind(localName: string, targetName: string, live?: boolean): any;
                     }
                     /**
                         * Interface implemented by all the elements that have an URL.
@@ -556,6 +562,9 @@ declare module 'jsdb' {
                             load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
                     }
+                    /**
+                        * A query, performed on a collection or on an entity root.
+                        */
                     interface IQuery<E extends Entity> extends IReadableCollection<E> {
                             load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
@@ -563,6 +572,80 @@ declare module 'jsdb' {
                             limit(limit: number): IQuery<E>;
                             range(from: any, to: any): IQuery<E>;
                             equals(val: any): IQuery<E>;
+                    }
+                    /**
+                        * Database configuration, use one subclass like {@link FirebaseConf}.
+                        */
+                    interface DatabaseConf {
+                    }
+                    /**
+                        * Database configuration for Firebase backend.
+                        */
+                    interface FirebaseConf extends DatabaseConf {
+                            /**
+                                * Url of the Firebase server.
+                                */
+                            baseUrl: string;
+                    }
+                    /**
+                        * Parameters for an entity declaration.
+                        */
+                    interface EntityParams {
+                            /**
+                                * If the entity is rooted, the root name.
+                                */
+                            root?: string;
+                    }
+                    /**
+                        * Parameters for embedded entity declaration.
+                        */
+                    interface EmbeddedParams {
+                            /**
+                                * Type of the embedded entity.
+                                */
+                            type: Api.EntityType<any> | Api.EntityTypeProducer<any>;
+                            /**
+                                * Binding to the embedded entity.
+                                */
+                            binding?: Api.IBinding;
+                    }
+                    /**
+                        * Parameters for referenced entity declaration.
+                        */
+                    interface ReferenceParams {
+                            /**
+                                * Type of the referenced entity.
+                                */
+                            type: Api.EntityType<any> | Api.EntityTypeProducer<any>;
+                            /**
+                                * Projections of the entity to save embedded in the parent entity document.
+                                */
+                            projections?: string[];
+                    }
+                    /**
+                        * Parameters for defition of a collection.
+                        */
+                    interface CollectionParams {
+                            /**
+                                * Type of the entities in the collection.
+                                */
+                            type: Api.EntityType<any> | Api.EntityTypeProducer<any>;
+                            /**
+                                * true if this is a collection of references, false (default) for a collection of embedded entities.
+                                */
+                            reference?: boolean;
+                            /**
+                                * Default sort order of the collection
+                                */
+                            sorting?: Api.SortingData;
+                            /**
+                                * Binding on the embedded entities of this collection.
+                                */
+                            binding?: Api.IBinding;
+                            /**
+                                * Projections of the referenced entities of this collection.
+                                */
+                            projections?: string[];
                     }
             }
             /**
@@ -586,12 +669,6 @@ declare module 'jsdb' {
                             erase(): void;
                     }
                     /**
-                        * Binding between parent and {@link embedded} entities.
-                        */
-                    interface IBinding {
-                            bind(localName: string, targetName: string, live?: boolean): any;
-                    }
-                    /**
                         * Current state of an ongoing binding.
                         */
                     interface BindingState {
@@ -603,7 +680,7 @@ declare module 'jsdb' {
                     /**
                         * Implementation of {@link IBinding}.
                         */
-                    class BindingImpl implements IBinding {
+                    class BindingImpl implements Api.IBinding {
                             keys: string[];
                             bindings: {
                                     [index: string]: string;
@@ -611,7 +688,7 @@ declare module 'jsdb' {
                             live: {
                                     [index: string]: boolean;
                             };
-                            bind(local: string, remote: string, live?: boolean): IBinding;
+                            bind(local: string, remote: string, live?: boolean): Api.IBinding;
                             /**
                                 * Start pre-loading bound fields.
                                 *
@@ -839,6 +916,7 @@ declare module 'jsdb' {
                                 * Set the {@link _originalClassMeta} this event works on.
                                 */
                             originalClassMeta: ClassMetadata;
+                            db: Api.IDb3Static;
                             /**
                                 * Return this url this event is relative to.
                                 *
@@ -1297,7 +1375,7 @@ declare module 'jsdb' {
                             entityRoot(meta: ClassMetadata): Api.IEntityRoot<any>;
                             entityRootFromUrl(url: string): Api.IEntityRoot<any>;
                             getUrl(): string;
-                            bindEntity(e: Api.Entity, ev: GenericEvent): void;
+                            bindEntity(e: Api.Entity, ev: EntityEvent<any>): void;
                             createEvent(e: Api.Entity, stack?: MetaDescriptor[]): GenericEvent;
                             loadEvent(url: string, meta?: ClassMetadata): GenericEvent;
                             storeInCache(evt: GenericEvent): void;
@@ -1334,31 +1412,32 @@ declare module 'jsdb' {
                             findForDiscriminator(disc: string): ClassMetadata;
                     }
                     class EmbeddedMetaDescriptor extends MetaDescriptor {
-                            binding: IBinding;
+                            binding: Api.IBinding;
                             named(name: string): EmbeddedMetaDescriptor;
                             createEvent(allMetadata: Metadata): GenericEvent;
-                            setBinding(binding: IBinding): void;
+                            setBinding(binding: Api.IBinding): void;
                     }
                     class ReferenceMetaDescriptor extends MetaDescriptor {
                             project: string[];
                             named(name: string): ReferenceMetaDescriptor;
                             createEvent(allMetadata: Metadata): GenericEvent;
                     }
-                    class MapMetaDescriptor extends MetaDescriptor {
+                    class CollectionMetaDescriptor extends MetaDescriptor {
                             isReference: boolean;
                             sorting: Api.SortingData;
+                            project: string[];
+                            binding: Api.IBinding;
+                            configure(allMetadata: Metadata, ret: MapEvent<any>): MapEvent<any>;
+                    }
+                    class MapMetaDescriptor extends CollectionMetaDescriptor {
                             named(name: string): MapMetaDescriptor;
                             createEvent(allMetadata: Metadata): GenericEvent;
                     }
-                    class SetMetaDescriptor extends MetaDescriptor {
-                            isReference: boolean;
-                            sorting: Api.SortingData;
+                    class SetMetaDescriptor extends CollectionMetaDescriptor {
                             named(name: string): SetMetaDescriptor;
                             createEvent(allMetadata: Metadata): GenericEvent;
                     }
-                    class ListMetaDescriptor extends MetaDescriptor {
-                            isReference: boolean;
-                            sorting: Api.SortingData;
+                    class ListMetaDescriptor extends CollectionMetaDescriptor {
                             named(name: string): SetMetaDescriptor;
                             createEvent(allMetadata: Metadata): GenericEvent;
                     }
@@ -1402,24 +1481,24 @@ declare module 'jsdb' {
                             delete(k: any): void;
                     }
             }
-            function bind(localName: string, targetName: string, live?: boolean): Internal.IBinding;
+            function bind(localName: string, targetName: string, live?: boolean): Api.IBinding;
             function sortBy(field: string, desc?: boolean): Api.SortingData;
-            function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, binding?: Internal.IBinding): PropertyDecorator;
-            function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, project?: string[]): PropertyDecorator;
-            function map(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
-            function set(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
-            function list(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): PropertyDecorator;
+            function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): PropertyDecorator;
+            function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): PropertyDecorator;
+            function map(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;
+            function set(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;
+            function list(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;
             function root(name?: string, override?: string): ClassDecorator;
             function discriminator(disc: string): ClassDecorator;
             function override(override?: string): ClassDecorator;
             function observable(): PropertyDecorator;
             function ignore(): PropertyDecorator;
             module meta {
-                    function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, binding?: Internal.IBinding): Db.Internal.EmbeddedMetaDescriptor;
-                    function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any>, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
-                    function map(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.MapMetaDescriptor;
-                    function set(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.SetMetaDescriptor;
-                    function list(valuetype: Api.EntityType<any> | Api.EntityTypeProducer<any>, reference?: boolean, sorting?: Api.SortingData): Db.Internal.ListMetaDescriptor;
+                    function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Db.Internal.EmbeddedMetaDescriptor;
+                    function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
+                    function map(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.MapMetaDescriptor;
+                    function set(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.SetMetaDescriptor;
+                    function list(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.ListMetaDescriptor;
                     function observable(): Db.Internal.ObservableMetaDescriptor;
                     function ignore(): Db.Internal.IgnoreMetaDescriptor;
                     function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;

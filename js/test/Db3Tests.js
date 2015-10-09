@@ -226,7 +226,7 @@ var WithSet = (function () {
         Db3.set(WithProps, true)
     ], WithSet.prototype, "refSet");
     __decorate([
-        Db3.set(SubEntity, false, Db3.sortBy('str'))
+        Db3.set({ type: SubEntity, sorting: Db3.sortBy('str') })
     ], WithSet.prototype, "sortedSet");
     WithSet = __decorate([
         Db3.root('withSet')
@@ -2131,3 +2131,5 @@ describe('Db3 >', function () {
         });
     });
 });
+
+//# sourceMappingURL=Db3Tests.js.map

@@ -1053,3 +1053,5 @@ var Db;
     })(internal = Db.internal || (Db.internal = {}));
 })(Db || (Db = {}));
 module.exports = Db;
+
+//# sourceMappingURL=Db2.js.map
