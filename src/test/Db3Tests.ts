@@ -1072,6 +1072,44 @@ describe('Db3 >', () => {
 			});
 		});
 		
+		describe.only('Urls >', ()=>{
+			it('should load a root entity', ()=>{
+				return Db().load(this, wp1Fb.toString()).then((ed) => {
+					var wp1 = <WithProps>ed.payload;
+					M.assert('Data is of right type').when(wp1).is(M.instanceOf(WithProps));
+					M.assert('Data loaded').when(wp1).is(M.objectMatching({
+						str: 'String 1',
+						num: 200,
+						arr: [1,2,3],
+						subobj: {
+							substr: 'Sub String'
+						},
+						ignored: 'ignored'
+					}));
+					M.assert("Entity hook respected").when(wp1._lastUpdateEv).is(M.objectMatching({
+						type: Db3.Api.EventType.LOAD,
+						payload: M.exactly(wp1)
+					}));
+				});
+			});
+			
+			it('should load an embedded', ()=>{
+				return Db().load(this, ws1Fb.toString() + '/sub').then((ed) => {
+					var sube = <SubEntity>ed.payload;
+					M.assert('Data is of right type').when(sube).is(M.instanceOf(SubEntity));
+					M.assert('Data loaded').when(sube.str).is('Sub String 1');
+				});
+			});
+			
+			it('should load a nested embedded', ()=>{
+				return Db().load(this, ws2Fb.toString() + '/nested/sub').then((ed) => {
+					var sube = <SubEntity>ed.payload;
+					M.assert('Data is of right type').when(sube).is(M.instanceOf(SubEntity));
+					M.assert('Data loaded').when(sube.str).is('Sub Sub String 1');
+				});
+			});
+		});
+		
 		describe('Binding >', () => {
 			it('should bind and keep live on subentity and parent', () => {
 				var wpl1 = Db(WithPreloads).get('wpl1');

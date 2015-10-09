@@ -99,7 +99,7 @@ declare module 'jsdb' {
                             /**
                                 * Load an entity by url. The url can point to a root entity, or an {@link embedded} or {@link reference} value.
                                 */
-                            load<T extends Entity>(url: string): T;
+                            load(ctx: Object, url: string): Promise<IEventDetails<any>>;
                             /**
                                 * Reset the internal state of the db, purging the cache and closing al listeners.
                                 */
@@ -664,7 +664,7 @@ declare module 'jsdb' {
                             state: DbState;
                             constructor(state: DbState);
                             fork(conf: any): Api.IDb3Static;
-                            load<T extends Api.Entity>(url: string): T;
+                            load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
                             reset(): void;
                             erase(): void;
                     }
@@ -892,6 +892,10 @@ declare module 'jsdb' {
                             state: DbState;
                             /** The parent of this event */
                             parent: GenericEvent;
+                            /**
+                                * Local (ram, javascript) name of the entity represented by this event on the parent entity.
+                                */
+                            nameOnParent: string;
                             /** The children of this event */
                             private children;
                             /** Dependant events */
@@ -908,6 +912,7 @@ declare module 'jsdb' {
                                 * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
                                 */
                             setEntity(entity: Api.Entity): void;
+                            protected setEntityOnParent(val?: any): void;
                             /**
                                 * Set the {@link _classMeta} this event works on.
                                 */
@@ -1128,10 +1133,6 @@ declare module 'jsdb' {
                         */
                     class EntityEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
                             /**
-                                * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-                                */
-                            nameOnParent: string;
-                            /**
                                 * If given, binding directives.
                                 */
                             binding: BindingImpl;
@@ -1202,10 +1203,6 @@ declare module 'jsdb' {
                         */
                     class ReferenceEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
                             /**
-                                * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-                                */
-                            nameOnParent: string;
-                            /**
                                 * List of fields to save as projections.
                                 */
                             project: string[];
@@ -1262,7 +1259,6 @@ declare module 'jsdb' {
                         */
                     class MapEvent<E extends Api.Entity> extends GenericEvent implements Api.IMapEvent<E> {
                             isReference: boolean;
-                            nameOnParent: string;
                             project: string[];
                             binding: BindingImpl;
                             sorting: Api.SortingData;
@@ -1329,7 +1325,6 @@ declare module 'jsdb' {
                             serialize(localsOnly?: boolean, fields?: string[]): Object;
                     }
                     class IgnoreEvent<E extends Api.Entity> extends GenericEvent {
-                            nameOnParent: string;
                             val: any;
                             setEntity(): void;
                             parseValue(ds: FirebaseDataSnapshot): void;
@@ -1337,7 +1332,6 @@ declare module 'jsdb' {
                             isLocal(): boolean;
                     }
                     class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
-                            nameOnParent: string;
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
                             live(ctx: Object): void;
                             parseValue(ds: FirebaseDataSnapshot): void;
@@ -1346,10 +1340,12 @@ declare module 'jsdb' {
                     }
                     class EntityRoot<E extends Api.Entity> implements Api.IEntityRoot<E> {
                             constructor(state: DbState, meta: ClassMetadata);
+                            getEvent(id: string): EntityEvent<E>;
                             get(id: string): E;
                             idOf(entity: E): string;
                             query(): Api.IQuery<E>;
                             getUrl(): string;
+                            getRemainingUrl(url: string): string;
                     }
                     class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
                             constructor(ev: GenericEvent);
@@ -1371,16 +1367,16 @@ declare module 'jsdb' {
                             db: Api.IDb3Static;
                             configure(conf: any): void;
                             reset(): void;
-                            entityRoot(ctor: Api.EntityType<any>): Api.IEntityRoot<any>;
-                            entityRoot(meta: ClassMetadata): Api.IEntityRoot<any>;
-                            entityRootFromUrl(url: string): Api.IEntityRoot<any>;
+                            entityRoot(ctor: Api.EntityType<any>): EntityRoot<any>;
+                            entityRoot(meta: ClassMetadata): EntityRoot<any>;
+                            entityRootFromUrl(url: string): EntityRoot<any>;
                             getUrl(): string;
                             bindEntity(e: Api.Entity, ev: EntityEvent<any>): void;
-                            createEvent(e: Api.Entity, stack?: MetaDescriptor[]): GenericEvent;
-                            loadEvent(url: string, meta?: ClassMetadata): GenericEvent;
+                            createEvent(e: Api.Entity, stack?: MetaDescriptor[] | string[]): GenericEvent;
+                            loadEvent(url: string): GenericEvent;
                             storeInCache(evt: GenericEvent): void;
-                            loadEventWithInstance(url: string, meta?: ClassMetadata): GenericEvent;
-                            load<T>(url: string, meta?: ClassMetadata): T;
+                            fetchFromCache(url: string): GenericEvent;
+                            loadEventWithInstance(url: string): GenericEvent;
                     }
                     class MetaDescriptor {
                             localName: string;

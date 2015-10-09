@@ -28,7 +28,7 @@ Basic support should already be there, since it's built into the events.
 
 
 Support automatic pre-resolving for references
---------------------------------------------
+----------------------------------------------
 
 Sometimes we might want a reference to be automatically resolved on load, like
 a binding is but the other way around.
@@ -83,18 +83,6 @@ Write an interface for database configuration
 ---------------------------------------------
 
 
-Complete loading by url
------------------------
-
-It could use the existing methods, simply needs to build the metadata chain from url segments
-rather than from calls to getters. This however limits the scope, cause for example it could be
-hard to go inside a collection (true also for metadata navigation).
-
-Otherwise, it could work like the current one based on metadata, calling child creation.
-
-Otherwise, it could be the current one that become string based (to create children it only needs
-the name, that is a string and is also the path segment of the url).
-
 
 Cache and cache cleaning
 ------------------------
@@ -103,6 +91,7 @@ A simple initial implementation could be based on roots only, where only rooted 
 are cached and managed, with a periodic pruning of unused children events.
 
 This would automatically grant the peristence of parent events as long as child events are active.
+
 
 Support for calling server side methods
 --------------------------------------
@@ -121,7 +110,7 @@ when the entity has been created for the first time programmatically, the bindin
 has to be done manually.
 
 For example:
-```
+```typescript
 class Ship {
 	@Tsdb.reference()
 	clazz :ShipClass;
@@ -189,4 +178,10 @@ and then when updating, between two different instances.
 > It could be resolved adding some more saved metadata (we already have 
 > the discriminator). Ad additional "instid" could be created for each newly created instance,
 > and when loading the instance could be completely replaced if the instid changed.
+
+> Later, to the metadata we could also add a version to make optimistic locking, since
+> Firebase supports in theory optimistic lock (validating the version is previous + 1 for example),
+> and Mongo and every other DB supports it.
+
+
 

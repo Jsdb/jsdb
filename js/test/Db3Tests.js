@@ -1055,6 +1055,41 @@ describe('Db3 >', function () {
                 });
             });
         });
+        describe.only('Urls >', function () {
+            it('should load a root entity', function () {
+                return Db().load(_this, wp1Fb.toString()).then(function (ed) {
+                    var wp1 = ed.payload;
+                    M.assert('Data is of right type').when(wp1).is(M.instanceOf(WithProps));
+                    M.assert('Data loaded').when(wp1).is(M.objectMatching({
+                        str: 'String 1',
+                        num: 200,
+                        arr: [1, 2, 3],
+                        subobj: {
+                            substr: 'Sub String'
+                        },
+                        ignored: 'ignored'
+                    }));
+                    M.assert("Entity hook respected").when(wp1._lastUpdateEv).is(M.objectMatching({
+                        type: Db3.Api.EventType.LOAD,
+                        payload: M.exactly(wp1)
+                    }));
+                });
+            });
+            it('should load an embedded', function () {
+                return Db().load(_this, ws1Fb.toString() + '/sub').then(function (ed) {
+                    var sube = ed.payload;
+                    M.assert('Data is of right type').when(sube).is(M.instanceOf(SubEntity));
+                    M.assert('Data loaded').when(sube.str).is('Sub String 1');
+                });
+            });
+            it('should load a nested embedded', function () {
+                return Db().load(_this, ws2Fb.toString() + '/nested/sub').then(function (ed) {
+                    var sube = ed.payload;
+                    M.assert('Data is of right type').when(sube).is(M.instanceOf(SubEntity));
+                    M.assert('Data loaded').when(sube.str).is('Sub Sub String 1');
+                });
+            });
+        });
         describe('Binding >', function () {
             it('should bind and keep live on subentity and parent', function () {
                 var wpl1 = Db(WithPreloads).get('wpl1');

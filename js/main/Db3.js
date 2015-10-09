@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151009_030628_master_1.0.0_b59a46f
+ * TSDB version : 20151009_184909_master_1.0.0_6f194dd
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151009_030628_master_1.0.0_b59a46f';
+var Version = '20151009_184909_master_1.0.0_6f194dd';
 /**
  * The main Db module.
  */
@@ -137,8 +137,12 @@ var Db;
                 Utils.copyObj(conf, nconf);
                 return createDb(nconf);
             };
-            DbOperations.prototype.load = function (url) {
-                return this.state.load(url);
+            DbOperations.prototype.load = function (ctx, url) {
+                var evt = this.state.loadEvent(url);
+                if (evt['load']) {
+                    return evt['load'](ctx);
+                }
+                throw new Error("The url " + url + " cannot be loaded");
             };
             DbOperations.prototype.reset = function () {
                 this.state.reset();
@@ -479,6 +483,10 @@ var Db;
          */
         var GenericEvent = (function () {
             function GenericEvent() {
+                /**
+                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
+                 */
+                this.nameOnParent = null;
                 /** The children of this event */
                 this.children = {};
                 /** Dependant events */
@@ -498,6 +506,12 @@ var Db;
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 // TODO clean the children if entity changed? they could be pointing to old instance data
+            };
+            GenericEvent.prototype.setEntityOnParent = function (val) {
+                val = val || this.entity;
+                if (this.parent && this.nameOnParent && this.parent.entity) {
+                    this.parent.entity[this.nameOnParent] = val;
+                }
             };
             Object.defineProperty(GenericEvent.prototype, "classMeta", {
                 /**
@@ -934,10 +948,6 @@ var Db;
             function EntityEvent() {
                 _super.apply(this, arguments);
                 /**
-                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-                 */
-                this.nameOnParent = null;
-                /**
                  * If given, binding directives.
                  */
                 this.binding = null;
@@ -1015,25 +1025,31 @@ var Db;
                 this.lastDs = ds;
                 var val = ds.val();
                 if (val) {
-                    // Check if we have a discriminator
-                    if (val['_dis']) {
-                        // Find <nd set the correct metadata
-                        var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta, val['_dis']);
-                        if (!cm)
-                            throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
-                        this.classMeta = cm;
+                    // Avoid messing with the entity if we are processing a reference
+                    if (!val._ref) {
+                        // Check if we have a discriminator
+                        if (val['_dis']) {
+                            // Find and set the correct metadata
+                            var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta, val['_dis']);
+                            if (!cm)
+                                throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
+                            this.classMeta = cm;
+                        }
+                        else {
+                            // If we don't have a discriminator, reset the original metadata
+                            // resetting it is important because this could be an update
+                            this.classMeta = this.originalClassMeta;
+                        }
+                        // TODO?? disciminator : change here then this.classMeta
+                        // If we haven't yet created the entity instance, or the entity we have is not the right
+                        // type (which could happen if this is an updated and the discriminator changed,
+                        // create an instance of the right type.
+                        if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
+                            this.setEntity(this.classMeta.createInstance());
+                        }
                     }
                     else {
-                        // If we don't have a discriminator, reset the original metadata
-                        // resetting it is important because this could be an update
-                        this.classMeta = this.originalClassMeta;
-                    }
-                    // TODO?? disciminator : change here then this.classMeta
-                    // If we haven't yet created the entity instance, or the entity we have is not the right
-                    // type (which could happen if this is an updated and the discriminator changed,
-                    // create an instance of the right type.
-                    if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
-                        this.setEntity(this.classMeta.createInstance());
+                        delete val._ref;
                     }
                     for (var k in val) {
                         if (k == 'constructor')
@@ -1057,9 +1073,7 @@ var Db;
                     this.setEntity(null);
                 }
                 // if it's embedded should set the value on the parent entity
-                if (this.parent && this.nameOnParent) {
-                    this.parent.entity[this.nameOnParent] = this.entity;
-                }
+                this.setEntityOnParent();
             };
             EntityEvent.prototype.load = function (ctx) {
                 var _this = this;
@@ -1265,10 +1279,6 @@ var Db;
                 _super.apply(this, arguments);
                 //classMeta :ClassMetadata = null;
                 /**
-                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-                 */
-                this.nameOnParent = null;
-                /**
                  * List of fields to save as projections.
                  */
                 this.project = null;
@@ -1360,7 +1370,7 @@ var Db;
                     if (this.pointedEvent == null || this.pointedEvent.getUrl() != val._ref) {
                         //  .. create a new pointed event
                         this.prevPointedEvent = this.pointedEvent;
-                        this.pointedEvent = this.state.loadEventWithInstance(val._ref, this.classMeta);
+                        this.pointedEvent = this.state.loadEventWithInstance(val._ref);
                         // Forward the projection
                         this.pointedEvent.handleProjection(ds);
                         this.setEntity(this.pointedEvent.entity);
@@ -1373,9 +1383,7 @@ var Db;
                     this.setEntity(null);
                 }
                 // set the value on the parent entity
-                if (this.parent && this.nameOnParent) {
-                    this.parent.entity[this.nameOnParent] = this.entity;
-                }
+                this.setEntityOnParent();
             };
             ReferenceEvent.prototype.getReferencedUrl = function () {
                 if (!this.pointedEvent)
@@ -1468,7 +1476,6 @@ var Db;
             function MapEvent() {
                 _super.apply(this, arguments);
                 this.isReference = false;
-                this.nameOnParent = null;
                 this.project = null;
                 this.binding = null;
                 this.sorting = null;
@@ -1648,7 +1655,7 @@ var Db;
                     if (!enturl)
                         throw new Error("The entity used as a key in a map must be already saved elsewhere");
                     var entroot = this.state.entityRootFromUrl(enturl);
-                    enturl = enturl.substr(entroot.getUrl().length);
+                    enturl = entroot.getRemainingUrl(enturl);
                     key = enturl.replace(/\//g, '');
                 }
                 return key;
@@ -1660,9 +1667,7 @@ var Db;
                 else {
                     this.realField[ds.key()] = val;
                 }
-                if (this.parent && this.parent.entity) {
-                    this.parent.entity[this.nameOnParent] = this.realField;
-                }
+                this.setEntityOnParent(this.realField);
             };
             MapEvent.prototype.remove = function (keyOrValue) {
                 var _this = this;
@@ -1859,9 +1864,7 @@ var Db;
             };
             ArrayCollectionEvent.prototype.addToInternal = function (event, ds, val, det) {
                 this.evarray.addToInternal(event, ds, val, det);
-                if (this.parent && this.parent.entity) {
-                    this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
-                }
+                this.setEntityOnParent(this.evarray.arrayValue);
             };
             ArrayCollectionEvent.prototype.load = function (ctx) {
                 var _this = this;
@@ -1954,7 +1957,7 @@ var Db;
                     if (!enturl)
                         throw new Error("Cannot add to a set a reference that has not been loaded or not yet been saved");
                     var entroot = this.state.entityRootFromUrl(enturl);
-                    enturl = enturl.substr(entroot.getUrl().length);
+                    enturl = entroot.getRemainingUrl(enturl);
                 }
                 else {
                     // if it's an embedded, check if it has a url and substract my url to obtain id
@@ -1997,7 +2000,6 @@ var Db;
             __extends(IgnoreEvent, _super);
             function IgnoreEvent() {
                 _super.apply(this, arguments);
-                this.nameOnParent = null;
             }
             IgnoreEvent.prototype.setEntity = function () {
                 // can't set entity, will refuse it, it's unmutable
@@ -2018,7 +2020,6 @@ var Db;
             __extends(ObservableEvent, _super);
             function ObservableEvent() {
                 _super.apply(this, arguments);
-                this.nameOnParent = null;
             }
             ObservableEvent.prototype.updated = function (ctx, callback, discriminator) {
                 if (discriminator === void 0) { discriminator = null; }
@@ -2030,9 +2031,7 @@ var Db;
             };
             ObservableEvent.prototype.parseValue = function (ds) {
                 this.setEntity(ds.val());
-                if (this.parent && this.nameOnParent) {
-                    this.parent.entity[this.nameOnParent] = this.entity;
-                }
+                this.setEntityOnParent();
             };
             ObservableEvent.prototype.serialize = function () {
                 return this.entity;
@@ -2050,8 +2049,43 @@ var Db;
                 if (!meta.root)
                     throw new Error("The entity " + meta.getName() + " is not a root entity");
             }
+            EntityRoot.prototype.getEvent = function (id) {
+                var url = this.getUrl() + id + "/";
+                var event = this.state.fetchFromCache(url);
+                if (event)
+                    return event;
+                var dis = null;
+                var colonpos = id.indexOf('*');
+                if (colonpos == 0) {
+                    dis = id.substring(1);
+                }
+                else if (colonpos > 0) {
+                    dis = id.substring(0, colonpos);
+                }
+                event = new EntityEvent();
+                event.url = url;
+                event.state = this.state;
+                event.classMeta = this.meta;
+                var meta = this.meta;
+                if (dis) {
+                    var nmeta = this.state.myMeta.findDiscriminated(this.meta, dis);
+                    // TODO issue a warning if the discriminator can't be resolved, maybe?
+                    if (nmeta)
+                        meta = nmeta;
+                }
+                event.classMeta = meta;
+                var inst = new meta.ctor();
+                if (inst.dbInit) {
+                    inst.dbInit(url, this.state.db);
+                }
+                event.setEntity(inst);
+                this.state.storeInCache(event);
+                this.state.bindEntity(inst, event);
+                return event;
+            };
             EntityRoot.prototype.get = function (id) {
-                return this.state.load(this.getUrl() + id, this.meta);
+                var evt = this.getEvent(id);
+                return evt.entity;
             };
             EntityRoot.prototype.idOf = function (entity) {
                 var ev = this.state.createEvent(entity);
@@ -2067,6 +2101,9 @@ var Db;
             };
             EntityRoot.prototype.getUrl = function () {
                 return this.state.getUrl() + this.meta.root + '/';
+            };
+            EntityRoot.prototype.getRemainingUrl = function (url) {
+                return url.substr(this.getUrl().length);
             };
             return EntityRoot;
         })();
@@ -2176,7 +2213,7 @@ var Db;
                 // - double roots
             };
             DbState.prototype.reset = function () {
-                // Automatic off for all handlers?
+                // Automatic off for all handlers
                 for (var k in this.cache) {
                     var val = this.cache[k];
                     if (val instanceof GenericEvent) {
@@ -2247,6 +2284,8 @@ var Db;
                 for (var i = 0; i < stack.length; i++) {
                     // search child event if any
                     var sube = acp.findCreateChildFor(stack[i]);
+                    if (!sube)
+                        throw new Error("Cannot find an event for " + stack[i]);
                     sube.state = this;
                     if (sube.isTraversingTree()) {
                         roote = sube.getTraversed();
@@ -2257,24 +2296,32 @@ var Db;
                 }
                 return acp;
             };
-            DbState.prototype.loadEvent = function (url, meta) {
+            DbState.prototype.loadEvent = function (url) {
                 if (url.charAt(url.length - 1) != '/')
                     url += '/';
                 var ret = this.cache[url];
                 if (ret)
                     return ret;
-                if (!meta) {
-                }
-                if (!meta) {
+                // Find the entity root
+                var entroot = this.entityRootFromUrl(url);
+                if (!entroot) {
                     throw "The url " + url + " cannot be connected to an entity";
                 }
-                // TODO the meta should construct this
-                var event = new EntityEvent();
-                event.url = url;
-                event.state = this;
-                event.classMeta = meta;
-                this.cache[url] = event;
-                return event;
+                var remurl = entroot.getRemainingUrl(url);
+                // Tokenize the url
+                var toks = remurl.split("/");
+                while (!toks[toks.length - 1])
+                    toks.pop();
+                // Get the root event
+                var roote = entroot.getEvent(toks[0]);
+                if (toks.length > 1) {
+                    // Use the rest to recursively create events
+                    var evt = this.createEvent(roote.entity, toks.slice(1));
+                    return evt;
+                }
+                else {
+                    return roote;
+                }
             };
             DbState.prototype.storeInCache = function (evt) {
                 var url = evt.getUrl();
@@ -2286,7 +2333,10 @@ var Db;
                 }
                 this.cache[url] = evt;
             };
-            DbState.prototype.loadEventWithInstance = function (url, meta) {
+            DbState.prototype.fetchFromCache = function (url) {
+                return this.cache[url];
+            };
+            DbState.prototype.loadEventWithInstance = function (url) {
                 var dis = null;
                 var segs = url.split('/');
                 var lastseg = segs.pop();
@@ -2295,13 +2345,14 @@ var Db;
                 var colonpos = lastseg.indexOf('*');
                 if (colonpos == 0) {
                     dis = lastseg.substring(1);
-                    url = url.substring(0, url.lastIndexOf('/'));
+                    url = url.substring(0, url.lastIndexOf('/') + 1);
                 }
                 else if (colonpos > 0) {
                     dis = lastseg.substring(0, colonpos);
                 }
                 // clean the url from discriminator
-                var event = this.loadEvent(url, meta);
+                var event = this.loadEvent(url);
+                var meta = event.classMeta;
                 if (event instanceof EntityEvent) {
                     if (!event.entity) {
                         // Find right meta if url has a discriminator
@@ -2323,34 +2374,6 @@ var Db;
                     }
                 }
                 return event;
-            };
-            DbState.prototype.load = function (url, meta) {
-                var event = this.loadEventWithInstance(url, meta);
-                return event.entity;
-                /*
-                if (url.charAt(url.length - 1) != '/') url += '/';
-                var ret = this.cache[url];
-                if (ret) return <T>ret.entity;
-                if (!meta) {
-                    // TODO find meta from url
-                }
-                if (!meta) {
-                    throw "The url " + url + " cannot be connected to an entity";
-                }
-                var inst = <any>new meta.ctor();
-                if (inst.dbInit) {
-                    (<IDb3Initable>inst).dbInit(url, this.db);
-                }
-                // TODO the meta should construct this
-                var event = new EntityEvent();
-                event.url = url;
-                event.state = this;
-                event.entity = inst;
-                event.classMeta = meta;
-                (<IDb3Annotated>inst).__dbevent = event;
-                this.cache[url] = event;
-                return inst;
-                */
             };
             return DbState;
         })();

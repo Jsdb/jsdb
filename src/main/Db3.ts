@@ -163,7 +163,7 @@ module Db {
 			/**
 			 * Load an entity by url. The url can point to a root entity, or an {@link embedded} or {@link reference} value.
 			 */
-			load<T extends Entity>(url :string) :T;
+			load(ctx :Object, url :string) :Promise<IEventDetails<any>>;
 			
 			/**
 			 * Reset the internal state of the db, purging the cache and closing al listeners.
@@ -845,8 +845,12 @@ module Db {
 				return createDb(nconf);
 			}
 			
-			load<T extends Api.Entity>(url :string) :T {
-				return <T>this.state.load(url);
+			load(ctx :Object, url :string) :Promise<Api.IEventDetails<any>> {
+				var evt = this.state.loadEvent(url);
+				if (evt['load']) {
+					return evt['load'](ctx);
+				}
+				throw new Error("The url " + url + " cannot be loaded");
 			}
 			
 			reset() {
@@ -1251,6 +1255,11 @@ module Db {
 			/** The parent of this event */
 			parent :GenericEvent;
 			
+			/**
+			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
+			 */
+			nameOnParent :string = null;
+						
 			/** The children of this event */
 			private children :{[index:string]:GenericEvent} = {};
 			
@@ -1274,6 +1283,13 @@ module Db {
 			setEntity(entity :Api.Entity) {
 				this.entity = entity;
 				// TODO clean the children if entity changed? they could be pointing to old instance data
+			}
+			
+			protected setEntityOnParent(val? :any) {
+				val = val || this.entity;
+				if (this.parent && this.nameOnParent && this.parent.entity) {
+					this.parent.entity[this.nameOnParent] = val;
+				}
 			}
 			
 			/**
@@ -1701,11 +1717,6 @@ module Db {
 		 */
 		export class EntityEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
 			/**
-			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-			 */
-			nameOnParent :string = null;
-			
-			/**
 			 * If given, binding directives.
 			 */
 			binding :BindingImpl = null;
@@ -1790,23 +1801,28 @@ module Db {
 				this.lastDs = ds;
 				var val = ds.val();
 				if (val) {
-					// Check if we have a discriminator
-					if (val['_dis']) {
-						// Find <nd set the correct metadata
-						var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta,val['_dis']);
-						if (!cm) throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
-						this.classMeta = cm;
+					// Avoid messing with the entity if we are processing a reference
+					if (!val._ref) {  
+						// Check if we have a discriminator
+						if (val['_dis']) {
+							// Find and set the correct metadata
+							var cm = this.state.myMeta.findDiscriminated(this.originalClassMeta,val['_dis']);
+							if (!cm) throw new Error("Cannot find a suitable subclass for discriminator " + val['_dis']);
+							this.classMeta = cm;
+						} else {
+							// If we don't have a discriminator, reset the original metadata
+							// resetting it is important because this could be an update
+							this.classMeta = this.originalClassMeta;
+						}
+						// TODO?? disciminator : change here then this.classMeta
+						// If we haven't yet created the entity instance, or the entity we have is not the right
+						// type (which could happen if this is an updated and the discriminator changed,
+						// create an instance of the right type.
+						if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
+							this.setEntity(this.classMeta.createInstance());
+						}
 					} else {
-						// If we don't have a discriminator, reset the original metadata
-						// resetting it is important because this could be an update
-						this.classMeta = this.originalClassMeta;
-					}
-					// TODO?? disciminator : change here then this.classMeta
-					// If we haven't yet created the entity instance, or the entity we have is not the right
-					// type (which could happen if this is an updated and the discriminator changed,
-					// create an instance of the right type.
-					if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
-						this.setEntity(this.classMeta.createInstance());
+						delete val._ref;
 					}
 					for (var k in val) {
 						if (k == 'constructor') continue;
@@ -1827,9 +1843,7 @@ module Db {
 					this.setEntity(null);
 				}
 				// if it's embedded should set the value on the parent entity
-				if (this.parent && this.nameOnParent) {
-					this.parent.entity[this.nameOnParent] = this.entity;
-				}
+				this.setEntityOnParent();
 			}
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {
@@ -2023,10 +2037,6 @@ module Db {
 		export class ReferenceEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IEntityOrReferenceEvent<E> {
 			//classMeta :ClassMetadata = null;
 			/**
-			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
-			 */
-			nameOnParent :string = null;
-			/**
 			 * List of fields to save as projections.
 			 */
 			project :string[] = null;
@@ -2119,7 +2129,7 @@ module Db {
 					if (this.pointedEvent == null || this.pointedEvent.getUrl() != val._ref) {
 						//  .. create a new pointed event
 						this.prevPointedEvent = this.pointedEvent;
-						this.pointedEvent = <EntityEvent<E>>this.state.loadEventWithInstance(val._ref, this.classMeta);
+						this.pointedEvent = <EntityEvent<E>>this.state.loadEventWithInstance(val._ref);
 						// Forward the projection
 						this.pointedEvent.handleProjection(ds);
 						this.setEntity(this.pointedEvent.entity);
@@ -2131,9 +2141,7 @@ module Db {
 					this.setEntity(null);
 				}
 				// set the value on the parent entity
-				if (this.parent && this.nameOnParent) {
-					this.parent.entity[this.nameOnParent] = this.entity;
-				}
+				this.setEntityOnParent();
 			}
 			
 			getReferencedUrl() :string {
@@ -2220,7 +2228,6 @@ module Db {
 		 */
 		export class MapEvent<E extends Api.Entity> extends GenericEvent implements Api.IMapEvent<E> {
 			isReference :boolean = false;
-			nameOnParent :string = null;
 			project :string[] = null;
 			binding :BindingImpl = null;
 			sorting :Api.SortingData = null;
@@ -2404,7 +2411,7 @@ module Db {
 					var enturl = this.state.createEvent(<Api.Entity>key).getUrl();
 					if (!enturl) throw new Error("The entity used as a key in a map must be already saved elsewhere");
 					var entroot = this.state.entityRootFromUrl(enturl);
-					enturl = enturl.substr(entroot.getUrl().length);
+					enturl = entroot.getRemainingUrl(enturl);
 					key = enturl.replace(/\//g,'');
 				}
 				return <string>key;
@@ -2416,9 +2423,7 @@ module Db {
 				} else {
 					this.realField[ds.key()] = val;
 				}
-				if (this.parent && this.parent.entity) {
-					this.parent.entity[this.nameOnParent] = this.realField;
-				}
+				this.setEntityOnParent(this.realField);
 			}
 
 			remove(keyOrValue :string|number|Api.Entity) :Promise<any> {
@@ -2619,9 +2624,7 @@ module Db {
 
 			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
 				this.evarray.addToInternal(event, ds, val, det);
-				if (this.parent && this.parent.entity) {
-					this.parent.entity[this.nameOnParent] = this.evarray.arrayValue;
-				}
+				this.setEntityOnParent(this.evarray.arrayValue);
 			}
 
 			load(ctx:Object) :Promise<E[]> {
@@ -2708,7 +2711,7 @@ module Db {
 					// if it is a reference, use path from the root path
 					if (!enturl) throw new Error("Cannot add to a set a reference that has not been loaded or not yet been saved");
 					var entroot = this.state.entityRootFromUrl(enturl);
-					enturl = enturl.substr(entroot.getUrl().length);
+					enturl = entroot.getRemainingUrl(enturl);
 				} else {
 					// if it's an embedded, check if it has a url and substract my url to obtain id
 					if (enturl) {
@@ -2745,7 +2748,6 @@ module Db {
 		}
 		
 		export class IgnoreEvent<E extends Api.Entity> extends GenericEvent {
-			nameOnParent :string = null;
 			val :any;
 			
 			setEntity() {
@@ -2767,8 +2769,6 @@ module Db {
 		
 		export class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
 			
-			nameOnParent :string = null;
-			
 			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void, discriminator :any = null) :void {
 				var h = new EventHandler(ctx, callback, discriminator);
 				super.on(h);
@@ -2780,9 +2780,7 @@ module Db {
 			
 			parseValue(ds :FirebaseDataSnapshot) {
 				this.setEntity(ds.val());
-				if (this.parent && this.nameOnParent) {
-					this.parent.entity[this.nameOnParent] = this.entity;
-				}
+				this.setEntityOnParent();
 			}
 			
 			serialize() {
@@ -2803,8 +2801,47 @@ module Db {
 				if (!meta.root) throw new Error("The entity " + meta.getName() + " is not a root entity");
 			}
 			
+			getEvent(id:string) :EntityEvent<E> {
+				var url = this.getUrl() + id + "/";
+				var event = <EntityEvent<E>>this.state.fetchFromCache(url);
+				if (event) return event;
+				
+				var dis = null;
+				var colonpos = id.indexOf('*');
+				if (colonpos == 0) {
+					dis = id.substring(1);
+				} else if (colonpos > 0) {
+					dis = id.substring(0,colonpos);
+				}
+				
+				
+				event = new EntityEvent<E>();
+				event.url = url;
+				event.state = this.state;
+				event.classMeta = this.meta;
+				var meta = this.meta;
+				if (dis) {
+					var nmeta = this.state.myMeta.findDiscriminated(this.meta,dis);
+					// TODO issue a warning if the discriminator can't be resolved, maybe?
+					if (nmeta) meta = nmeta;
+				}
+				event.classMeta = meta;
+				
+				var inst = <any>new meta.ctor();
+				if (inst.dbInit) {
+					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
+				}
+				event.setEntity(inst);
+				
+				this.state.storeInCache(event);
+				this.state.bindEntity(inst, event);
+				
+				return event;
+			} 
+			
 			get(id:string) :E {
-				return <E>this.state.load(this.getUrl() + id, this.meta);
+				var evt = this.getEvent(id);
+				return <E>evt.entity;
 			}
 			
 			idOf(entity :E) :string {
@@ -2825,6 +2862,9 @@ module Db {
 				return this.state.getUrl() + this.meta.root + '/';
 			}
 			
+			getRemainingUrl(url :string) :string {
+				return url.substr(this.getUrl().length);
+			}
 		}
 		
 		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
@@ -2938,7 +2978,7 @@ module Db {
 			}
 			
 			reset() {
-				// Automatic off for all handlers?
+				// Automatic off for all handlers
 				for (var k in this.cache) {
 					var val = this.cache[k];
 					if (val instanceof GenericEvent) {
@@ -2949,9 +2989,9 @@ module Db {
 				this.cache = {};
 			}
 			
-			entityRoot(ctor :Api.EntityType<any>) :Api.IEntityRoot<any>;
-			entityRoot(meta :ClassMetadata) :Api.IEntityRoot<any>;
-			entityRoot(param :any) :Api.IEntityRoot<any> {
+			entityRoot(ctor :Api.EntityType<any>) :EntityRoot<any>;
+			entityRoot(meta :ClassMetadata) :EntityRoot<any>;
+			entityRoot(param :any) :EntityRoot<any> {
 				var meta :ClassMetadata = null;
 				if (param instanceof ClassMetadata) {
 					meta = param;
@@ -2971,7 +3011,7 @@ module Db {
 				return new EntityRoot<any>(this, meta);
 			}
 			
-			entityRootFromUrl(url :string) :Api.IEntityRoot<any> {
+			entityRootFromUrl(url :string) :EntityRoot<any> {
 				// Check if the given url pertains to me
 				if (url.indexOf(this.getUrl()) != 0) return null;
 				// Make the url relative
@@ -2990,7 +3030,7 @@ module Db {
 				entEvent.set(e, ev);
 			}
 			
-			createEvent(e :Api.Entity, stack :MetaDescriptor[] = []) :GenericEvent {
+			createEvent(e :Api.Entity, stack :MetaDescriptor[]|string[] = []) :GenericEvent {
 				//var roote = (<IDb3Annotated>e).__dbevent;
 				var roote :GenericEvent = entEvent.get(e);
 				if (!roote) {
@@ -3010,6 +3050,7 @@ module Db {
 				for (var i = 0; i < stack.length; i++) {
 					// search child event if any
 					var sube = acp.findCreateChildFor(stack[i]);
+					if (!sube) throw new Error("Cannot find an event for " + stack[i]);
 					sube.state = this;
 					if (sube.isTraversingTree()) {
 						roote = sube.getTraversed();
@@ -3021,23 +3062,31 @@ module Db {
 				return acp;
 			}
 			
-			loadEvent(url :string, meta? :ClassMetadata) :GenericEvent {
+			loadEvent(url :string) :GenericEvent {
 				if (url.charAt(url.length - 1) != '/') url += '/';
 				var ret = this.cache[url];
 				if (ret) return ret;
-				if (!meta) {
-					// TODO find meta from url
-				}
-				if (!meta) {
+				
+				// Find the entity root
+				var entroot = this.entityRootFromUrl(url);
+				if (!entroot) {
 					throw "The url " + url + " cannot be connected to an entity";
 				}
-				// TODO the meta should construct this
-				var event = new EntityEvent();
-				event.url = url;
-				event.state = this;
-				event.classMeta = meta;
-				this.cache[url] = event;
-				return event;
+				var remurl = entroot.getRemainingUrl(url);
+				
+				// Tokenize the url
+				var toks = remurl.split("/");
+				while (!toks[toks.length - 1]) toks.pop();
+				
+				// Get the root event
+				var roote = entroot.getEvent(toks[0]);
+				if (toks.length > 1) {
+					// Use the rest to recursively create events
+					var evt = this.createEvent(roote.entity, toks.slice(1));
+					return evt;
+				} else {
+					return roote;
+				}
 			}
 			
 			storeInCache(evt :GenericEvent) {
@@ -3050,7 +3099,11 @@ module Db {
 				this.cache[url] = evt;
 			}
 			
-			loadEventWithInstance(url :string, meta? :ClassMetadata) :GenericEvent {
+			fetchFromCache(url :string) {
+				return this.cache[url];
+			}
+			
+			loadEventWithInstance(url :string) :GenericEvent {
 				var dis = null;
 				var segs = url.split('/');
 				var lastseg = segs.pop();
@@ -3058,12 +3111,13 @@ module Db {
 				var colonpos = lastseg.indexOf('*');
 				if (colonpos == 0) {
 					dis = lastseg.substring(1);
-					url = url.substring(0,url.lastIndexOf('/'));
+					url = url.substring(0,url.lastIndexOf('/') + 1);
 				} else if (colonpos > 0) {
 					dis = lastseg.substring(0,colonpos);
 				}
 				// clean the url from discriminator
-				var event = this.loadEvent(url, meta);
+				var event = this.loadEvent(url);
+				var meta = event.classMeta;
 				if (event instanceof EntityEvent) {
 					if (!event.entity) {
 						// Find right meta if url has a discriminator
@@ -3086,6 +3140,7 @@ module Db {
 				return event;
 			}
 			
+			/*
 			load<T>(url :string, meta? :ClassMetadata) :T {
 				var event = this.loadEventWithInstance(url, meta);
 				return <T>event.entity;
@@ -3112,8 +3167,9 @@ module Db {
 				(<IDb3Annotated>inst).__dbevent = event;
 				this.cache[url] = event;
 				return inst;
-				*/
+				* /
 			}
+			*/
 
 		}
 		
