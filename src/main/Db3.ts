@@ -447,6 +447,11 @@ module Db {
 			 * behavior.
 			 */
 			clone() :E;
+			
+			/**
+			 * Access to the db instance of this event.
+			 */
+			db :IDb3Static;
 		}
 		
 		
@@ -531,6 +536,11 @@ module Db {
 			 * 		or used on other operations. 
 			 */
 			off(ctx:Object) :void;
+			
+			/**
+			 * Access to the db instance of this event.
+			 */
+			db :IDb3Static;
 		}
 		
 		/**

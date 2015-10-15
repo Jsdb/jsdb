@@ -342,6 +342,10 @@ declare module Db {
              * behavior.
              */
             clone(): E;
+            /**
+             * Access to the db instance of this event.
+             */
+            db: IDb3Static;
         }
         interface IEntityRoot<E extends Entity> extends IUrled {
             get(id: string): E;
@@ -416,6 +420,10 @@ declare module Db {
              * 		or used on other operations.
              */
             off(ctx: Object): void;
+            /**
+             * Access to the db instance of this event.
+             */
+            db: IDb3Static;
         }
         /**
          * Interface implemented by collections that can also be written to and used

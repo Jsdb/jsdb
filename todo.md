@@ -155,11 +155,11 @@ srBattle.countdown = new Countdown();
 db(srBattle).save();
 ```
 
-However, on client, since it's an embedded, the same instance will still
+On client, since it's an embedded, the same instance will still
 be used, eventually updated but still the same instance, which means the callback
 will be there.
 
-However, on the server, or on the client that issues te update, and in the intention
+However, on the server, or on the client that issues the update, and in the intention
 of the programmer, the instance should be a new one.
 
 This stems from the fact that embeddeds don't have a key to differentiate, when saving

@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151015_015756_master_1.0.0_ee6a492
+ * TSDB version : 20151015_164853_master_1.0.0_02a5b0b
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151015_015756_master_1.0.0_ee6a492';
+var Version = '20151015_164853_master_1.0.0_02a5b0b';
 /**
  * The main Db module.
  */
