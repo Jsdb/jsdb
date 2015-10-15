@@ -1,4 +1,3 @@
-
 Support emitted metadata
 ------------------------
 
@@ -92,16 +91,7 @@ are cached and managed, with a periodic pruning of unused children events.
 
 This would automatically grant the peristence of parent events as long as child events are active.
 
-
-Support for calling server side methods
---------------------------------------
-
-> !! Need to clarify the semantics a bit, what can be passed, what is serialized and how etc..
-
-> Depends on "Complete loading by url"
-
  
-
 Auto-binding
 ------------
 
@@ -135,9 +125,9 @@ ship.battleStatus._status = ship.status;
 Moreover, if after the binding has been done the values are changed,
 it is not automatically updated.
 
-```
+```typescript
 ship.clazz = anotherClazz;
-// status still points to the wrong class
+// ship.status._clazz still points to the wrong class
 ```
 
 It would be nice to :
@@ -183,5 +173,52 @@ and then when updating, between two different instances.
 > Firebase supports in theory optimistic lock (validating the version is previous + 1 for example),
 > and Mongo and every other DB supports it.
 
+
+
+
+
+
+
+
+Done
+====
+
+
+Support for calling server side methods
+--------------------------------------
+
+> !! Need to clarify the semantics a bit, what can be passed, what is serialized and how etc..
+
+A method on the client can be called, the call will be forwared to the server, the server will
+perform checks and eventually modify data on the database and/ore return a value, the returned value
+will resolve a server side promise that will resolve a client side promise.
+
+The method operates on an object, the url of the object will be sent to the server.
+
+The method will take parameters :
+* Native parameters will be serialized as is
+* Database persisted objects will be serialized as URL only
+
+This implies that the following code will not work as expected :
+```typescript
+var ship = Db(Ship).get('s1').load(this).then(()=>{
+	ship.name = "Something different";
+	ship.checkAndPersistName(); // Server method 1
+	
+	ship.status.holdOpen = true;
+	ship.updateStatus(ship.status); // Server method 2
+	
+	var nstatus = new ShipStatus();
+	nstatus.holdOpen = true;
+	ship.updateStatus(nstatus);
+});
+```
+
+Since the ship instance is not serialized the first method will not see the changed name, and since the ship
+status is not sent the same applies to the second method. Ironically, the third method would work. 
+
+> So, instead, we need a dirty check and sending differences to the server on method call? And for performance 
+> reasons, probably it could be a good idea to have annotations to specify what to serialize and what not
+> on a method call.
 
 

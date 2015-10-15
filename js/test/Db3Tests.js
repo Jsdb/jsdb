@@ -18,7 +18,7 @@ var M = require('tsMatchers');
 var assert = M.assert;
 var baseUrl = "https://swashp.firebaseio.com/test3/";
 var Db = Db3.configure({ baseUrl: baseUrl });
-var lastLocalCallArgs = null;
+var lastRemoteCallArgs = null;
 var WithProps = (function () {
     function WithProps() {
         this._local = 1;
@@ -30,12 +30,11 @@ var WithProps = (function () {
         };
         this.ignored = 'ignored';
     }
-    WithProps.prototype.localCall = function () {
-        lastLocalCallArgs = arguments;
-        return 'localCallAck';
-    };
     WithProps.prototype.postUpdate = function (ed) {
         this._lastUpdateEv = ed;
+    };
+    WithProps.prototype.remoteCall = function (p1, p2) {
+        return null;
     };
     __decorate([
         Db3.observable()
@@ -43,6 +42,10 @@ var WithProps = (function () {
     __decorate([
         Db3.ignore()
     ], WithProps.prototype, "ignored");
+    Object.defineProperty(WithProps.prototype, "remoteCall",
+        __decorate([
+            Db3.remote()
+        ], WithProps.prototype, "remoteCall", Object.getOwnPropertyDescriptor(WithProps.prototype, "remoteCall")));
     WithProps = __decorate([
         Db3.root()
     ], WithProps);
@@ -53,6 +56,10 @@ var ServerWithProps = (function (_super) {
     function ServerWithProps() {
         _super.apply(this, arguments);
     }
+    ServerWithProps.prototype.remoteCall = function () {
+        lastRemoteCallArgs = arguments;
+        return Promise.resolve('localCallAck');
+    };
     ServerWithProps = __decorate([
         Db3.override()
     ], ServerWithProps);
@@ -1055,7 +1062,7 @@ describe('Db3 >', function () {
                 });
             });
         });
-        describe.only('Urls >', function () {
+        describe('Urls >', function () {
             it('should load a root entity', function () {
                 return Db().load(_this, wp1Fb.toString()).then(function (ed) {
                     var wp1 = ed.payload;
@@ -2162,6 +2169,55 @@ describe('Db3 >', function () {
                     assert('the first element is right').when(vals[0].str).is('3 a');
                     assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
                 });
+            });
+        });
+    });
+    describe('Server calls >', function () {
+        it('should create correct server side method call payload', function () {
+            var wp2 = Db(WithProps).get("wp2");
+            var wp1 = Db(WithProps).get("wp1");
+            var pld = Db3.Internal.createRemoteCallPayload(Db(wp2), 'method', ['a', 1, { generic: 'object' }, wp1]);
+            M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
+                entityUrl: Db(wp2).getUrl(),
+                method: 'method',
+                args: [
+                    'a',
+                    1,
+                    { generic: 'object' },
+                    { _ref: Db(wp1).getUrl() }
+                ]
+            }));
+        });
+        it('should execute server side method calls', function () {
+            var serDb = Db().fork({ override: 'server' });
+            var wp1 = Db(WithProps).get("wp1");
+            var wp2 = serDb(WithProps).get("wp2");
+            var pyl = {
+                entityUrl: serDb(wp2).getUrl(),
+                method: 'remoteCall',
+                args: [
+                    'a',
+                    1,
+                    { generic: 'object' },
+                    { _ref: Db(wp1).getUrl() }
+                ]
+            };
+            var state = serDb(wp2).state;
+            var ret = state.executeServerMethod(_this, pyl);
+            return ret.then(function (val) {
+                M.assert('Returned the method return').when(val).is('localCallAck');
+                M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+                M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+                M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic: 'object' }));
+                M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.instanceOf(WithProps));
+                M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.objectMatching({
+                    str: 'String 1',
+                    num: 200,
+                    arr: [1, 2, 3],
+                    subobj: {
+                        substr: 'Sub String'
+                    }
+                }));
             });
         });
     });

@@ -786,6 +786,15 @@ module Db {
 			 */
 			projections? :string[];
 		}
+		
+		export interface RemoteCallParams {
+			// TODO what we need here?
+			
+			// TODO a presave, that saves the object before calling, syncronizing the promises ?
+			
+			// TODO a waitupdate, that waits for following object update before resolving the promise? but what if the called method does not modify/save the promise?
+
+		}
 	}
 	
 	/**
@@ -793,6 +802,70 @@ module Db {
 	 * they should never be used directly.
 	 */
 	export module Internal {
+		
+		/**
+		* Send to the server a server-side method call. 
+		* 
+		* The protocol is very simply this :
+		* 	- A "method" event is send to th server
+		*  - The only parameter is an object with the following fields :
+		*  - "entityUrl" is the url of the entity the method was called on
+		*  - "method" is the method name
+		*  - "args" is the arguments of the call
+		* 
+		* If in the arguments there is a saved entity (one with a URL), the url will be sent,
+		* so that the server will operate on database data.
+		* 
+		* The server can return data or simply aknowledge the execution. When this happens the
+		* promise will be fulfilled.
+		* 
+		* The server can return an error by returning an object with an "error" field
+		* containing a string describing the error. In that case the promise will be failed.  
+		*/
+		export function remoteCall(inst :Api.Entity, name :string, params :any[]) {
+			// TODO on static methods, probably inst is the constructor function itself, how to deal with it?
+			var ev = <GenericEvent><any>Db.of(inst);
+			if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
+			if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
+			
+			var msg = createRemoteCallPayload(ev, name, params);
+			
+			var io = ev.state.serverIo;
+			if (!io) throw new Error("Database is not configured for remote method call");
+			return new Promise<any>((res,err) => {
+				io.emit('method', msg, function(resp) {
+					if (resp.error) {
+						err(resp);
+					} else {
+						res(resp);
+					}
+				});
+			});
+		}
+		
+		export function createRemoteCallPayload(ev :GenericEvent, name :string, params :any[]) {
+			var payload = [];
+			for (var i = 0; i < params.length; i++) {
+				var val = params[i];
+				var valev = entEvent.get(val);
+				if (valev) {
+					var url = valev.getUrl();
+					if (url) {
+						payload.push({_ref:url});
+						continue;
+					} else {
+						throw new Error("Entity not saved, cannot use it as a parameter " + val);
+					}
+				}
+				payload.push(val);
+			}
+			
+			return {
+				entityUrl: ev.getUrl(),
+				method: name,
+				args: payload
+			}
+		}
 		
 		/**
 		 * Creates a Db based on the given configuration.
@@ -2969,6 +3042,7 @@ module Db {
 			conf :any;
 			myMeta = allMetadata;
 			db :Api.IDb3Static;
+			serverIo :SocketIO.Socket;
 			
 			configure(conf :any) {
 				this.conf = conf;
@@ -3130,47 +3204,58 @@ module Db {
 						if (inst.dbInit) {
 							(<Api.IDb3Initable>inst).dbInit(url, this.db);
 						}
-						/*
-						Object.defineProperty(inst, '__dbevent', {readable:true, writable:true, enumerable:false});
-						(<IDb3Annotated>inst).__dbevent = event;
-						*/
 						event.setEntity(inst);
 					}
 				}
 				return event;
 			}
 			
-			/*
-			load<T>(url :string, meta? :ClassMetadata) :T {
-				var event = this.loadEventWithInstance(url, meta);
-				return <T>event.entity;
-				/*
-				if (url.charAt(url.length - 1) != '/') url += '/';
-				var ret = this.cache[url];
-				if (ret) return <T>ret.entity;
-				if (!meta) {
-					// TODO find meta from url
-				}
-				if (!meta) {
-					throw "The url " + url + " cannot be connected to an entity";
-				}
-				var inst = <any>new meta.ctor();
-				if (inst.dbInit) {
-					(<IDb3Initable>inst).dbInit(url, this.db);
-				}
-				// TODO the meta should construct this
-				var event = new EntityEvent();
-				event.url = url;
-				event.state = this;
-				event.entity = inst;
-				event.classMeta = meta;
-				(<IDb3Annotated>inst).__dbevent = event;
-				this.cache[url] = event;
-				return inst;
-				* /
-			}
+			/**
+			* Executes a method on server-side. Payload is the only parameter passed to the "method" event
+			* from the callServerMethod method. 
+			* 
+			* This method will return a Promise to return to the socket when resolved. 
 			*/
+			executeServerMethod(ctx :Object, payload :any) :Promise<any> {
+				try {
+					var promises :Promise<any>[] = [];
+					
+					var entevt = this.loadEventWithInstance(payload.entityUrl);
+					if (!entevt) throw "Can't find entity";
+					var fn = <Function>entevt.entity[payload.method];
+					if (!fn) throw "Can't find method";
+					if (entevt['load']) {
+						promises.push(<Promise<any>>entevt['load'](ctx));
+					} else {
+						promises.push(Promise.resolve(entevt.entity));
+					}
+					
+					var args = <any[]>payload.args;
+					for (var i = 0; i < args.length; i++) {
+						var val = args[i];
+						if (val._ref) {
+							var evt = this.loadEventWithInstance(val._ref);
+							if (evt['load']) {
+								promises.push(<Promise<any>>evt['load'](ctx));
+								continue;
+							}
+						}
+						promises.push(Promise.resolve(args[i]));
+					}
 
+					return Promise.all(promises).then((values) => {
+						for (var i = 0; i < values.length; i++) {
+							if (values[i] instanceof EventDetails) {
+								values[i] = (<EventDetails<any>>values[i]).payload;
+							}
+						}
+						var entity = values[0];
+						return <Promise<any>>fn.apply(entity,values.slice(1));
+					});
+				} catch (e) {
+					return Promise.resolve({error: e.toString()});
+				}
+			}
 		}
 		
 		export class MetaDescriptor {
@@ -3644,6 +3729,10 @@ module Db {
 				}
 			}
 			
+			private getOnly(k :Object) {
+				return k['__weaks'];
+			}
+			
 			private getOrMake(k :Object) {
 				if (!k.hasOwnProperty('__weaks')) { 
 					Object.defineProperty(k, '__weaks', {writable:true, enumerable:false,value:{}});
@@ -3653,7 +3742,8 @@ module Db {
 			
 			get(k:any) :V {
 				if (this.wm) return this.wm.get(k);
-				var obj = this.getOrMake(k);
+				var obj = this.getOnly(k);
+				if (!obj) return undefined;
 				return obj[this.id];
 			}
 			
@@ -3775,6 +3865,19 @@ module Db {
 		return function(target: Object, propertyKey: string | symbol) {
 			var ret = meta.ignore();
 			addDescriptor(target, propertyKey, ret);
+		}
+	}
+	
+	export interface TypedMethodDecorator<T> {
+		(target: Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>) : TypedPropertyDescriptor<T> | void;
+	}
+
+	
+	export function remote(settings? :Api.RemoteCallParams) :TypedMethodDecorator<(...args :any[]) => Thenable<any>> {
+		return function(target :Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<(...args :any[]) => Thenable<any>>) {
+			descriptor.value = function (...args :any[]) {
+				return Internal.remoteCall(this, propertyKey.toString(), args);
+			}
 		}
 	}
 	

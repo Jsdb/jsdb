@@ -647,12 +647,39 @@ declare module Db {
              */
             projections?: string[];
         }
+        interface RemoteCallParams {
+        }
     }
     /**
      * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
      * they should never be used directly.
      */
     module Internal {
+        /**
+        * Send to the server a server-side method call.
+        *
+        * The protocol is very simply this :
+        * 	- A "method" event is send to th server
+        *  - The only parameter is an object with the following fields :
+        *  - "entityUrl" is the url of the entity the method was called on
+        *  - "method" is the method name
+        *  - "args" is the arguments of the call
+        *
+        * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+        * so that the server will operate on database data.
+        *
+        * The server can return data or simply aknowledge the execution. When this happens the
+        * promise will be fulfilled.
+        *
+        * The server can return an error by returning an object with an "error" field
+        * containing a string describing the error. In that case the promise will be failed.
+        */
+        function remoteCall(inst: Api.Entity, name: string, params: any[]): Promise<any>;
+        function createRemoteCallPayload(ev: GenericEvent, name: string, params: any[]): {
+            entityUrl: string;
+            method: string;
+            args: any[];
+        };
         /**
          * Creates a Db based on the given configuration.
          */
@@ -1385,6 +1412,7 @@ declare module Db {
             conf: any;
             myMeta: Metadata;
             db: Api.IDb3Static;
+            serverIo: SocketIO.Socket;
             configure(conf: any): void;
             reset(): void;
             entityRoot(ctor: Api.EntityType<any>): EntityRoot<any>;
@@ -1397,6 +1425,13 @@ declare module Db {
             storeInCache(evt: GenericEvent): void;
             fetchFromCache(url: string): GenericEvent;
             loadEventWithInstance(url: string): GenericEvent;
+            /**
+            * Executes a method on server-side. Payload is the only parameter passed to the "method" event
+            * from the callServerMethod method.
+            *
+            * This method will return a Promise to return to the socket when resolved.
+            */
+            executeServerMethod(ctx: Object, payload: any): Promise<any>;
         }
         class MetaDescriptor {
             localName: string;
@@ -1500,6 +1535,7 @@ declare module Db {
             private wm;
             private id;
             constructor();
+            private getOnly(k);
             private getOrMake(k);
             get(k: any): V;
             set(k: any, val: V): void;
@@ -1518,6 +1554,10 @@ declare module Db {
     function override(override?: string): ClassDecorator;
     function observable(): PropertyDecorator;
     function ignore(): PropertyDecorator;
+    interface TypedMethodDecorator<T> {
+        (target: Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>): TypedPropertyDescriptor<T> | void;
+    }
+    function remote(settings?: Api.RemoteCallParams): TypedMethodDecorator<(...args: any[]) => Thenable<any>>;
     module meta {
         function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Db.Internal.EmbeddedMetaDescriptor;
         function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Db.Internal.ReferenceMetaDescriptor;

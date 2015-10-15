@@ -9,7 +9,7 @@ var baseUrl :string = "https://swashp.firebaseio.com/test3/"
 
 var Db = Db3.configure({baseUrl:baseUrl});
 
-var lastLocalCallArgs :IArguments = null;
+var lastRemoteCallArgs :IArguments = null;
 
 @Db3.root()
 class WithProps implements Db3.Api.IEntityHooks {
@@ -26,19 +26,23 @@ class WithProps implements Db3.Api.IEntityHooks {
 	@Db3.ignore()
 	ignored :string = 'ignored';
 	
-	localCall() {
-		lastLocalCallArgs = arguments;
-		return 'localCallAck';
-	}
-	
 	postUpdate(ed :Db3.Api.IEventDetails<WithProps>) {
 		this._lastUpdateEv = ed;
+	}
+	
+	@Db3.remote()
+	remoteCall(p1 :string, p2 :number):Thenable<string> {
+		return null;
 	}
 }
 
 @Db3.override()
 class ServerWithProps extends WithProps {
 	serverStuff :string;
+	remoteCall():Thenable<string> {
+		lastRemoteCallArgs = arguments;
+		return Promise.resolve('localCallAck');
+	}
 }
 
 @Db3.discriminator('more')
@@ -1072,7 +1076,7 @@ describe('Db3 >', () => {
 			});
 		});
 		
-		describe.only('Urls >', ()=>{
+		describe('Urls >', ()=>{
 			it('should load a root entity', ()=>{
 				return Db().load(this, wp1Fb.toString()).then((ed) => {
 					var wp1 = <WithProps>ed.payload;
@@ -2280,6 +2284,68 @@ describe('Db3 >', () => {
 				});
 			});
 		});
+	});
+	
+	describe('Server calls >', ()=>{
+		it('should create correct server side method call payload', () => {
+			var wp2 = Db(WithProps).get("wp2");
+			var wp1 = Db(WithProps).get("wp1");
+			
+			var pld = Db3.Internal.createRemoteCallPayload(<Db3.Internal.GenericEvent><any>Db(wp2), 'method', ['a', 1, {generic:'object'}, wp1])
+			M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
+				entityUrl: Db(wp2).getUrl(),
+				method: 'method',
+				args: 
+					[
+						'a',
+						1,
+						{ generic:'object' },
+						{_ref:Db(wp1).getUrl()}
+					]
+			}));
+		});
+		
+		it('should execute server side method calls', () => {
+			var serDb = Db().fork({override:'server'});
+
+			var wp1 = Db(WithProps).get("wp1");
+			var wp2 = serDb(WithProps).get("wp2");
+			
+			var pyl = {
+				entityUrl : serDb(wp2).getUrl(),
+				method: 'remoteCall',
+				args:
+					[
+						'a',
+						1,
+						{ generic:'object' },
+						{_ref:Db(wp1).getUrl()}
+					]
+			};
+			
+			var state = (<Db3.Internal.GenericEvent><any>serDb(wp2)).state;
+			
+			var ret = state.executeServerMethod(this,pyl);
+			return ret.then((val) => {
+				M.assert('Returned the method return').when(val).is('localCallAck');
+				M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+				M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+				M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic:'object' }));
+				M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.instanceOf(WithProps));
+				M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.objectMatching(
+					{
+						str: 'String 1',
+						num: 200,
+						arr: [1,2,3],
+						subobj: {
+							substr: 'Sub String'
+						}
+					}
+				));
+			});
+		});
+		
+		
 	});
 
 });
