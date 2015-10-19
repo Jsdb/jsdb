@@ -43,6 +43,22 @@ keep a list of already created instances, de-facto creating the cache. This woul
 * Implement there the code for cleanup
 * Offer a place for root-based cache settings
 
+
+Server side adapter for calls
+-----------------------------
+
+For receiving server side remote calls, we need to :
+* Have a socketIo receiving the message
+* Find the right db based on something (url, whether we prefer share nothing or shared, etc..)
+* Initialize the ExecContext with useful stuff
+
+Once we have all of this, we can use the db state to execute the method.
+
+Since all these steps are very "application specific", it would be better to :
+* create an interface for a remote calls adapter
+* a default implementation with sensible defaults (for example, only the socket in the context, always defaultDb etc..)
+* give a way to initialize the server-side of remote calls with a custom implementation of the adapter
+
   
 
 
