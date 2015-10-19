@@ -26,6 +26,26 @@ TEST Support binding and prjections on collections
 Basic support should already be there, since it's built into the events.
 
 
+Convert EntityRoot to be a GenericEvent
+---------------------------------------
+
+This is needed to :
+* Properly implement the query() method returning a QueryImpl
+* Uniform cache
+* uniform the structure
+
+EntityRoots are not different than a map, they could even extend Map. The only special 
+thisng they have is that they create instances that are not immediately loaded.
+
+If they implement GenericEvent, and use the normal findOrCreateChild, then they would also
+keep a list of already created instances, de-facto creating the cache. This would mean :
+* Moving the cache inside the entity roots
+* Implement there the code for cleanup
+* Offer a place for root-based cache settings
+
+  
+
+
 Support automatic pre-resolving for references
 ----------------------------------------------
 
