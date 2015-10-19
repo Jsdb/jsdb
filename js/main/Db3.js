@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151019_053254_master_1.0.0_8c090bc
+ * TSDB version : 20151019_060902_master_1.0.0_bb73f1d
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151019_053254_master_1.0.0_8c090bc';
+var Version = '20151019_060902_master_1.0.0_bb73f1d';
 /**
  * The main Db module.
  */
@@ -125,7 +125,6 @@ var Db;
                     throw new Error("The object is not saved on the database, cannot invoke remote method");
                 state = ev.state;
             }
-            // TODO on static methods, probably inst is the constructor function itself, how to deal with it?
             var msg = createRemoteCallPayload(inst, name, params);
             var io = state.serverIo;
             if (!io)
@@ -1798,6 +1797,21 @@ var Db;
                 return new Promise(function (ok, err) {
                     var fb = new Firebase(_this.getUrl());
                     var obj = _this.serialize();
+                    fb.set(obj, function (fberr) {
+                        if (fberr) {
+                            err(fberr);
+                        }
+                        else {
+                            ok(null);
+                        }
+                    });
+                });
+            };
+            MapEvent.prototype.clear = function () {
+                var _this = this;
+                return new Promise(function (ok, err) {
+                    var fb = new Firebase(_this.getUrl());
+                    var obj = {};
                     fb.set(obj, function (fberr) {
                         if (fberr) {
                             err(fberr);

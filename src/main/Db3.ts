@@ -576,6 +576,11 @@ module Db {
 			remove(key :string|number|Entity) :Promise<any>;
 			
 			/**
+			 * Clears the collection, removing all elements in it.
+			 */
+			clear() :Promise<any>;
+			
+			/**
 			 * Fetch the specified key from the collection.  
 			 * 
 			 * TODO does this only dereference or also load the value?
@@ -2571,6 +2576,20 @@ module Db {
 				return new Promise<any>((ok,err) => {
 					var fb = new Firebase(this.getUrl());
 					var obj = this.serialize();
+					fb.set(obj, (fberr) => {
+						if (fberr) {
+							err(fberr);
+						} else {
+							ok(null);
+						}
+					});
+				});
+			}
+			
+			clear() :Promise<any> {
+				return new Promise<any>((ok,err) => {
+					var fb = new Firebase(this.getUrl());
+					var obj = {};
 					fb.set(obj, (fberr) => {
 						if (fberr) {
 							err(fberr);

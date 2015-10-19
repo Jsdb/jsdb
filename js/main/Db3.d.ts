@@ -455,6 +455,10 @@ declare module Db {
              */
             remove(key: string | number | Entity): Promise<any>;
             /**
+             * Clears the collection, removing all elements in it.
+             */
+            clear(): Promise<any>;
+            /**
              * Fetch the specified key from the collection.
              *
              * TODO does this only dereference or also load the value?
@@ -1333,6 +1337,7 @@ declare module Db {
             isLoaded(): boolean;
             assertLoaded(): void;
             save(): Promise<any>;
+            clear(): Promise<any>;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
             query(): Api.IQuery<E>;
         }

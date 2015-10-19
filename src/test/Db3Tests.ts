@@ -1891,6 +1891,17 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
+
+			it('should clear the map', () => {
+				var wm1 = Db(WithMap).get('wm1');
+				return Db(wm1.embedMap).clear().then(() => {
+					return new Promise((ok) => {
+						wm1Fb.child('embedMap').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert('has removed all elements').when(ds.val()).is(M.objectMatchingStrictly({}));
+				});
+			});
 			
 			it ('should fetch an embed with a specific key', () => {
 				var wm1 = Db(WithMap).get('wm1');
