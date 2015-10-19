@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151015_164853_master_1.0.0_02a5b0b
+ * TSDB version : 20151019_053254_master_1.0.0_8c090bc
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151015_164853_master_1.0.0_02a5b0b';
+var Version = '20151019_053254_master_1.0.0_8c090bc';
 /**
  * The main Db module.
  */
@@ -107,14 +107,27 @@ var Db;
         * containing a string describing the error. In that case the promise will be failed.
         */
         function remoteCall(inst, name, params) {
+            var state = defaultDb['state'];
+            if (typeof (inst) === 'function') {
+                // It's a static call, try to find a database instance
+                for (var i = 0; i < params.length; i++) {
+                    if (typeof (params[i]) === 'function' && params[i]['state']) {
+                        state = params[i]['state'];
+                        break;
+                    }
+                }
+            }
+            else {
+                var ev = Db.of(inst);
+                if (!ev)
+                    throw new Error("The object is not bound to a database, cannot invoke remote method");
+                if (!ev.getUrl())
+                    throw new Error("The object is not saved on the database, cannot invoke remote method");
+                state = ev.state;
+            }
             // TODO on static methods, probably inst is the constructor function itself, how to deal with it?
-            var ev = Db.of(inst);
-            if (!ev)
-                throw new Error("The object is not bound to a database, cannot invoke remote method");
-            if (!ev.getUrl())
-                throw new Error("The object is not saved on the database, cannot invoke remote method");
-            var msg = createRemoteCallPayload(ev, name, params);
-            var io = ev.state.serverIo;
+            var msg = createRemoteCallPayload(inst, name, params);
+            var io = state.serverIo;
             if (!io)
                 throw new Error("Database is not configured for remote method call");
             return new Promise(function (res, err) {
@@ -129,7 +142,15 @@ var Db;
             });
         }
         Internal.remoteCall = remoteCall;
-        function createRemoteCallPayload(ev, name, params) {
+        function createRemoteCallPayload(inst, name, params) {
+            var ident = "";
+            if (typeof (inst) === 'function') {
+                ident = "staticCall:" + Utils.findName(inst);
+            }
+            else {
+                var ev = Db.of(inst);
+                ident = ev.getUrl();
+            }
             var payload = [];
             for (var i = 0; i < params.length; i++) {
                 var val = params[i];
@@ -147,7 +168,7 @@ var Db;
                 payload.push(val);
             }
             return {
-                entityUrl: ev.getUrl(),
+                entityUrl: ident,
                 method: name,
                 args: payload
             };
@@ -187,6 +208,7 @@ var Db;
                 return ret;
             };
             state.db = db;
+            db['state'] = state;
             return db;
         }
         Internal.createDb = createDb;
@@ -2788,6 +2810,13 @@ var Db;
             };
             Metadata.prototype.findDiscriminated = function (base, dis) {
                 return base.findForDiscriminator(dis);
+            };
+            Metadata.prototype.findNamed = function (name) {
+                for (var i = 0; i < this.classes.length; i++) {
+                    if (this.classes[i].getName() == name)
+                        return this.classes[i];
+                }
+                return null;
             };
             return Metadata;
         })();

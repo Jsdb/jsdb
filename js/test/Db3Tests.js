@@ -2176,9 +2176,24 @@ describe('Db3 >', function () {
         it('should create correct server side method call payload', function () {
             var wp2 = Db(WithProps).get("wp2");
             var wp1 = Db(WithProps).get("wp1");
-            var pld = Db3.Internal.createRemoteCallPayload(Db(wp2), 'method', ['a', 1, { generic: 'object' }, wp1]);
+            var pld = Db3.Internal.createRemoteCallPayload(wp2, 'method', ['a', 1, { generic: 'object' }, wp1]);
             M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
                 entityUrl: Db(wp2).getUrl(),
+                method: 'method',
+                args: [
+                    'a',
+                    1,
+                    { generic: 'object' },
+                    { _ref: Db(wp1).getUrl() }
+                ]
+            }));
+        });
+        it('should create correct server side STATIC method call payload', function () {
+            var wp2 = Db(WithProps).get("wp2");
+            var wp1 = Db(WithProps).get("wp1");
+            var pld = Db3.Internal.createRemoteCallPayload(WithProps, 'method', ['a', 1, { generic: 'object' }, wp1]);
+            M.assert("Right payload").when(pld).is(M.objectMatchingStrictly({
+                entityUrl: 'staticCall:WithProps',
                 method: 'method',
                 args: [
                     'a',

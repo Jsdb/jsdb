@@ -683,7 +683,7 @@ declare module Db {
         * containing a string describing the error. In that case the promise will be failed.
         */
         function remoteCall(inst: Api.Entity, name: string, params: any[]): Promise<any>;
-        function createRemoteCallPayload(ev: GenericEvent, name: string, params: any[]): {
+        function createRemoteCallPayload(inst: any, name: string, params: any[]): {
             entityUrl: string;
             method: string;
             args: any[];
@@ -1517,6 +1517,7 @@ declare module Db {
             findMeta(param: Api.EntityType<any> | Api.Entity): ClassMetadata;
             findRooted(relurl: string): ClassMetadata;
             findDiscriminated(base: ClassMetadata, dis: string): ClassMetadata;
+            findNamed(name: string): ClassMetadata;
         }
         function getAllMetadata(): Metadata;
         function getLastEntity(): Api.Entity;

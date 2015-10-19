@@ -833,14 +833,25 @@ module Db {
 		* containing a string describing the error. In that case the promise will be failed.  
 		*/
 		export function remoteCall(inst :Api.Entity, name :string, params :any[]) {
-			// TODO on static methods, probably inst is the constructor function itself, how to deal with it?
-			var ev = <GenericEvent><any>Db.of(inst);
-			if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
-			if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
+			var state :DbState = defaultDb['state'];
+			if (typeof(inst) === 'function') {
+				// It's a static call, try to find a database instance
+				for (var i = 0; i < params.length; i++) {
+					if (typeof(params[i]) === 'function' && params[i]['state']) {
+						state = params[i]['state'];
+						break;
+					}
+				}
+			} else {
+				var ev = <GenericEvent><any>Db.of(inst);
+				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
+				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
+				state = ev.state;
+			}
 			
-			var msg = createRemoteCallPayload(ev, name, params);
+			var msg = createRemoteCallPayload(inst, name, params);
 			
-			var io = ev.state.serverIo;
+			var io = state.serverIo;
 			if (!io) throw new Error("Database is not configured for remote method call");
 			return new Promise<any>((res,err) => {
 				io.emit('method', msg, function(resp) {
@@ -853,7 +864,15 @@ module Db {
 			});
 		}
 		
-		export function createRemoteCallPayload(ev :GenericEvent, name :string, params :any[]) {
+		export function createRemoteCallPayload(inst :any, name :string, params :any[]) {
+			var ident = "";
+			if (typeof(inst) === 'function') {
+				ident = "staticCall:" + Utils.findName(inst);
+			} else {
+				var ev = <GenericEvent><any>Db.of(inst);
+				ident = ev.getUrl();
+			}
+			
 			var payload = [];
 			for (var i = 0; i < params.length; i++) {
 				var val = params[i];
@@ -871,7 +890,7 @@ module Db {
 			}
 			
 			return {
-				entityUrl: ev.getUrl(),
+				entityUrl: ident,
 				method: name,
 				args: payload
 			}
@@ -910,6 +929,7 @@ module Db {
 				return ret;
 			};
 			state.db = db;
+			db['state'] = state;
 			return db;
 		}
 		
@@ -3541,6 +3561,13 @@ module Db {
 			
 			findDiscriminated(base :ClassMetadata, dis :string) :ClassMetadata {
 				return base.findForDiscriminator(dis);
+			}
+			
+			findNamed(name :string) :ClassMetadata {
+				for (var i = 0; i < this.classes.length; i++) {
+					if (this.classes[i].getName() == name) return this.classes[i];
+				}
+				return null;
 			}
 		}
 		
