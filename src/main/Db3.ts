@@ -44,7 +44,7 @@ module Db {
 	 * 
 	 * @return An initialized and configured db instance
 	 */
-	export function configure(conf :any) :Db.Api.IDb3Static {
+	export function configure(conf :Api.DatabaseConf) :Db.Api.IDb3Static {
 		if (!defaultDb) {
 			defaultDb = Db.Internal.createDb(conf);
 			return defaultDb;
@@ -63,6 +63,7 @@ module Db {
 	export function getDefaultDb() :Db.Api.IDb3Static {
 		return defaultDb;
 	}
+	
 	
 	export module Api {
 		/**
@@ -174,6 +175,9 @@ module Db {
 			 * Deletes all the data from the db, without sending any event, and resets the internal state.
 			 */
 			erase();
+			
+			
+			executeServerMethod(ctx :Object, payload :any) :Promise<any>;
 		}
 		
 		/**
@@ -454,10 +458,24 @@ module Db {
 			db :IDb3Static;
 		}
 		
-		
+		/**
+		 * Entity root gives access to rooted entities.
+		 */
 		export interface IEntityRoot<E extends Entity> extends IUrled {
+			/**
+			 * Get the instance with the given id. Note that this method is
+			 * synchronous, and does not load the data from the database.
+			 */
 			get(id:string):E;
+			
+			/**
+			 * Return the "id" part of the given entity. 
+			 */
 			idOf(instance :E) :string;
+			
+			/**
+			 * Return a {@link IQuery} that operates on all the entities in this entity root.
+			 */
 			query() :IQuery<E>;
 		}
 		
@@ -630,15 +648,20 @@ module Db {
 			save():Promise<any>;
 			
 			/**
-			 * Loads this collection into the parent entity, and also returns the value in the promise.
+			 * Loads this collection, both in the parent entity and returning it in the promise. 
+			 * If this is a collection of references, all the references are resolved and referenced entities loaded.
 			 * 
-			 * If this is a collection of references, all the references are also loaded.
+			 * @param ctx the context object, to use with {@link off}
+			 * @return a Promise that will be resolved with the full collection. 
 			 */
 			load(ctx:Object) :Promise<any>;
 			
 			/**
-			 * Loads this collection into the parent entity, only deferencing the references and not
-			 * loading the referenced entity.
+			 * Similar to load(), but only dereferences the references in this collection, not loading 
+			 * the referenced entities.
+			 * 
+			 * @param ctx the context object, to use with {@link off}
+			 * @return a Promise that will be resolved with the full collection. 
 			 */
 			dereference(ctx:Object) :Promise<any>;
 		}
@@ -664,7 +687,10 @@ module Db {
 			 */
 			add(key :string|number|Entity, value :E) :Promise<any>;
 
+			// Inherits docs
 			load(ctx:Object) :Promise<{[index:string]:E}>;
+
+			// Inherits docs
 			dereference(ctx:Object) :Promise<{[index:string]:E}>;
 		}
 
@@ -680,6 +706,7 @@ module Db {
 		 */
 		export interface IListSetEvent<E extends Entity> extends IGenericCollection<E> {
 			
+			// Inherits docs
 			add(value :E) :Promise<any>;
 			
 			/**
@@ -704,7 +731,10 @@ module Db {
 			 */
 			peekHead(ctx:Object) :Promise<IEventDetails<E>>;
 
+			// Inherits docs
 			load(ctx:Object) :Promise<E[]>;
+
+			// Inherits docs
 			dereference(ctx:Object) :Promise<E[]>;
 		}
 		
@@ -712,20 +742,37 @@ module Db {
 		 * A query, performed on a collection or on an entity root.
 		 */
 		export interface IQuery<E extends Entity> extends IReadableCollection<E> {
-			load(ctx:Object) :Promise<E[]>;
+			// Inherits docs
 			dereference(ctx:Object) :Promise<E[]>;
+			// Inherits docs
+			load(ctx:Object) :Promise<E[]>;
 			
 			onField(field :string, desc? :boolean):IQuery<E>;
 			limit(limit :number):IQuery<E>;
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
 		}
+		
+		export interface Socket {
+			emit(event :string, ...args: any[]) :Socket;
+		}
 				
+		export interface IClientSideSocketFactory {
+			connect(conf :DatabaseConf) :Promise<Socket>;
+		}
+			
+		export class DefaultClientSideSocketFactory implements IClientSideSocketFactory {
+			connect(conf :DatabaseConf) :Promise<Socket> {
+				return Promise.resolve(io());
+			}
+		}
+		
 		/**
 		 * Database configuration, use one subclass like {@link FirebaseConf}.
 		 */
 		export interface DatabaseConf {
-			
+			override? :string;
+			clientSocket? :IClientSideSocketFactory;
 		}
 		
 		/**
@@ -819,156 +866,12 @@ module Db {
 	export module Internal {
 		
 		/**
-		* Send to the server a server-side method call. 
-		* 
-		* The protocol is very simply this :
-		* 	- A "method" event is send to th server
-		*  - The only parameter is an object with the following fields :
-		*  - "entityUrl" is the url of the entity the method was called on
-		*  - "method" is the method name
-		*  - "args" is the arguments of the call
-		* 
-		* If in the arguments there is a saved entity (one with a URL), the url will be sent,
-		* so that the server will operate on database data.
-		* 
-		* The server can return data or simply aknowledge the execution. When this happens the
-		* promise will be fulfilled.
-		* 
-		* The server can return an error by returning an object with an "error" field
-		* containing a string describing the error. In that case the promise will be failed.  
-		*/
-		export function remoteCall(inst :Api.Entity, name :string, params :any[]) {
-			var state :DbState = defaultDb['state'];
-			if (typeof(inst) === 'function') {
-				// It's a static call, try to find a database instance
-				for (var i = 0; i < params.length; i++) {
-					if (typeof(params[i]) === 'function' && params[i]['state']) {
-						state = params[i]['state'];
-						break;
-					}
-				}
-			} else {
-				var ev = <GenericEvent><any>Db.of(inst);
-				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
-				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
-				state = ev.state;
-			}
-			
-			var msg = createRemoteCallPayload(inst, name, params);
-			
-			var io = state.serverIo;
-			if (!io) throw new Error("Database is not configured for remote method call");
-			return new Promise<any>((res,err) => {
-				io.emit('method', msg, function(resp) {
-					if (resp.error) {
-						err(resp);
-					} else {
-						res(resp);
-					}
-				});
-			});
-		}
-		
-		export function createRemoteCallPayload(inst :any, name :string, params :any[]) {
-			var ident = "";
-			if (typeof(inst) === 'function') {
-				ident = "staticCall:" + Utils.findName(inst);
-			} else {
-				var ev = <GenericEvent><any>Db.of(inst);
-				ident = ev.getUrl();
-			}
-			
-			var payload = [];
-			for (var i = 0; i < params.length; i++) {
-				var val = params[i];
-				var valev = entEvent.get(val);
-				if (valev) {
-					var url = valev.getUrl();
-					if (url) {
-						payload.push({_ref:url});
-						continue;
-					} else {
-						throw new Error("Entity not saved, cannot use it as a parameter " + val);
-					}
-				}
-				payload.push(val);
-			}
-			
-			return {
-				entityUrl: ident,
-				method: name,
-				args: payload
-			}
-		}
-		
-		/**
 		 * Creates a Db based on the given configuration.
 		 */
-		export function createDb(conf:any) :Api.IDb3Static {
+		export function createDb(conf:Api.DatabaseConf) :Api.IDb3Static {
 			var state = new DbState();
 			state.configure(conf);
-			var db = <Api.IDb3Static><any>function(param:any):any {
-				if (lastExpect === lastCantBe) {
-					if (param) clearLastStack();
-				} else if (param !== lastExpect) {
-					clearLastStack();
-				}
-				var e = lastEntity;
-				var stack = lastMetaPath;
-				clearLastStack();
-				
-				// if no arguments return operations
-				if (arguments.length == 0) {
-					return new DbOperations(state);
-				}
-				// Pass-thru for when db(something) is used also when not needed
-				if (param instanceof GenericEvent) return param;
-				
-				if (typeof param == 'function') {
-					return state.entityRoot(param);
-				} else if (!e) {
-					e = param;
-				}
-				
-				var ret = state.createEvent(e, stack);
-				return ret;
-			};
-			state.db = db;
-			db['state'] = state;
-			return db;
-		}
-		
-		/**
-		 * Implementation of {@link IDbOperations}.
-		 */
-		export class DbOperations implements Api.IDbOperations {
-			constructor(public state:DbState) {
-				
-			}
-			
-			fork(conf :any) :Api.IDb3Static {
-				var nconf = {};
-				Utils.copyObj(this.state.conf, nconf);
-				Utils.copyObj(conf, nconf);
-				return createDb(nconf);
-			}
-			
-			load(ctx :Object, url :string) :Promise<Api.IEventDetails<any>> {
-				var evt = this.state.loadEvent(url);
-				if (evt['load']) {
-					return evt['load'](ctx);
-				}
-				throw new Error("The url " + url + " cannot be loaded");
-			}
-			
-			reset() {
-				this.state.reset();
-			}
-			
-			erase() {
-				this.reset();
-				new Firebase(this.state.getUrl()).remove();
-			}
+			return <Api.IDb3Static><any>state.db;
 		}
 		
 		/**
@@ -3086,18 +2989,67 @@ module Db {
 		}
 		
 		
-		export class DbState {
+		export class DbState implements Api.IDbOperations {
 			cache :{[index:string]:GenericEvent} = {};
-			conf :any;
+			conf :Api.DatabaseConf;
 			myMeta = allMetadata;
+			serverIo :Api.Socket;
 			db :Api.IDb3Static;
-			serverIo :SocketIO.Socket;
 			
-			configure(conf :any) {
+			constructor() {
+				var me = this;
+				this.db = <Api.IDb3Static><any>function() { return me.internalDb.apply(me,arguments); };
+			}
+			
+			configure(conf :Api.DatabaseConf) {
 				this.conf = conf;
+				if (conf.clientSocket) {
+					conf.clientSocket.connect(conf).then((sock) => {
+						this.serverIo = sock;
+					})
+				}
 				// TODO filter metas
 				// TODO integrity tests on metas
-				// - double roots
+				// - doube roots
+			}
+			
+			internalDb(param:any):any {
+				if (lastExpect === lastCantBe) {
+					if (param) clearLastStack();
+				} else if (param !== lastExpect) {
+					clearLastStack();
+				}
+				var e = lastEntity;
+				var stack = lastMetaPath;
+				clearLastStack();
+				
+				// if no arguments return operations
+				if (arguments.length == 0) {
+					return this;
+				}
+				// Pass-thru for when db(something) is used also when not needed
+				if (param instanceof GenericEvent) return param;
+				
+				if (typeof param == 'function') {
+					return this.entityRoot(param);
+				} else if (!e) {
+					e = param;
+				}
+				
+				var ret = this.createEvent(e, stack);
+				return ret;
+			}
+			
+			fork(conf :any) :Api.IDb3Static {
+				var nconf = {};
+				Utils.copyObj(this.conf, nconf);
+				Utils.copyObj(conf, nconf);
+				return createDb(nconf);
+			}
+			
+			erase() {
+				this.reset();
+				new Firebase(this.getUrl()).remove();
 			}
 			
 			reset() {
@@ -3259,6 +3211,15 @@ module Db {
 				return event;
 			}
 			
+			load(ctx :Object, url :string) :Promise<Api.IEventDetails<any>> {
+				var evt = this.loadEvent(url);
+				if (evt['load']) {
+					return evt['load'](ctx);
+				}
+				throw new Error("The url " + url + " cannot be loaded");
+			}
+			
+			
 			/**
 			* Executes a method on server-side. Payload is the only parameter passed to the "method" event
 			* from the callServerMethod method. 
@@ -3279,33 +3240,89 @@ module Db {
 						promises.push(Promise.resolve(entevt.entity));
 					}
 					
-					var args = <any[]>payload.args;
-					for (var i = 0; i < args.length; i++) {
-						var val = args[i];
-						if (val._ref) {
-							var evt = this.loadEventWithInstance(val._ref);
-							if (evt['load']) {
-								promises.push(<Promise<any>>evt['load'](ctx));
-								continue;
-							}
-						}
-						promises.push(Promise.resolve(args[i]));
-					}
-
+					promises.push(Utils.deserializeRefs(this.db, ctx,<any[]>payload.args));
+					
 					return Promise.all(promises).then((values) => {
-						for (var i = 0; i < values.length; i++) {
-							if (values[i] instanceof EventDetails) {
-								values[i] = (<EventDetails<any>>values[i]).payload;
-							}
-						}
-						var entity = values[0];
-						return <Promise<any>>fn.apply(entity,values.slice(1));
-					});
+						var entity = values[0].payload;
+						// TODO if the return value is an entity, it must be serialized as a _ref
+						return <Promise<any>>fn.apply(entity,values[1]);
+					}).then((ret) => {
+						return Utils.serializeRefs(ret);
+					})
 				} catch (e) {
 					return Promise.resolve({error: e.toString()});
 				}
 			}
 		}
+		
+		/**
+		* Send to the server a server-side method call. 
+		* 
+		* The protocol is very simply this :
+		* 	- A "method" event is send to th server
+		*  - The only parameter is an object with the following fields :
+		*  - "entityUrl" is the url of the entity the method was called on
+		*  - "method" is the method name
+		*  - "args" is the arguments of the call
+		* 
+		* If in the arguments there is a saved entity (one with a URL), the url will be sent,
+		* so that the server will operate on database data.
+		* 
+		* The server can return data or simply aknowledge the execution. When this happens the
+		* promise will be fulfilled.
+		* 
+		* The server can return an error by returning an object with an "error" field
+		* containing a string describing the error. In that case the promise will be failed.  
+		*/
+		export function remoteCall(inst :Api.Entity, name :string, params :any[]) {
+			var state :DbState = defaultDb['state'];
+			if (typeof(inst) === 'function') {
+				// It's a static call, try to find a database instance
+				for (var i = 0; i < params.length; i++) {
+					if (typeof(params[i]) === 'function' && params[i]['state']) {
+						state = params[i]['state'];
+						break;
+					}
+				}
+			} else {
+				var ev = <GenericEvent><any>Db.of(inst);
+				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
+				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
+				state = ev.state;
+			}
+			
+			var msg = createRemoteCallPayload(inst, name, params);
+			
+			var io = state.serverIo;
+			if (!io) throw new Error("Database is not configured for remote method call");
+			return new Promise<any>((res,err) => {
+				io.emit('method', msg, function(resp) {
+					if (resp.error) {
+						err(resp);
+					} else {
+						// TODO if the return value is an entity, it will be serialized as a _ref
+						res(resp);
+					}
+				});
+			});
+		}
+		
+		export function createRemoteCallPayload(inst :any, name :string, params :any[]) {
+			var ident = "";
+			if (typeof(inst) === 'function') {
+				ident = "staticCall:" + Utils.findName(inst);
+			} else {
+				var ev = <GenericEvent><any>Db.of(inst);
+				ident = ev.getUrl();
+			}
+			
+			return {
+				entityUrl: ident,
+				method: name,
+				args: Utils.serializeRefs(params)
+			}
+		}
+		
 		
 		export class MetaDescriptor {
 			localName :string = null;
@@ -3679,6 +3696,68 @@ module Db {
 					val = valto;
 				}
 				to[k] = val;
+			}
+		}
+		
+		export function serializeRefs(from :any) :any {
+			if (Array.isArray(from)) {
+				var retArr = [];
+				for (var i = 0; i < from.length; i++) {
+					retArr[i] = serializeRefs(from[i]);
+				}
+				return retArr;
+			}
+			if (typeof(from) === 'object') {
+				// Check if it's an entity
+				var ev = of(from);
+				if (ev && ev.getUrl()) {
+					return {_ref:ev.getUrl()};
+				}
+				var ks = Object.keys(from);
+				var retObj = {};
+				for (var i = 0; i < ks.length; i++) {
+					retObj[ks[i]] = serializeRefs(from[ks[i]]);
+				}
+				return retObj;
+			}
+			return from;
+		}
+		
+		export function deserializeRefs(db :Api.IDb3Static, ctx :Object, from :any) :Promise<any> {
+			var ret = {};
+			var promises :Promise<any>[] = [];
+			intDeserializeRefs(db, ctx, promises, {base:from}, ret, 'base');
+			return Promise.all(promises).then((vals) => {
+				return ret['base'];
+			});
+		}
+		
+		function intDeserializeRefs(db :Api.IDb3Static, ctx :Object, promises :Promise<any>[], src :any, to :any, key :number|string) {
+			var from = src[key];
+			if (Array.isArray(from)) {
+				var retArr = [];
+				to[key] = retArr;
+				for (var i = 0; i < from.length; i++) {
+					intDeserializeRefs(db, ctx, promises, from, retArr, i);
+				}
+			} else if (typeof(from) === 'object') {
+				if (from._ref) {
+					var prom = db().load(ctx, from._ref);
+					promises.push(prom);
+					to[key] = null;
+					prom.then((det)=>{
+						to[key] = det.payload;
+					});
+				} else {
+					var retObj = {};
+					to[key] = retObj;
+					var ks = Object.keys(from);
+					for (var i = 0; i < ks.length; i++) {
+						intDeserializeRefs(db, ctx, promises, from, retObj, ks[i]);
+					}
+				}
+			} else {
+				to[key] = from;
 			}
 		}
 		

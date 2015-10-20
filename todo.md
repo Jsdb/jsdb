@@ -44,7 +44,14 @@ keep a list of already created instances, de-facto creating the cache. This woul
 * Offer a place for root-based cache settings
 
 
-Server side adapter for calls
+Create an ExecContext for server side methods
+---------------------------------------------
+
+The context is to be used by the user application, to store things like the current user or similar,
+and passed as last parameter if the parameter name is "ctx".
+
+
+Adapter for socket.io and calls
 -----------------------------
 
 For receiving server side remote calls, we need to :
@@ -59,7 +66,7 @@ Since all these steps are very "application specific", it would be better to :
 * a default implementation with sensible defaults (for example, only the socket in the context, always defaultDb etc..)
 * give a way to initialize the server-side of remote calls with a custom implementation of the adapter
 
-  
+Ssame goes for the client side part.   
 
 
 Support automatic pre-resolving for references

@@ -13,7 +13,7 @@ declare module 'jsdb' {
                 *
                 * @return An initialized and configured db instance
                 */
-            function configure(conf: any): Db.Api.IDb3Static;
+            function configure(conf: Api.DatabaseConf): Db.Api.IDb3Static;
             function of<E extends Api.Entity>(e: E): Db.Api.IEntityOrReferenceEvent<E>;
             /**
                 * Return the {@link defaultDb} if any has been created.
@@ -347,9 +347,22 @@ declare module 'jsdb' {
                                 */
                             db: IDb3Static;
                     }
+                    /**
+                        * Entity root gives access to rooted entities.
+                        */
                     interface IEntityRoot<E extends Entity> extends IUrled {
+                            /**
+                                * Get the instance with the given id. Note that this method is
+                                * synchronous, and does not load the data from the database.
+                                */
                             get(id: string): E;
+                            /**
+                                * Return the "id" part of the given entity.
+                                */
                             idOf(instance: E): string;
+                            /**
+                                * Return a {@link IQuery} that operates on all the entities in this entity root.
+                                */
                             query(): IQuery<E>;
                     }
                     interface IObservableEvent<E extends Entity> extends IUrled {
@@ -501,14 +514,19 @@ declare module 'jsdb' {
                                 */
                             save(): Promise<any>;
                             /**
-                                * Loads this collection into the parent entity, and also returns the value in the promise.
+                                * Loads this collection, both in the parent entity and returning it in the promise.
+                                * If this is a collection of references, all the references are resolved and referenced entities loaded.
                                 *
-                                * If this is a collection of references, all the references are also loaded.
+                                * @param ctx the context object, to use with {@link off}
+                                * @return a Promise that will be resolved with the full collection.
                                 */
                             load(ctx: Object): Promise<any>;
                             /**
-                                * Loads this collection into the parent entity, only deferencing the references and not
-                                * loading the referenced entity.
+                                * Similar to load(), but only dereferences the references in this collection, not loading
+                                * the referenced entities.
+                                *
+                                * @param ctx the context object, to use with {@link off}
+                                * @return a Promise that will be resolved with the full collection.
                                 */
                             dereference(ctx: Object): Promise<any>;
                     }
@@ -578,17 +596,28 @@ declare module 'jsdb' {
                         * A query, performed on a collection or on an entity root.
                         */
                     interface IQuery<E extends Entity> extends IReadableCollection<E> {
-                            load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
+                            load(ctx: Object): Promise<E[]>;
                             onField(field: string, desc?: boolean): IQuery<E>;
                             limit(limit: number): IQuery<E>;
                             range(from: any, to: any): IQuery<E>;
                             equals(val: any): IQuery<E>;
                     }
+                    interface Socket {
+                            emit(event: string, ...args: any[]): Socket;
+                    }
+                    interface IClientSideSocketFactory {
+                            connect(conf: DatabaseConf): Promise<Socket>;
+                    }
+                    class DefaultClientSideSocketFactory implements IClientSideSocketFactory {
+                            connect(conf: DatabaseConf): Promise<Socket>;
+                    }
                     /**
                         * Database configuration, use one subclass like {@link FirebaseConf}.
                         */
                     interface DatabaseConf {
+                            override?: string;
+                            clientSocket?: IClientSideSocketFactory;
                     }
                     /**
                         * Database configuration for Firebase backend.
@@ -668,45 +697,9 @@ declare module 'jsdb' {
                 */
             module Internal {
                     /**
-                     * Send to the server a server-side method call.
-                     *
-                     * The protocol is very simply this :
-                     * 	- A "method" event is send to th server
-                     *  - The only parameter is an object with the following fields :
-                     *  - "entityUrl" is the url of the entity the method was called on
-                     *  - "method" is the method name
-                     *  - "args" is the arguments of the call
-                     *
-                     * If in the arguments there is a saved entity (one with a URL), the url will be sent,
-                     * so that the server will operate on database data.
-                     *
-                     * The server can return data or simply aknowledge the execution. When this happens the
-                     * promise will be fulfilled.
-                     *
-                     * The server can return an error by returning an object with an "error" field
-                     * containing a string describing the error. In that case the promise will be failed.
-                     */
-                    function remoteCall(inst: Api.Entity, name: string, params: any[]): Promise<any>;
-                    function createRemoteCallPayload(inst: any, name: string, params: any[]): {
-                            entityUrl: string;
-                            method: string;
-                            args: any[];
-                    };
-                    /**
                         * Creates a Db based on the given configuration.
                         */
-                    function createDb(conf: any): Api.IDb3Static;
-                    /**
-                        * Implementation of {@link IDbOperations}.
-                        */
-                    class DbOperations implements Api.IDbOperations {
-                            state: DbState;
-                            constructor(state: DbState);
-                            fork(conf: any): Api.IDb3Static;
-                            load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
-                            reset(): void;
-                            erase(): void;
-                    }
+                    function createDb(conf: Api.DatabaseConf): Api.IDb3Static;
                     /**
                         * Current state of an ongoing binding.
                         */
@@ -1398,15 +1391,19 @@ declare module 'jsdb' {
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             save(): Promise<any>;
                     }
-                    class DbState {
+                    class DbState implements Api.IDbOperations {
                             cache: {
                                     [index: string]: GenericEvent;
                             };
-                            conf: any;
+                            conf: Api.DatabaseConf;
                             myMeta: Metadata;
+                            serverIo: Api.Socket;
                             db: Api.IDb3Static;
-                            serverIo: SocketIO.Socket;
-                            configure(conf: any): void;
+                            constructor();
+                            configure(conf: Api.DatabaseConf): void;
+                            internalDb(param: any): any;
+                            fork(conf: any): Api.IDb3Static;
+                            erase(): void;
                             reset(): void;
                             entityRoot(ctor: Api.EntityType<any>): EntityRoot<any>;
                             entityRoot(meta: ClassMetadata): EntityRoot<any>;
@@ -1418,6 +1415,7 @@ declare module 'jsdb' {
                             storeInCache(evt: GenericEvent): void;
                             fetchFromCache(url: string): GenericEvent;
                             loadEventWithInstance(url: string): GenericEvent;
+                            load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
                             /**
                              * Executes a method on server-side. Payload is the only parameter passed to the "method" event
                              * from the callServerMethod method.
@@ -1426,6 +1424,31 @@ declare module 'jsdb' {
                              */
                             executeServerMethod(ctx: Object, payload: any): Promise<any>;
                     }
+                    /**
+                     * Send to the server a server-side method call.
+                     *
+                     * The protocol is very simply this :
+                     * 	- A "method" event is send to th server
+                     *  - The only parameter is an object with the following fields :
+                     *  - "entityUrl" is the url of the entity the method was called on
+                     *  - "method" is the method name
+                     *  - "args" is the arguments of the call
+                     *
+                     * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+                     * so that the server will operate on database data.
+                     *
+                     * The server can return data or simply aknowledge the execution. When this happens the
+                     * promise will be fulfilled.
+                     *
+                     * The server can return an error by returning an object with an "error" field
+                     * containing a string describing the error. In that case the promise will be failed.
+                     */
+                    function remoteCall(inst: Api.Entity, name: string, params: any[]): Promise<any>;
+                    function createRemoteCallPayload(inst: any, name: string, params: any[]): {
+                            entityUrl: string;
+                            method: string;
+                            args: any;
+                    };
                     class MetaDescriptor {
                             localName: string;
                             remoteName: string;
@@ -1509,6 +1532,8 @@ declare module 'jsdb' {
                     function isInlineObject(o: any): boolean;
                     function isEmpty(obj: any): boolean;
                     function copyObj(from: Object, to: Object): void;
+                    function serializeRefs(from: any): any;
+                    function deserializeRefs(db: Api.IDb3Static, ctx: Object, from: any): Promise<any>;
                     class IdGenerator {
                             static PUSH_CHARS: string;
                             static BASE: number;

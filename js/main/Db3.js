@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151019_060902_master_1.0.0_bb73f1d
+ * TSDB version : 20151020_063335_master_1.0.0_021b8fc
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151019_060902_master_1.0.0_bb73f1d';
+var Version = '20151020_063335_master_1.0.0_021b8fc';
 /**
  * The main Db module.
  */
@@ -80,6 +80,15 @@ var Db;
             EventType[EventType["LIST_END"] = 5] = "LIST_END";
         })(Api.EventType || (Api.EventType = {}));
         var EventType = Api.EventType;
+        var DefaultClientSideSocketFactory = (function () {
+            function DefaultClientSideSocketFactory() {
+            }
+            DefaultClientSideSocketFactory.prototype.connect = function (conf) {
+                return Promise.resolve(io());
+            };
+            return DefaultClientSideSocketFactory;
+        })();
+        Api.DefaultClientSideSocketFactory = DefaultClientSideSocketFactory;
     })(Api = Db.Api || (Db.Api = {}));
     /**
      * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
@@ -88,159 +97,14 @@ var Db;
     var Internal;
     (function (Internal) {
         /**
-        * Send to the server a server-side method call.
-        *
-        * The protocol is very simply this :
-        * 	- A "method" event is send to th server
-        *  - The only parameter is an object with the following fields :
-        *  - "entityUrl" is the url of the entity the method was called on
-        *  - "method" is the method name
-        *  - "args" is the arguments of the call
-        *
-        * If in the arguments there is a saved entity (one with a URL), the url will be sent,
-        * so that the server will operate on database data.
-        *
-        * The server can return data or simply aknowledge the execution. When this happens the
-        * promise will be fulfilled.
-        *
-        * The server can return an error by returning an object with an "error" field
-        * containing a string describing the error. In that case the promise will be failed.
-        */
-        function remoteCall(inst, name, params) {
-            var state = defaultDb['state'];
-            if (typeof (inst) === 'function') {
-                // It's a static call, try to find a database instance
-                for (var i = 0; i < params.length; i++) {
-                    if (typeof (params[i]) === 'function' && params[i]['state']) {
-                        state = params[i]['state'];
-                        break;
-                    }
-                }
-            }
-            else {
-                var ev = Db.of(inst);
-                if (!ev)
-                    throw new Error("The object is not bound to a database, cannot invoke remote method");
-                if (!ev.getUrl())
-                    throw new Error("The object is not saved on the database, cannot invoke remote method");
-                state = ev.state;
-            }
-            var msg = createRemoteCallPayload(inst, name, params);
-            var io = state.serverIo;
-            if (!io)
-                throw new Error("Database is not configured for remote method call");
-            return new Promise(function (res, err) {
-                io.emit('method', msg, function (resp) {
-                    if (resp.error) {
-                        err(resp);
-                    }
-                    else {
-                        res(resp);
-                    }
-                });
-            });
-        }
-        Internal.remoteCall = remoteCall;
-        function createRemoteCallPayload(inst, name, params) {
-            var ident = "";
-            if (typeof (inst) === 'function') {
-                ident = "staticCall:" + Utils.findName(inst);
-            }
-            else {
-                var ev = Db.of(inst);
-                ident = ev.getUrl();
-            }
-            var payload = [];
-            for (var i = 0; i < params.length; i++) {
-                var val = params[i];
-                var valev = entEvent.get(val);
-                if (valev) {
-                    var url = valev.getUrl();
-                    if (url) {
-                        payload.push({ _ref: url });
-                        continue;
-                    }
-                    else {
-                        throw new Error("Entity not saved, cannot use it as a parameter " + val);
-                    }
-                }
-                payload.push(val);
-            }
-            return {
-                entityUrl: ident,
-                method: name,
-                args: payload
-            };
-        }
-        Internal.createRemoteCallPayload = createRemoteCallPayload;
-        /**
          * Creates a Db based on the given configuration.
          */
         function createDb(conf) {
             var state = new DbState();
             state.configure(conf);
-            var db = function (param) {
-                if (lastExpect === lastCantBe) {
-                    if (param)
-                        clearLastStack();
-                }
-                else if (param !== lastExpect) {
-                    clearLastStack();
-                }
-                var e = lastEntity;
-                var stack = lastMetaPath;
-                clearLastStack();
-                // if no arguments return operations
-                if (arguments.length == 0) {
-                    return new DbOperations(state);
-                }
-                // Pass-thru for when db(something) is used also when not needed
-                if (param instanceof GenericEvent)
-                    return param;
-                if (typeof param == 'function') {
-                    return state.entityRoot(param);
-                }
-                else if (!e) {
-                    e = param;
-                }
-                var ret = state.createEvent(e, stack);
-                return ret;
-            };
-            state.db = db;
-            db['state'] = state;
-            return db;
+            return state.db;
         }
         Internal.createDb = createDb;
-        /**
-         * Implementation of {@link IDbOperations}.
-         */
-        var DbOperations = (function () {
-            function DbOperations(state) {
-                this.state = state;
-            }
-            DbOperations.prototype.fork = function (conf) {
-                var nconf = {};
-                Utils.copyObj(this.state.conf, nconf);
-                Utils.copyObj(conf, nconf);
-                return createDb(nconf);
-            };
-            DbOperations.prototype.load = function (ctx, url) {
-                var evt = this.state.loadEvent(url);
-                if (evt['load']) {
-                    return evt['load'](ctx);
-                }
-                throw new Error("The url " + url + " cannot be loaded");
-            };
-            DbOperations.prototype.reset = function () {
-                this.state.reset();
-            };
-            DbOperations.prototype.erase = function () {
-                this.reset();
-                new Firebase(this.state.getUrl()).remove();
-            };
-            return DbOperations;
-        })();
-        Internal.DbOperations = DbOperations;
         /**
          * Implementation of {@link IBinding}.
          */
@@ -2307,12 +2171,57 @@ var Db;
             function DbState() {
                 this.cache = {};
                 this.myMeta = allMetadata;
+                var me = this;
+                this.db = function () { return me.internalDb.apply(me, arguments); };
             }
             DbState.prototype.configure = function (conf) {
+                var _this = this;
                 this.conf = conf;
+                if (conf.clientSocket) {
+                    conf.clientSocket.connect(conf).then(function (sock) {
+                        _this.serverIo = sock;
+                    });
+                }
                 // TODO filter metas
                 // TODO integrity tests on metas
-                // - double roots
+                // - doube roots
+            };
+            DbState.prototype.internalDb = function (param) {
+                if (lastExpect === lastCantBe) {
+                    if (param)
+                        clearLastStack();
+                }
+                else if (param !== lastExpect) {
+                    clearLastStack();
+                }
+                var e = lastEntity;
+                var stack = lastMetaPath;
+                clearLastStack();
+                // if no arguments return operations
+                if (arguments.length == 0) {
+                    return this;
+                }
+                // Pass-thru for when db(something) is used also when not needed
+                if (param instanceof GenericEvent)
+                    return param;
+                if (typeof param == 'function') {
+                    return this.entityRoot(param);
+                }
+                else if (!e) {
+                    e = param;
+                }
+                var ret = this.createEvent(e, stack);
+                return ret;
+            };
+            DbState.prototype.fork = function (conf) {
+                var nconf = {};
+                Utils.copyObj(this.conf, nconf);
+                Utils.copyObj(conf, nconf);
+                return createDb(nconf);
+            };
+            DbState.prototype.erase = function () {
+                this.reset();
+                new Firebase(this.getUrl()).remove();
             };
             DbState.prototype.reset = function () {
                 // Automatic off for all handlers
@@ -2473,6 +2382,13 @@ var Db;
                 }
                 return event;
             };
+            DbState.prototype.load = function (ctx, url) {
+                var evt = this.loadEvent(url);
+                if (evt['load']) {
+                    return evt['load'](ctx);
+                }
+                throw new Error("The url " + url + " cannot be loaded");
+            };
             /**
             * Executes a method on server-side. Payload is the only parameter passed to the "method" event
             * from the callServerMethod method.
@@ -2494,26 +2410,13 @@ var Db;
                     else {
                         promises.push(Promise.resolve(entevt.entity));
                     }
-                    var args = payload.args;
-                    for (var i = 0; i < args.length; i++) {
-                        var val = args[i];
-                        if (val._ref) {
-                            var evt = this.loadEventWithInstance(val._ref);
-                            if (evt['load']) {
-                                promises.push(evt['load'](ctx));
-                                continue;
-                            }
-                        }
-                        promises.push(Promise.resolve(args[i]));
-                    }
+                    promises.push(Utils.deserializeRefs(this.db, ctx, payload.args));
                     return Promise.all(promises).then(function (values) {
-                        for (var i = 0; i < values.length; i++) {
-                            if (values[i] instanceof EventDetails) {
-                                values[i] = values[i].payload;
-                            }
-                        }
-                        var entity = values[0];
-                        return fn.apply(entity, values.slice(1));
+                        var entity = values[0].payload;
+                        // TODO if the return value is an entity, it must be serialized as a _ref
+                        return fn.apply(entity, values[1]);
+                    }).then(function (ret) {
+                        return Utils.serializeRefs(ret);
                     });
                 }
                 catch (e) {
@@ -2523,6 +2426,77 @@ var Db;
             return DbState;
         })();
         Internal.DbState = DbState;
+        /**
+        * Send to the server a server-side method call.
+        *
+        * The protocol is very simply this :
+        * 	- A "method" event is send to th server
+        *  - The only parameter is an object with the following fields :
+        *  - "entityUrl" is the url of the entity the method was called on
+        *  - "method" is the method name
+        *  - "args" is the arguments of the call
+        *
+        * If in the arguments there is a saved entity (one with a URL), the url will be sent,
+        * so that the server will operate on database data.
+        *
+        * The server can return data or simply aknowledge the execution. When this happens the
+        * promise will be fulfilled.
+        *
+        * The server can return an error by returning an object with an "error" field
+        * containing a string describing the error. In that case the promise will be failed.
+        */
+        function remoteCall(inst, name, params) {
+            var state = defaultDb['state'];
+            if (typeof (inst) === 'function') {
+                // It's a static call, try to find a database instance
+                for (var i = 0; i < params.length; i++) {
+                    if (typeof (params[i]) === 'function' && params[i]['state']) {
+                        state = params[i]['state'];
+                        break;
+                    }
+                }
+            }
+            else {
+                var ev = Db.of(inst);
+                if (!ev)
+                    throw new Error("The object is not bound to a database, cannot invoke remote method");
+                if (!ev.getUrl())
+                    throw new Error("The object is not saved on the database, cannot invoke remote method");
+                state = ev.state;
+            }
+            var msg = createRemoteCallPayload(inst, name, params);
+            var io = state.serverIo;
+            if (!io)
+                throw new Error("Database is not configured for remote method call");
+            return new Promise(function (res, err) {
+                io.emit('method', msg, function (resp) {
+                    if (resp.error) {
+                        err(resp);
+                    }
+                    else {
+                        // TODO if the return value is an entity, it will be serialized as a _ref
+                        res(resp);
+                    }
+                });
+            });
+        }
+        Internal.remoteCall = remoteCall;
+        function createRemoteCallPayload(inst, name, params) {
+            var ident = "";
+            if (typeof (inst) === 'function') {
+                ident = "staticCall:" + Utils.findName(inst);
+            }
+            else {
+                var ev = Db.of(inst);
+                ident = ev.getUrl();
+            }
+            return {
+                entityUrl: ident,
+                method: name,
+                args: Utils.serializeRefs(params)
+            };
+        }
+        Internal.createRemoteCallPayload = createRemoteCallPayload;
         var MetaDescriptor = (function () {
             function MetaDescriptor() {
                 this.localName = null;
@@ -2931,6 +2905,70 @@ var Db;
             }
         }
         Utils.copyObj = copyObj;
+        function serializeRefs(from) {
+            if (Array.isArray(from)) {
+                var retArr = [];
+                for (var i = 0; i < from.length; i++) {
+                    retArr[i] = serializeRefs(from[i]);
+                }
+                return retArr;
+            }
+            if (typeof (from) === 'object') {
+                // Check if it's an entity
+                var ev = of(from);
+                if (ev && ev.getUrl()) {
+                    return { _ref: ev.getUrl() };
+                }
+                var ks = Object.keys(from);
+                var retObj = {};
+                for (var i = 0; i < ks.length; i++) {
+                    retObj[ks[i]] = serializeRefs(from[ks[i]]);
+                }
+                return retObj;
+            }
+            return from;
+        }
+        Utils.serializeRefs = serializeRefs;
+        function deserializeRefs(db, ctx, from) {
+            var ret = {};
+            var promises = [];
+            intDeserializeRefs(db, ctx, promises, { base: from }, ret, 'base');
+            return Promise.all(promises).then(function (vals) {
+                return ret['base'];
+            });
+        }
+        Utils.deserializeRefs = deserializeRefs;
+        function intDeserializeRefs(db, ctx, promises, src, to, key) {
+            var from = src[key];
+            if (Array.isArray(from)) {
+                var retArr = [];
+                to[key] = retArr;
+                for (var i = 0; i < from.length; i++) {
+                    intDeserializeRefs(db, ctx, promises, from, retArr, i);
+                }
+            }
+            else if (typeof (from) === 'object') {
+                if (from._ref) {
+                    var prom = db().load(ctx, from._ref);
+                    promises.push(prom);
+                    to[key] = null;
+                    prom.then(function (det) {
+                        to[key] = det.payload;
+                    });
+                }
+                else {
+                    var retObj = {};
+                    to[key] = retObj;
+                    var ks = Object.keys(from);
+                    for (var i = 0; i < ks.length; i++) {
+                        intDeserializeRefs(db, ctx, promises, from, retObj, ks[i]);
+                    }
+                }
+            }
+            else {
+                to[key] = from;
+            }
+        }
         var IdGenerator = (function () {
             function IdGenerator() {
             }

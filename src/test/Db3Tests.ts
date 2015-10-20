@@ -7,7 +7,7 @@ import assert = M.assert;
 
 var baseUrl :string = "https://swashp.firebaseio.com/test3/"
 
-var Db = Db3.configure({baseUrl:baseUrl});
+var Db = Db3.configure(<Db3.Api.FirebaseConf>{baseUrl:baseUrl});
 
 var lastRemoteCallArgs :IArguments = null;
 
@@ -2298,6 +2298,114 @@ describe('Db3 >', () => {
 	});
 	
 	describe('Server calls >', ()=>{
+		it('should serialize and deserialize refs on native', ()=>{
+			var to = Db3.Utils.serializeRefs(1);
+			assert("Serialized correctly").when(to).is(1);
+			return Db3.Utils.deserializeRefs(Db, this, to).then((des)=>{
+				assert("Serialized correctly").when(des).is(1);
+			});
+		});
+
+		it('should serialize and deserialize refs on entity', ()=>{
+			var wp1 = Db(WithProps).get("wp1");
+			var wp1url = Db(wp1).getUrl();
+			
+			var to = Db3.Utils.serializeRefs(wp1);
+			assert("Serialized correctly").when(to).is(M.objectMatchingStrictly({
+				_ref:wp1url
+			}));
+			
+			return Db3.Utils.deserializeRefs(Db, this, to).then((des)=>{
+				assert("Serialized correctly").when(des).is(M.exactly(wp1));
+			});
+		});
+
+		it('should serialize and deserialize refs on array', ()=>{
+			var wp1 = Db(WithProps).get("wp1");
+			var wp1url = Db(wp1).getUrl();
+			
+			var to = Db3.Utils.serializeRefs(['a',1,wp1]);
+			assert("Serialized correctly as array").when(to).is(M.anArray);
+			assert("Serialized correct length").when(to).is(M.withLength(3));
+			assert("Serialized correct element 0").when(to[0]).is('a');
+			assert("Serialized correct element 1").when(to[1]).is(1);
+			assert("Serialized correct element 2").when(to[2]).is(M.objectMatchingStrictly({
+				_ref: wp1url
+			}));
+			
+			return Db3.Utils.deserializeRefs(Db, this, to).then((des)=>{
+				assert("Deserialized correctly as array").when(des).is(M.anArray);
+				assert("Deserialized correct length").when(des).is(M.withLength(3));
+				assert("Deserialized correct element 0").when(des[0]).is('a');
+				assert("Deserialized correct element 1").when(des[1]).is(1);
+				assert("Deserialized correct element 2").when(des[2]).is(M.exactly(wp1));
+			});
+		});
+		
+		it('should serialize and deserialize refs on complex object', ()=>{
+			var wp1 = Db(WithProps).get("wp1");
+			var wp1url = Db(wp1).getUrl();
+			
+			var from = {
+				str: 'str',
+				num: 1,
+				ent: wp1,
+				arr: [
+					'str',
+					1,
+					wp1
+				],
+				obj: {
+					str: 'str',
+					num: 1,
+					ent: wp1
+				}
+			};
+			
+			var to = Db3.Utils.serializeRefs(from);
+			assert("serialized correctly").when(to).is(M.objectMatchingStrictly({
+				str: 'str',
+				num: 1,
+				ent: {_ref:wp1url},
+				arr: [
+					'str',
+					1,
+					{_ref:wp1url}
+				],
+				obj: {
+					str: 'str',
+					num: 1,
+					ent: {_ref:wp1url}
+				}
+			}));
+			
+			return Db3.Utils.deserializeRefs(Db, this, to).then((des)=>{
+				assert("deserialized correctly").when(des).is(M.objectMatchingStrictly({
+					str: 'str',
+					num: 1,
+					ent: M.exactly(wp1),
+					arr: [
+						'str',
+						1,
+						M.exactly(wp1)
+					],
+					obj: {
+						str: 'str',
+						num: 1,
+						ent: M.exactly(wp1)
+					}
+				}));
+				assert("ref entity has been loaded").when(des.ent).is(M.objectMatching({
+					str: 'String 1',
+					num: 200,
+					arr: [1,2,3],
+					subobj: {
+						substr: 'Sub String'
+					}
+				}));
+			});
+		});
+		
 		it('should create correct server side method call payload', () => {
 			var wp2 = Db(WithProps).get("wp2");
 			var wp1 = Db(WithProps).get("wp1");
