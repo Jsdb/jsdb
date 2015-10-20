@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151020_222247_master_1.0.0_46ffdd9
+ * TSDB version : 20151020_223101_master_1.0.0_558d479
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151020_222247_master_1.0.0_46ffdd9';
+var Version = '20151020_223101_master_1.0.0_558d479';
 /**
  * The main Db module.
  */
@@ -2038,25 +2038,6 @@ var Db;
                 else if (colonpos > 0) {
                     dis = id.substring(0, colonpos);
                 }
-                /*
-                event = new EntityEvent<E>();
-                event.url = url;
-                event.state = this.state;
-                event.classMeta = this.classMeta;
-                var meta = this.classMeta;
-                if (dis) {
-                    var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
-                    // TODO issue a warning if the discriminator can't be resolved, maybe?
-                    if (nmeta) meta = nmeta;
-                }
-                event.classMeta = meta;
-                
-                var inst = <any>new meta.ctor();
-                if (inst.dbInit) {
-                    (<Api.IDb3Initable>inst).dbInit(url, this.state.db);
-                }
-                event.setEntity(inst);
-                */
                 var meta = this.classMeta;
                 if (dis) {
                     var nmeta = this.state.myMeta.findDiscriminated(this.classMeta, dis);
@@ -2170,19 +2151,6 @@ var Db;
                         h.ref = h.ref.limitToFirst(limVal);
                     }
                 }
-                /*
-                if (this.sorting && this.sorting.desc) {
-                    if (this._limit) {
-                        h.ref = h.ref.limitToLast(this._limit);
-                    } else {
-                        h.ref = h.ref.limitToLast(Number.MAX_VALUE);
-                    }
-                } else {
-                    if (this._limit) {
-                        h.ref = h.ref.limitToFirst(this._limit);
-                    }
-                }
-                */
                 h.event = this;
                 h.hookAll(function (ds, prev, event) { return _this.handleDbEvent(h, event, ds, prev); });
             };

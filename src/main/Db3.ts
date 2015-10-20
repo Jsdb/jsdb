@@ -2850,27 +2850,6 @@ module Db {
 					dis = id.substring(0,colonpos);
 				}
 				
-				
-				/*
-				event = new EntityEvent<E>();
-				event.url = url;
-				event.state = this.state;
-				event.classMeta = this.classMeta;
-				var meta = this.classMeta;
-				if (dis) {
-					var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
-					// TODO issue a warning if the discriminator can't be resolved, maybe?
-					if (nmeta) meta = nmeta;
-				}
-				event.classMeta = meta;
-				
-				var inst = <any>new meta.ctor();
-				if (inst.dbInit) {
-					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
-				}
-				event.setEntity(inst);
-				*/
-								
 				var meta = this.classMeta;
 				if (dis) {
 					var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
@@ -2993,19 +2972,6 @@ module Db {
 						h.ref = h.ref.limitToFirst(limVal);
 					}
 				}
-				/*
-				if (this.sorting && this.sorting.desc) {
-					if (this._limit) {
-						h.ref = h.ref.limitToLast(this._limit);
-					} else {
-						h.ref = h.ref.limitToLast(Number.MAX_VALUE);
-					}
-				} else {
-					if (this._limit) {
-						h.ref = h.ref.limitToFirst(this._limit);
-					}
-				}
-				*/
 				h.event = this;
 				h.hookAll((ds,prev,event) => this.handleDbEvent(h,event,ds,prev));
 			}
