@@ -2180,6 +2180,12 @@ describe('Db3 >', function () {
                     assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
                 });
             });
+            it('should work on entity roots', function () {
+                Db(WithProps).query().onField('num').equals(200).load(_this).then(function (vals) {
+                    assert('the list has right size').when(vals).is(M.withLength(1));
+                    assert('the first element is right').when(vals[0].str).is('String 1');
+                });
+            });
         });
     });
     describe('Server calls >', function () {

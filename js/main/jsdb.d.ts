@@ -108,6 +108,7 @@ declare module 'jsdb' {
                                 * Deletes all the data from the db, without sending any event, and resets the internal state.
                                 */
                             erase(): any;
+                            executeServerMethod(ctx: Object, payload: any): Promise<any>;
                     }
                     /**
                         * Interface for sorting informations.
@@ -1371,8 +1372,9 @@ declare module 'jsdb' {
                             serialize(): Api.Entity;
                             isLocal(): boolean;
                     }
-                    class EntityRoot<E extends Api.Entity> implements Api.IEntityRoot<E> {
+                    class EntityRoot<E extends Api.Entity> extends GenericEvent implements Api.IEntityRoot<E> {
                             constructor(state: DbState, meta: ClassMetadata);
+                            findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             getEvent(id: string): EntityEvent<E>;
                             get(id: string): E;
                             idOf(entity: E): string;
@@ -1477,11 +1479,12 @@ declare module 'jsdb' {
                             mergeSuper(sup: ClassMetadata): void;
                             addSubclass(sub: ClassMetadata): void;
                             findForDiscriminator(disc: string): ClassMetadata;
+                            createEvent(allMetadata: Metadata): GenericEvent;
                     }
                     class EmbeddedMetaDescriptor extends MetaDescriptor {
                             binding: Api.IBinding;
                             named(name: string): EmbeddedMetaDescriptor;
-                            createEvent(allMetadata: Metadata): GenericEvent;
+                            createEvent(allMetadata: Metadata): EntityEvent<any>;
                             setBinding(binding: Api.IBinding): void;
                     }
                     class ReferenceMetaDescriptor extends MetaDescriptor {

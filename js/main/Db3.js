@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151020_063335_master_1.0.0_021b8fc
+ * TSDB version : 20151020_222247_master_1.0.0_46ffdd9
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151020_063335_master_1.0.0_021b8fc';
+var Version = '20151020_222247_master_1.0.0_46ffdd9';
 /**
  * The main Db module.
  */
@@ -2008,13 +2008,23 @@ var Db;
             return ObservableEvent;
         })(SingleDbHandlerEvent);
         Internal.ObservableEvent = ObservableEvent;
-        var EntityRoot = (function () {
+        var EntityRoot = (function (_super) {
+            __extends(EntityRoot, _super);
             function EntityRoot(state, meta) {
-                this.state = state;
-                this.meta = meta;
+                _super.call(this);
                 if (!meta.root)
                     throw new Error("The entity " + meta.getName() + " is not a root entity");
+                this.state = state;
+                this.classMeta = meta;
             }
+            EntityRoot.prototype.findCreateChildFor = function (metaOrkey, force) {
+                if (force === void 0) { force = false; }
+                var meta = null;
+                if (metaOrkey instanceof MetaDescriptor) {
+                    throw new Error("EntityRoot does not support children using MetaDescriptors");
+                }
+                return this.getEvent(metaOrkey);
+            };
             EntityRoot.prototype.getEvent = function (id) {
                 var url = this.getUrl() + id + "/";
                 var event = this.state.fetchFromCache(url);
@@ -2028,20 +2038,37 @@ var Db;
                 else if (colonpos > 0) {
                     dis = id.substring(0, colonpos);
                 }
-                event = new EntityEvent();
+                /*
+                event = new EntityEvent<E>();
                 event.url = url;
                 event.state = this.state;
-                event.classMeta = this.meta;
-                var meta = this.meta;
+                event.classMeta = this.classMeta;
+                var meta = this.classMeta;
                 if (dis) {
-                    var nmeta = this.state.myMeta.findDiscriminated(this.meta, dis);
+                    var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
+                    // TODO issue a warning if the discriminator can't be resolved, maybe?
+                    if (nmeta) meta = nmeta;
+                }
+                event.classMeta = meta;
+                
+                var inst = <any>new meta.ctor();
+                if (inst.dbInit) {
+                    (<Api.IDb3Initable>inst).dbInit(url, this.state.db);
+                }
+                event.setEntity(inst);
+                */
+                var meta = this.classMeta;
+                if (dis) {
+                    var nmeta = this.state.myMeta.findDiscriminated(this.classMeta, dis);
                     // TODO issue a warning if the discriminator can't be resolved, maybe?
                     if (nmeta)
                         meta = nmeta;
                 }
-                event.classMeta = meta;
-                var inst = new meta.ctor();
-                if (inst.dbInit) {
+                event = meta.createEvent(this.state.myMeta);
+                event.url = url;
+                event.state = this.state;
+                var inst = meta.createInstance();
+                if (inst['dbInit']) {
                     inst.dbInit(url, this.state.db);
                 }
                 event.setEntity(inst);
@@ -2062,17 +2089,19 @@ var Db;
                 return eu.substr(this.getUrl().length).replace('/', '');
             };
             EntityRoot.prototype.query = function () {
-                // TODO implement this
-                return null;
+                var ret = new QueryImpl(this);
+                ret.classMeta = this.classMeta;
+                this.addDependant(ret);
+                return ret;
             };
             EntityRoot.prototype.getUrl = function () {
-                return this.state.getUrl() + this.meta.root + '/';
+                return this.state.getUrl() + this.classMeta.root + '/';
             };
             EntityRoot.prototype.getRemainingUrl = function (url) {
                 return url.substr(this.getUrl().length);
             };
             return EntityRoot;
-        })();
+        })(GenericEvent);
         Internal.EntityRoot = EntityRoot;
         var QueryImpl = (function (_super) {
             __extends(QueryImpl, _super);
@@ -2612,6 +2641,12 @@ var Db;
                         return ret;
                 }
                 return null;
+            };
+            ClassMetadata.prototype.createEvent = function (allMetadata) {
+                var ret = new EntityEvent();
+                ret.url = this.getRemoteName();
+                ret.classMeta = this;
+                return ret;
             };
             return ClassMetadata;
         })(MetaDescriptor);

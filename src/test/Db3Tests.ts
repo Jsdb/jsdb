@@ -2294,6 +2294,12 @@ describe('Db3 >', () => {
 					assert('field is not inited').when(wl1.embedList).is(M.withLength(0));
 				});
 			});
+			it('should work on entity roots', ()=>{
+				Db(WithProps).query().onField('num').equals(200).load(this).then((vals)=>{
+					assert('the list has right size').when(vals).is(M.withLength(1));
+					assert('the first element is right').when(vals[0].str).is('String 1');
+				});
+			});
 		});
 	});
 	

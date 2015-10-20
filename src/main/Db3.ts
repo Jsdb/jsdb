@@ -2818,12 +2818,23 @@ module Db {
 		}
 
 		
-		export class EntityRoot<E extends Api.Entity> implements Api.IEntityRoot<E> {
+		export class EntityRoot<E extends Api.Entity> extends GenericEvent implements Api.IEntityRoot<E> {
 			constructor(
-				private state :DbState,
-				private meta :ClassMetadata
+				state :DbState,
+				meta :ClassMetadata
 			) {
+				super();
 				if (!meta.root) throw new Error("The entity " + meta.getName() + " is not a root entity");
+				this.state = state;
+				this.classMeta = meta;
+			}
+			
+			findCreateChildFor(metaOrkey :string|MetaDescriptor, force :boolean = false):GenericEvent {
+				var meta:MetaDescriptor = null;
+				if (metaOrkey instanceof MetaDescriptor) {
+					throw new Error("EntityRoot does not support children using MetaDescriptors");
+				}
+				return this.getEvent(<string>metaOrkey);
 			}
 			
 			getEvent(id:string) :EntityEvent<E> {
@@ -2840,13 +2851,14 @@ module Db {
 				}
 				
 				
+				/*
 				event = new EntityEvent<E>();
 				event.url = url;
 				event.state = this.state;
-				event.classMeta = this.meta;
-				var meta = this.meta;
+				event.classMeta = this.classMeta;
+				var meta = this.classMeta;
 				if (dis) {
-					var nmeta = this.state.myMeta.findDiscriminated(this.meta,dis);
+					var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
 					// TODO issue a warning if the discriminator can't be resolved, maybe?
 					if (nmeta) meta = nmeta;
 				}
@@ -2854,6 +2866,23 @@ module Db {
 				
 				var inst = <any>new meta.ctor();
 				if (inst.dbInit) {
+					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
+				}
+				event.setEntity(inst);
+				*/
+								
+				var meta = this.classMeta;
+				if (dis) {
+					var nmeta = this.state.myMeta.findDiscriminated(this.classMeta,dis);
+					// TODO issue a warning if the discriminator can't be resolved, maybe?
+					if (nmeta) meta = nmeta;
+				}
+				event = <EntityEvent<E>>meta.createEvent(this.state.myMeta);
+				event.url = url;
+				event.state = this.state;
+				
+				var inst = meta.createInstance();
+				if (inst['dbInit']) {
 					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
 				}
 				event.setEntity(inst);
@@ -2879,12 +2908,14 @@ module Db {
 			}
 			
 			query() :Api.IQuery<E> {
-				// TODO implement this
-				return null;
+				var ret = new QueryImpl<E>(this);
+				ret.classMeta = this.classMeta;
+				this.addDependant(ret);
+				return ret;
 			}
 			
 			getUrl() :string {
-				return this.state.getUrl() + this.meta.root + '/';
+				return this.state.getUrl() + this.classMeta.root + '/';
 			}
 			
 			getRemainingUrl(url :string) :string {
@@ -3436,6 +3467,13 @@ module Db {
 				}
 				return null;
 			}
+			
+			createEvent(allMetadata :Metadata) :GenericEvent {
+				var ret = new EntityEvent();
+				ret.url = this.getRemoteName();
+				ret.classMeta = this;
+				return ret;
+			}
 		}
 		
 
@@ -3448,7 +3486,7 @@ module Db {
 				return this;
 			}
 			
-			createEvent(allMetadata :Metadata) :GenericEvent {
+			createEvent(allMetadata :Metadata) :EntityEvent<any> {
 				var ret = new EntityEvent();
 				ret.url = this.getRemoteName();
 				// TODO i need this search? can't i cache this?
