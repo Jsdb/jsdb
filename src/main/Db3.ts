@@ -3071,15 +3071,7 @@ module Db {
 					meta = this.myMeta.findMeta(param);
 				}
 				// change the meta based on current overrides
-				if (meta.override != this.conf.override) {
-					for (var i = meta.subMeta.length - 1; i >= 0; i--) {
-						var subc = meta.subMeta[i];
-						if (subc.override == this.conf.override) {
-							meta = subc;
-							break;
-						}
-					}
-				}
+				meta = meta.findOverridden(this.conf.override);
 				return new EntityRoot<any>(this, meta);
 			}
 			
@@ -3226,17 +3218,29 @@ module Db {
 			executeServerMethod(ctx :Object, payload :any) :Promise<any> {
 				try {
 					var promises :Promise<any>[] = [];
+					var fn :Function = null;
 					
-					var entevt = this.loadEventWithInstance(payload.entityUrl);
-					if (!entevt) throw "Can't find entity";
-					var fn = <Function>entevt.entity[payload.method];
-					if (!fn) throw "Can't find method";
-					if (entevt['load']) {
-						promises.push(<Promise<any>>entevt['load'](ctx));
+					if (payload.entityUrl.indexOf('staticCall:') === 0) {
+						var clname = payload.entityUrl.substr(11);
+						var meta = this.myMeta.findNamed(clname);
+						if (!meta) throw "Can't find class named " + clname;
+						meta = meta.findOverridden(this.conf.override);
+						if (!meta) throw "Can't find override of class " + clname + " for " + this.conf.override;
+						fn = <Function>meta.ctor[payload.method];
+						if (!fn) throw "Can't find method";
+						promises.push(Promise.resolve(meta.ctor));
 					} else {
-						promises.push(Promise.resolve(entevt.entity));
+						var entevt = this.loadEventWithInstance(payload.entityUrl);
+						if (!entevt) throw "Can't find entity";
+						fn = <Function>entevt.entity[payload.method];
+						if (!fn) throw "Can't find method";
+						if (entevt['load']) {
+							promises.push(<Promise<any>>entevt['load'](ctx));
+						} else {
+							promises.push(Promise.resolve(entevt.entity));
+						}
 					}
-					
+						
 					promises.push(Utils.deserializeRefs(this.db, ctx,<any[]>payload.args));
 					
 					return Promise.all(promises).then((values) => {
@@ -3245,7 +3249,7 @@ module Db {
 						return <Promise<any>>fn.apply(entity,values[1]);
 					}).then((ret) => {
 						return Utils.serializeRefs(ret);
-					})
+					});
 				} catch (e) {
 					return Promise.resolve({error: e.toString()});
 				}
@@ -3432,6 +3436,19 @@ module Db {
 					if (ret) return ret;
 				}
 				return null;
+			}
+			
+			findOverridden(override :string) :ClassMetadata {
+				if (!override) return this;
+				if (this.override == override) return this;
+				for (var i = this.subMeta.length - 1; i >= 0; i--) {
+					var subc = this.subMeta[i];
+					if (subc.override == override) {
+						return subc;
+						break;
+					}
+				}
+				return this;
 			}
 			
 			createEvent(allMetadata :Metadata) :GenericEvent {

@@ -36,6 +36,9 @@ var WithProps = (function () {
     WithProps.prototype.remoteCall = function (p1, p2) {
         return null;
     };
+    WithProps.statRemoteCall = function (p1, p2) {
+        return null;
+    };
     __decorate([
         Db3.observable()
     ], WithProps.prototype, "num");
@@ -46,6 +49,10 @@ var WithProps = (function () {
         __decorate([
             Db3.remote()
         ], WithProps.prototype, "remoteCall", Object.getOwnPropertyDescriptor(WithProps.prototype, "remoteCall")));
+    Object.defineProperty(WithProps, "statRemoteCall",
+        __decorate([
+            Db3.remote()
+        ], WithProps, "statRemoteCall", Object.getOwnPropertyDescriptor(WithProps, "statRemoteCall")));
     WithProps = __decorate([
         Db3.root()
     ], WithProps);
@@ -59,6 +66,10 @@ var ServerWithProps = (function (_super) {
     ServerWithProps.prototype.remoteCall = function () {
         lastRemoteCallArgs = arguments;
         return Promise.resolve('localCallAck');
+    };
+    ServerWithProps.statRemoteCall = function () {
+        lastRemoteCallArgs = arguments;
+        return Promise.resolve('localStaticCallAck');
     };
     ServerWithProps = __decorate([
         Db3.override()
@@ -2317,6 +2328,7 @@ describe('Db3 >', function () {
             }));
         });
         it('should execute server side method calls', function () {
+            lastRemoteCallArgs = null;
             var serDb = Db().fork({ override: 'server' });
             var wp1 = Db(WithProps).get("wp1");
             var wp2 = serDb(WithProps).get("wp2");
@@ -2334,6 +2346,39 @@ describe('Db3 >', function () {
             var ret = state.executeServerMethod(_this, pyl);
             return ret.then(function (val) {
                 M.assert('Returned the method return').when(val).is('localCallAck');
+                M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+                M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+                M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic: 'object' }));
+                M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.instanceOf(WithProps));
+                M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.objectMatching({
+                    str: 'String 1',
+                    num: 200,
+                    arr: [1, 2, 3],
+                    subobj: {
+                        substr: 'Sub String'
+                    }
+                }));
+            });
+        });
+        it('should execute STATIC server side method calls', function () {
+            lastRemoteCallArgs = null;
+            var serDb = Db().fork({ override: 'server' });
+            var wp1 = Db(WithProps).get("wp1");
+            var wp2 = serDb(WithProps).get("wp2");
+            var pyl = {
+                entityUrl: "staticCall:WithProps",
+                method: 'statRemoteCall',
+                args: [
+                    'a',
+                    1,
+                    { generic: 'object' },
+                    { _ref: Db(wp1).getUrl() }
+                ]
+            };
+            var state = serDb(wp2).state;
+            var ret = state.executeServerMethod(_this, pyl);
+            return ret.then(function (val) {
+                M.assert('Returned the method return').when(val).is('localStaticCallAck');
                 M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
                 M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
                 M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic: 'object' }));

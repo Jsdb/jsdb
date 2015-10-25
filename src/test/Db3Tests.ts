@@ -34,6 +34,11 @@ class WithProps implements Db3.Api.IEntityHooks {
 	remoteCall(p1 :string, p2 :number):Thenable<string> {
 		return null;
 	}
+	
+	@Db3.remote()
+	static statRemoteCall(p1 :string, p2 :number):Thenable<string> {
+		return null;
+	}
 }
 
 @Db3.override()
@@ -42,6 +47,10 @@ class ServerWithProps extends WithProps {
 	remoteCall():Thenable<string> {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localCallAck');
+	}
+	static statRemoteCall():Thenable<string> {
+		lastRemoteCallArgs = arguments;
+		return Promise.resolve('localStaticCallAck');
 	}
 }
 
@@ -2449,6 +2458,7 @@ describe('Db3 >', () => {
 		});
 		
 		it('should execute server side method calls', () => {
+			lastRemoteCallArgs = null;
 			var serDb = Db().fork({override:'server'});
 
 			var wp1 = Db(WithProps).get("wp1");
@@ -2471,6 +2481,47 @@ describe('Db3 >', () => {
 			var ret = state.executeServerMethod(this,pyl);
 			return ret.then((val) => {
 				M.assert('Returned the method return').when(val).is('localCallAck');
+				M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+				M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+				M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic:'object' }));
+				M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.instanceOf(WithProps));
+				M.assert('Call param 3 is right').when(lastRemoteCallArgs[3]).is(M.objectMatching(
+					{
+						str: 'String 1',
+						num: 200,
+						arr: [1,2,3],
+						subobj: {
+							substr: 'Sub String'
+						}
+					}
+				));
+			});
+		});
+
+		it('should execute STATIC server side method calls', () => {
+			lastRemoteCallArgs = null;
+			var serDb = Db().fork({override:'server'});
+
+			var wp1 = Db(WithProps).get("wp1");
+			var wp2 = serDb(WithProps).get("wp2");
+			
+			var pyl = {
+				entityUrl : "staticCall:WithProps",
+				method: 'statRemoteCall',
+				args:
+					[
+						'a',
+						1,
+						{ generic:'object' },
+						{_ref:Db(wp1).getUrl()}
+					]
+			};
+			
+			var state = (<Db3.Internal.GenericEvent><any>serDb(wp2)).state;
+			
+			var ret = state.executeServerMethod(this,pyl);
+			return ret.then((val) => {
+				M.assert('Returned the method return').when(val).is('localStaticCallAck');
 				M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
 				M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
 				M.assert('Call param 2 is right').when(lastRemoteCallArgs[2]).is(M.objectMatching({ generic:'object' }));

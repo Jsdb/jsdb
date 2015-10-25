@@ -16,8 +16,10 @@ ref :TheType
 
 > There is currently a bug that prevents completely supporting it. If the type is declared later in the file
 > (let alone in another file with circular dependency), it will not be resolved. It's already a problem with
-> the normal annotations, but there we can replace it with a function returning the type as late as poassible 
+> the normal annotations, but there we can replace it with a function returning the type as late as possible 
 > (already done), while here we have to wait for the language to support it properly.
+
+
 
 
 TEST Support binding and prjections on collections
@@ -71,7 +73,12 @@ Since all these steps are very "application specific", it would be better to :
 * a default implementation with sensible defaults (for example, only the socket in the context, always defaultDb etc..)
 * give a way to initialize the server-side of remote calls with a custom implementation of the adapter
 
-Ssame goes for the client side part.   
+Same goes for the client side part.
+
+> Done client side factory for creating the socket connection
+
+> I think that on server-side an adapter is too much, now that the method to handle a remote call is exposed in 
+> the IDbOperations, the full code to receive and handle the call should be a few lines. 
 
 
 Support automatic pre-resolving for references
@@ -128,6 +135,9 @@ non-primitive types.
 
 Write an interface for database configuration
 ---------------------------------------------
+
+> wrote interfaces, but maybe it's better to use a class or some toher way, cause we have no way at
+> runtime to understand which kind of database we want. (right now, it's only firebase so fine).
 
 
 
@@ -269,4 +279,16 @@ status is not sent the same applies to the second method. Ironically, the third 
 > reasons, probably it could be a good idea to have annotations to specify what to serialize and what not
 > on a method call.
 
+
+
+Remote calls to static methods
+------------------------------
+
+Currently, either a URL or the class name is sent in the payload. The URL is easy
+to decode, while the class name must be correctly handled :
+* find the class based on the name in the metadata of the current database state
+* find the correct override, because usually it will be a server side
+* find the method and execute as usual
+
+ 
 

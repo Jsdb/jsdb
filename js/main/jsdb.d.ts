@@ -1479,6 +1479,7 @@ declare module 'jsdb' {
                             mergeSuper(sup: ClassMetadata): void;
                             addSubclass(sub: ClassMetadata): void;
                             findForDiscriminator(disc: string): ClassMetadata;
+                            findOverridden(override: string): ClassMetadata;
                             createEvent(allMetadata: Metadata): GenericEvent;
                     }
                     class EmbeddedMetaDescriptor extends MetaDescriptor {

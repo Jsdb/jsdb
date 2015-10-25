@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151020_223101_master_1.0.0_558d479
+ * TSDB version : 20151026_004251_master_1.0.0_80f8f92
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151020_223101_master_1.0.0_558d479';
+var Version = '20151026_004251_master_1.0.0_80f8f92';
 /**
  * The main Db module.
  */
@@ -2240,15 +2240,7 @@ var Db;
                     meta = this.myMeta.findMeta(param);
                 }
                 // change the meta based on current overrides
-                if (meta.override != this.conf.override) {
-                    for (var i = meta.subMeta.length - 1; i >= 0; i--) {
-                        var subc = meta.subMeta[i];
-                        if (subc.override == this.conf.override) {
-                            meta = subc;
-                            break;
-                        }
-                    }
-                }
+                meta = meta.findOverridden(this.conf.override);
                 return new EntityRoot(this, meta);
             };
             DbState.prototype.entityRootFromUrl = function (url) {
@@ -2395,17 +2387,33 @@ var Db;
             DbState.prototype.executeServerMethod = function (ctx, payload) {
                 try {
                     var promises = [];
-                    var entevt = this.loadEventWithInstance(payload.entityUrl);
-                    if (!entevt)
-                        throw "Can't find entity";
-                    var fn = entevt.entity[payload.method];
-                    if (!fn)
-                        throw "Can't find method";
-                    if (entevt['load']) {
-                        promises.push(entevt['load'](ctx));
+                    var fn = null;
+                    if (payload.entityUrl.indexOf('staticCall:') === 0) {
+                        var clname = payload.entityUrl.substr(11);
+                        var meta = this.myMeta.findNamed(clname);
+                        if (!meta)
+                            throw "Can't find class named " + clname;
+                        meta = meta.findOverridden(this.conf.override);
+                        if (!meta)
+                            throw "Can't find override of class " + clname + " for " + this.conf.override;
+                        fn = meta.ctor[payload.method];
+                        if (!fn)
+                            throw "Can't find method";
+                        promises.push(Promise.resolve(meta.ctor));
                     }
                     else {
-                        promises.push(Promise.resolve(entevt.entity));
+                        var entevt = this.loadEventWithInstance(payload.entityUrl);
+                        if (!entevt)
+                            throw "Can't find entity";
+                        fn = entevt.entity[payload.method];
+                        if (!fn)
+                            throw "Can't find method";
+                        if (entevt['load']) {
+                            promises.push(entevt['load'](ctx));
+                        }
+                        else {
+                            promises.push(Promise.resolve(entevt.entity));
+                        }
                     }
                     promises.push(Utils.deserializeRefs(this.db, ctx, payload.args));
                     return Promise.all(promises).then(function (values) {
@@ -2609,6 +2617,20 @@ var Db;
                         return ret;
                 }
                 return null;
+            };
+            ClassMetadata.prototype.findOverridden = function (override) {
+                if (!override)
+                    return this;
+                if (this.override == override)
+                    return this;
+                for (var i = this.subMeta.length - 1; i >= 0; i--) {
+                    var subc = this.subMeta[i];
+                    if (subc.override == override) {
+                        return subc;
+                        break;
+                    }
+                }
+                return this;
             };
             ClassMetadata.prototype.createEvent = function (allMetadata) {
                 var ret = new EntityEvent();
