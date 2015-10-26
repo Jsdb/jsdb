@@ -51,12 +51,6 @@ keep a list of already created instances, de-facto creating the cache. This woul
 
 
 
-Create an ExecContext for server side methods
----------------------------------------------
-
-The context is to be used by the user application, to store things like the current user or similar,
-and passed as last parameter if the parameter name is "ctx".
-
 
 Adapter for socket.io and calls
 -----------------------------
@@ -291,4 +285,17 @@ to decode, while the class name must be correctly handled :
 * find the method and execute as usual
 
  
+Create an ExecContext for server side methods
+---------------------------------------------
+
+The context is to be used by the user application, to store things like the current user or similar,
+and passed as last parameter if the parameter name is "ctx".
+
+> The parameter must be called "_ctx" (with an underscore) and be the last parameter.
+> It can be optional, and parameters before it can be optional (they will be filled with
+> undefined if not passed in).
+> The interface is Api.IRemoteCallContext, by default it has a db that gets set to the current
+> db, but being and interface with an optional property anything can be passed it it will get 
+> the db set. Obviously, it can contain anything else useful for the method execution based
+> on final application needs. 
 

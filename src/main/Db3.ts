@@ -151,6 +151,15 @@ module Db {
 		export interface IDb3Initable {
 			dbInit?(url :string, db :IDb3Static);
 		}
+		
+		/**
+		 * Basic interface for a context for remote calls. Server-side applications
+		 * will usually extend this to bring other informations, like the curent
+		 * user or security token and other environmental stuff.
+		 */
+		export interface IRemoteCallContext {
+			db? :IDb3Static;
+		}
 
 		/**
 		 * Operations on a db.
@@ -177,7 +186,7 @@ module Db {
 			erase();
 			
 			
-			executeServerMethod(ctx :Object, payload :any) :Promise<any>;
+			executeServerMethod(ctx :IRemoteCallContext, payload :any) :Promise<any>;
 		}
 		
 		/**
@@ -3215,7 +3224,8 @@ module Db {
 			* 
 			* This method will return a Promise to return to the socket when resolved. 
 			*/
-			executeServerMethod(ctx :Object, payload :any) :Promise<any> {
+			executeServerMethod(ctx :Api.IRemoteCallContext, payload :any) :Promise<any> {
+				if (!ctx.db) ctx.db = this.db;
 				try {
 					var promises :Promise<any>[] = [];
 					var fn :Function = null;
@@ -3240,13 +3250,21 @@ module Db {
 							promises.push(Promise.resolve(entevt.entity));
 						}
 					}
+					
+					var parnames = Utils.findParameterNames(fn);
+					var appendCtx = (parnames.length > 0 && parnames[parnames.length - 1] == '_ctx') ? parnames.length - 1 : -1;  
 						
 					promises.push(Utils.deserializeRefs(this.db, ctx,<any[]>payload.args));
 					
 					return Promise.all(promises).then((values) => {
 						var entity = values[0].payload;
-						// TODO if the return value is an entity, it must be serialized as a _ref
-						return <Promise<any>>fn.apply(entity,values[1]);
+						// Inject the ctx, if any
+						var params :any[] = values[1];
+						if (appendCtx > -1) {
+							while (params.length < appendCtx) params.push(undefined);
+							params.push(ctx);
+						}
+						return <Promise<any>>fn.apply(entity,params);
 					}).then((ret) => {
 						return Utils.serializeRefs(ret);
 					});
@@ -3680,6 +3698,17 @@ module Db {
 			}
 			return ret;
 		}
+		
+		var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+		var ARGUMENT_NAMES = /([^\s,]+)/g;
+		
+		export function findParameterNames(func :Function) :string[] {
+			var fnStr = func.toString().replace(STRIP_COMMENTS, '');
+			var result = fnStr.slice(fnStr.indexOf('(')+1, fnStr.indexOf(')')).match(ARGUMENT_NAMES);
+			if(result === null)
+				result = [];
+			return result;
+		}		
 		
 		export function isInlineObject(o :any) {
 			return typeof o === 'object' && o.constructor === Object;

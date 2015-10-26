@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151026_004251_master_1.0.0_80f8f92
+ * TSDB version : 20151026_021433_master_1.0.0_0920593
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151026_004251_master_1.0.0_80f8f92';
+var Version = '20151026_021433_master_1.0.0_0920593';
 /**
  * The main Db module.
  */
@@ -2385,6 +2385,8 @@ var Db;
             * This method will return a Promise to return to the socket when resolved.
             */
             DbState.prototype.executeServerMethod = function (ctx, payload) {
+                if (!ctx.db)
+                    ctx.db = this.db;
                 try {
                     var promises = [];
                     var fn = null;
@@ -2415,11 +2417,19 @@ var Db;
                             promises.push(Promise.resolve(entevt.entity));
                         }
                     }
+                    var parnames = Utils.findParameterNames(fn);
+                    var appendCtx = (parnames.length > 0 && parnames[parnames.length - 1] == '_ctx') ? parnames.length - 1 : -1;
                     promises.push(Utils.deserializeRefs(this.db, ctx, payload.args));
                     return Promise.all(promises).then(function (values) {
                         var entity = values[0].payload;
-                        // TODO if the return value is an entity, it must be serialized as a _ref
-                        return fn.apply(entity, values[1]);
+                        // Inject the ctx, if any
+                        var params = values[1];
+                        if (appendCtx > -1) {
+                            while (params.length < appendCtx)
+                                params.push(undefined);
+                            params.push(ctx);
+                        }
+                        return fn.apply(entity, params);
                     }).then(function (ret) {
                         return Utils.serializeRefs(ret);
                     });
@@ -2891,6 +2901,16 @@ var Db;
             return ret;
         }
         Utils.findHierarchy = findHierarchy;
+        var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+        var ARGUMENT_NAMES = /([^\s,]+)/g;
+        function findParameterNames(func) {
+            var fnStr = func.toString().replace(STRIP_COMMENTS, '');
+            var result = fnStr.slice(fnStr.indexOf('(') + 1, fnStr.indexOf(')')).match(ARGUMENT_NAMES);
+            if (result === null)
+                result = [];
+            return result;
+        }
+        Utils.findParameterNames = findParameterNames;
         function isInlineObject(o) {
             return typeof o === 'object' && o.constructor === Object;
         }

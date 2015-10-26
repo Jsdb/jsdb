@@ -48,6 +48,10 @@ class ServerWithProps extends WithProps {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localCallAck');
 	}
+	remoteCtxCall(str :string, num? :number, _ctx? :Object):Thenable<string> {
+		lastRemoteCallArgs = arguments;
+		return Promise.resolve('localCallAck');
+	}
 	static statRemoteCall():Thenable<string> {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localStaticCallAck');
@@ -2538,7 +2542,63 @@ describe('Db3 >', () => {
 				));
 			});
 		});
+
+		it('should execute server side method calls with context', () => {
+			lastRemoteCallArgs = null;
+			var serDb = Db().fork({override:'server'});
+
+			var wp1 = Db(WithProps).get("wp1");
+			var wp2 = serDb(WithProps).get("wp2");
+			
+			var pyl = {
+				entityUrl : serDb(wp2).getUrl(),
+				method: 'remoteCtxCall',
+				args:
+					[
+						'a',
+						1
+					]
+			};
+			
+			var state = (<Db3.Internal.GenericEvent><any>serDb(wp2)).state;
+			
+			var ctx = { test: 1};
+			var ret = state.executeServerMethod(ctx,pyl);
+			return ret.then((val) => {
+				M.assert('Returned the method return').when(val).is('localCallAck');
+				M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+				M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+				M.assert('Ctx param is right').when(lastRemoteCallArgs[2]).is(M.exactly(ctx));
+			});
+		});
 		
+		it('should execute server side method calls with context and opt params', () => {
+			lastRemoteCallArgs = null;
+			var serDb = Db().fork({override:'server'});
+
+			var wp1 = Db(WithProps).get("wp1");
+			var wp2 = serDb(WithProps).get("wp2");
+			
+			var pyl = {
+				entityUrl : serDb(wp2).getUrl(),
+				method: 'remoteCtxCall',
+				args:
+					[
+						'a'
+					]
+			};
+			
+			var state = (<Db3.Internal.GenericEvent><any>serDb(wp2)).state;
+			
+			var ctx = { test: 1};
+			var ret = state.executeServerMethod(ctx,pyl);
+			return ret.then((val) => {
+				M.assert('Returned the method return').when(val).is('localCallAck');
+				M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+				M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(M.undefinedValue);
+				M.assert('Ctx param is right').when(lastRemoteCallArgs[2]).is(M.exactly(ctx));
+			});
+		});
 		
 	});
 

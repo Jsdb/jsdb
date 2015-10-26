@@ -67,6 +67,10 @@ var ServerWithProps = (function (_super) {
         lastRemoteCallArgs = arguments;
         return Promise.resolve('localCallAck');
     };
+    ServerWithProps.prototype.remoteCtxCall = function (str, num, _ctx) {
+        lastRemoteCallArgs = arguments;
+        return Promise.resolve('localCallAck');
+    };
     ServerWithProps.statRemoteCall = function () {
         lastRemoteCallArgs = arguments;
         return Promise.resolve('localStaticCallAck');
@@ -2391,6 +2395,51 @@ describe('Db3 >', function () {
                         substr: 'Sub String'
                     }
                 }));
+            });
+        });
+        it('should execute server side method calls with context', function () {
+            lastRemoteCallArgs = null;
+            var serDb = Db().fork({ override: 'server' });
+            var wp1 = Db(WithProps).get("wp1");
+            var wp2 = serDb(WithProps).get("wp2");
+            var pyl = {
+                entityUrl: serDb(wp2).getUrl(),
+                method: 'remoteCtxCall',
+                args: [
+                    'a',
+                    1
+                ]
+            };
+            var state = serDb(wp2).state;
+            var ctx = { test: 1 };
+            var ret = state.executeServerMethod(ctx, pyl);
+            return ret.then(function (val) {
+                M.assert('Returned the method return').when(val).is('localCallAck');
+                M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+                M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(1);
+                M.assert('Ctx param is right').when(lastRemoteCallArgs[2]).is(M.exactly(ctx));
+            });
+        });
+        it('should execute server side method calls with context and opt params', function () {
+            lastRemoteCallArgs = null;
+            var serDb = Db().fork({ override: 'server' });
+            var wp1 = Db(WithProps).get("wp1");
+            var wp2 = serDb(WithProps).get("wp2");
+            var pyl = {
+                entityUrl: serDb(wp2).getUrl(),
+                method: 'remoteCtxCall',
+                args: [
+                    'a'
+                ]
+            };
+            var state = serDb(wp2).state;
+            var ctx = { test: 1 };
+            var ret = state.executeServerMethod(ctx, pyl);
+            return ret.then(function (val) {
+                M.assert('Returned the method return').when(val).is('localCallAck');
+                M.assert('Call param 0 is right').when(lastRemoteCallArgs[0]).is('a');
+                M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(M.undefinedValue);
+                M.assert('Ctx param is right').when(lastRemoteCallArgs[2]).is(M.exactly(ctx));
             });
         });
     });

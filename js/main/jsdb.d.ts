@@ -89,6 +89,14 @@ declare module 'jsdb' {
                             dbInit?(url: string, db: IDb3Static): any;
                     }
                     /**
+                        * Basic interface for a context for remote calls. Server-side applications
+                        * will usually extend this to bring other informations, like the curent
+                        * user or security token and other environmental stuff.
+                        */
+                    interface IRemoteCallContext {
+                            db?: IDb3Static;
+                    }
+                    /**
                         * Operations on a db.
                         */
                     interface IDbOperations {
@@ -108,7 +116,7 @@ declare module 'jsdb' {
                                 * Deletes all the data from the db, without sending any event, and resets the internal state.
                                 */
                             erase(): any;
-                            executeServerMethod(ctx: Object, payload: any): Promise<any>;
+                            executeServerMethod(ctx: IRemoteCallContext, payload: any): Promise<any>;
                     }
                     /**
                         * Interface for sorting informations.
@@ -1424,7 +1432,7 @@ declare module 'jsdb' {
                              *
                              * This method will return a Promise to return to the socket when resolved.
                              */
-                            executeServerMethod(ctx: Object, payload: any): Promise<any>;
+                            executeServerMethod(ctx: Api.IRemoteCallContext, payload: any): Promise<any>;
                     }
                     /**
                      * Send to the server a server-side method call.
@@ -1533,6 +1541,7 @@ declare module 'jsdb' {
             module Utils {
                     function findName(o: any): string;
                     function findHierarchy(o: Api.Entity | Api.EntityType<any>): Api.EntityType<any>[];
+                    function findParameterNames(func: Function): string[];
                     function isInlineObject(o: any): boolean;
                     function isEmpty(obj: any): boolean;
                     function copyObj(from: Object, to: Object): void;
