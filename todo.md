@@ -1,3 +1,78 @@
+Programmatically trigger an update
+----------------------------------
+
+A normal Firebase scenario is that when an entity is updated lcoally and then saved,
+the updated events are triggered locally early, and later the database sync is performed.
+
+This is beneficial for the user experience.
+
+However, this is not the case when :
+* Another database backend is in use, some of them may be slow to respond
+* A server side method is called
+
+In the latter case, the roundtrip can be quite long even when using Firebase :
+* The call is made to the server
+* The server modifies the data and saves it
+* The database backend (Firebase) dispatches the change
+
+So, we should offer a way of programmatically trigger a "save" locally, even if
+the data is not really saved on the database. This could be used locally when
+server methods are called.
+
+Moreover, the database events could be the only kind of events the application is using,
+and there could be local modifications that does not go in parallel with the database
+that the application might want to trigger. Having a way to trigger local-only updated
+events could mean not having to use two event systems.
+
+
+Local stub for server side methods
+----------------------------------
+
+While the server side method calls are there to grant security and consistency to the 
+application, the lag they introduce can be rather long :
+* The call is made to the server
+* The server executes the method loading, modifiying and saving data
+* The database backend dispatches the change
+
+It would be good if the client side version of the method could "stub" the server
+side part, when needed and when the assumption that the server side call will succeed
+is high enough. 
+
+The promise returned sill still be the server side one, but local modification of
+data and local triggering of the update event can "preview" what the server is doing
+giving the user an immediate feedback. 
+
+
+Find a different way of passing a database for static remote calls
+-----------------------------------------------------------
+
+Even if the static calls are 99% of times probably made from a client application that
+has only one db active, it would be still be good to have a way to pass in the database
+on which to execute the call.
+
+Currently, one option is to pass it as a parameter, which works but gives error
+from typescript. 
+
+Another options could be :
+```typescript
+
+var db = Tsdb.configure();
+
+// The function call is "a classic" but also a burden
+db().with(()=>Clazz.static(param,param));
+
+db().useAsDefault();
+Clazz.static(param,param); // Should there be no interruption
+db().restoreDefault(); // No way to automatically cleanup
+
+// with is a getter, when called sets the "defaultDb"
+db().with(Clazz.static(param,param));
+// after execution cleans behind itself
+
+
+```
+
+
 Support emitted metadata
 ------------------------
 
