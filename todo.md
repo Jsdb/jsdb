@@ -65,10 +65,9 @@ db().useAsDefault();
 Clazz.static(param,param); // Should there be no interruption
 db().restoreDefault(); // No way to automatically cleanup
 
-// with is a getter, when called sets the "defaultDb"
+// with is a getter, when called sets the "defaultDb" and returns a function
 db().with(Clazz.static(param,param));
 // after execution cleans behind itself
-
 
 ```
 
