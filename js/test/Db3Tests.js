@@ -907,6 +907,53 @@ describe('Db3 >', function () {
                 }
             });
         });
+        it('should notify synthetic updates', function (done) {
+            var wp1 = Db(WithProps).get('wp1');
+            var times = 0;
+            Db(wp1).updated(_this, function (det) {
+                times++;
+                if (times == 1) {
+                    // Done loading event
+                    assert("Should receive done loading event").when(det.type).is(Db3.Api.EventType.LOAD);
+                    wp1._local = 5;
+                    Db(wp1).triggerLocalSave();
+                }
+                else if (times == 2) {
+                    assert("Given event should be an update").when(det.type).is(Db3.Api.EventType.UPDATE);
+                    assert("Given event is synthetic").when(det.synthetic).is(true);
+                    assert("Given event has right payload").when(det.payload).is(wp1);
+                    assert("In payload there is modification").when(det.payload._local).is(5);
+                    det.offMe();
+                    done();
+                }
+                else {
+                    assert("Should not call the event more than once").when(times).is(M.lessThan(3));
+                }
+            });
+        });
+        it('should notify synthetic updates on sub entities', function (done) {
+            var ws1 = Db(WithSubentity).get('ws1');
+            var times = 0;
+            Db(ws1.sub).updated(_this, function (det) {
+                times++;
+                if (times == 1) {
+                    // Done loading event
+                    assert("Should receive done loading event").when(det.type).is(Db3.Api.EventType.LOAD);
+                    ws1.str = "synth";
+                    Db(ws1).triggerLocalSave();
+                }
+                else if (times == 2) {
+                    assert("Given event should be an update").when(det.type).is(Db3.Api.EventType.UPDATE);
+                    assert("Given event is synthetic").when(det.synthetic).is(true);
+                    assert("Given event has right payload").when(det.payload).is(ws1.sub);
+                    det.offMe();
+                    done();
+                }
+                else {
+                    assert("Should not call the event more than once").when(times).is(M.lessThan(3));
+                }
+            });
+        });
         it('should update data for observable', function (done) {
             var wp1 = Db(WithProps).get('wp1');
             var times = 0;
@@ -973,7 +1020,6 @@ describe('Db3 >', function () {
                     M.assert("Loaded subentity").when(ws4.sub).is(M.exactly(null));
                 });
             });
-            // TODO load embeddeds by direct urls
         });
         describe('References >', function () {
             it('should dereference a reference', function () {

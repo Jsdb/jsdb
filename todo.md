@@ -1,28 +1,3 @@
-Programmatically trigger an update
-----------------------------------
-
-A normal Firebase scenario is that when an entity is updated lcoally and then saved,
-the updated events are triggered locally early, and later the database sync is performed.
-
-This is beneficial for the user experience.
-
-However, this is not the case when :
-* Another database backend is in use, some of them may be slow to respond
-* A server side method is called
-
-In the latter case, the roundtrip can be quite long even when using Firebase :
-* The call is made to the server
-* The server modifies the data and saves it
-* The database backend (Firebase) dispatches the change
-
-So, we should offer a way of programmatically trigger a "save" locally, even if
-the data is not really saved on the database. This could be used locally when
-server methods are called.
-
-Moreover, the database events could be the only kind of events the application is using,
-and there could be local modifications that does not go in parallel with the database
-that the application might want to trigger. Having a way to trigger local-only updated
-events could mean not having to use two event systems.
 
 
 Local stub for server side methods
@@ -373,3 +348,35 @@ and passed as last parameter if the parameter name is "ctx".
 > the db set. Obviously, it can contain anything else useful for the method execution based
 > on final application needs. 
 
+
+
+Programmatically trigger an update
+----------------------------------
+
+A normal Firebase scenario is that when an entity is updated lcoally and then saved,
+the updated events are triggered locally early, and later the database sync is performed.
+
+This is beneficial for the user experience.
+
+However, this is not the case when :
+* Another database backend is in use, some of them may be slow to respond
+* A server side method is called
+
+In the latter case, the roundtrip can be quite long even when using Firebase :
+* The call is made to the server
+* The server modifies the data and saves it
+* The database backend (Firebase) dispatches the change
+
+So, we should offer a way of programmatically trigger a "save" locally, even if
+the data is not really saved on the database. This could be used locally when
+server methods are called.
+
+Moreover, the database events could be the only kind of events the application is using,
+and there could be local modifications that does not go in parallel with the database
+that the application might want to trigger. Having a way to trigger local-only updated
+events could mean not having to use two event systems.
+
+> Done for entities and references. In entities it forwards to sub entities and other references,
+> like a normal "value" events on the root entity would. 
+> It is triggered only if the entity was loaded, or the reference was referenced.
+> Not yet implemented for collections.
