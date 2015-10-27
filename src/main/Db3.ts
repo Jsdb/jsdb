@@ -3233,17 +3233,17 @@ module Db {
 					if (payload.entityUrl.indexOf('staticCall:') === 0) {
 						var clname = payload.entityUrl.substr(11);
 						var meta = this.myMeta.findNamed(clname);
-						if (!meta) throw "Can't find class named " + clname;
+						if (!meta) throw new Error("Can't find class named " + clname);
 						meta = meta.findOverridden(this.conf.override);
-						if (!meta) throw "Can't find override of class " + clname + " for " + this.conf.override;
+						if (!meta) throw new Error("Can't find override of class " + clname + " for " + this.conf.override);
 						fn = <Function>meta.ctor[payload.method];
-						if (!fn) throw "Can't find method";
+						if (!fn) throw new Error("Can't find method");
 						promises.push(Promise.resolve(meta.ctor));
 					} else {
 						var entevt = this.loadEventWithInstance(payload.entityUrl);
-						if (!entevt) throw "Can't find entity";
+						if (!entevt) throw new Error("Can't find entity");
 						fn = <Function>entevt.entity[payload.method];
-						if (!fn) throw "Can't find method";
+						if (!fn) throw new Error("Can't find method");
 						if (entevt['load']) {
 							promises.push(<Promise<any>>entevt['load'](ctx));
 						} else {
@@ -3269,6 +3269,7 @@ module Db {
 						return Utils.serializeRefs(ret);
 					});
 				} catch (e) {
+					console.log("Error executing remote invocation", e);
 					return Promise.resolve({error: e.toString()});
 				}
 			}
@@ -3300,8 +3301,13 @@ module Db {
 				for (var i = 0; i < params.length; i++) {
 					if (typeof(params[i]) === 'function' && params[i]['state']) {
 						state = params[i]['state'];
+						params.splice(i,1);
 						break;
 					}
+				}
+				if (!state) {
+					if (!defaultDb) throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method");
+					state = <DbState>defaultDb();
 				}
 			} else {
 				var ev = <GenericEvent><any>Db.of(inst);
@@ -3319,8 +3325,10 @@ module Db {
 					if (resp.error) {
 						err(resp);
 					} else {
-						// TODO if the return value is an entity, it will be serialized as a _ref
-						res(resp);
+						// If the return value is an entity, it will be serialized as a _ref
+						Utils.deserializeRefs(state.db, inst, resp).then((val)=>{
+							res(val);
+						});
 					}
 				});
 			});

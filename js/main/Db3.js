@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151026_021433_master_1.0.0_0920593
+ * TSDB version : 20151026_043419_master_1.0.0_9489c27
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151026_021433_master_1.0.0_0920593';
+var Version = '20151026_043419_master_1.0.0_9489c27';
 /**
  * The main Db module.
  */
@@ -2394,22 +2394,22 @@ var Db;
                         var clname = payload.entityUrl.substr(11);
                         var meta = this.myMeta.findNamed(clname);
                         if (!meta)
-                            throw "Can't find class named " + clname;
+                            throw new Error("Can't find class named " + clname);
                         meta = meta.findOverridden(this.conf.override);
                         if (!meta)
-                            throw "Can't find override of class " + clname + " for " + this.conf.override;
+                            throw new Error("Can't find override of class " + clname + " for " + this.conf.override);
                         fn = meta.ctor[payload.method];
                         if (!fn)
-                            throw "Can't find method";
+                            throw new Error("Can't find method");
                         promises.push(Promise.resolve(meta.ctor));
                     }
                     else {
                         var entevt = this.loadEventWithInstance(payload.entityUrl);
                         if (!entevt)
-                            throw "Can't find entity";
+                            throw new Error("Can't find entity");
                         fn = entevt.entity[payload.method];
                         if (!fn)
-                            throw "Can't find method";
+                            throw new Error("Can't find method");
                         if (entevt['load']) {
                             promises.push(entevt['load'](ctx));
                         }
@@ -2435,6 +2435,7 @@ var Db;
                     });
                 }
                 catch (e) {
+                    console.log("Error executing remote invocation", e);
                     return Promise.resolve({ error: e.toString() });
                 }
             };
@@ -2467,8 +2468,14 @@ var Db;
                 for (var i = 0; i < params.length; i++) {
                     if (typeof (params[i]) === 'function' && params[i]['state']) {
                         state = params[i]['state'];
+                        params.splice(i, 1);
                         break;
                     }
+                }
+                if (!state) {
+                    if (!defaultDb)
+                        throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method");
+                    state = defaultDb();
                 }
             }
             else {
@@ -2489,8 +2496,10 @@ var Db;
                         err(resp);
                     }
                     else {
-                        // TODO if the return value is an entity, it will be serialized as a _ref
-                        res(resp);
+                        // If the return value is an entity, it will be serialized as a _ref
+                        Utils.deserializeRefs(state.db, inst, resp).then(function (val) {
+                            res(val);
+                        });
                     }
                 });
             });
