@@ -19,6 +19,7 @@ var assert = M.assert;
 var baseUrl = "https://swashp.firebaseio.com/test3/";
 var Db = Db3.configure({ baseUrl: baseUrl });
 var lastRemoteCallArgs = null;
+var lastLocalStubArgs = null;
 var WithProps = (function () {
     function WithProps() {
         this._local = 1;
@@ -34,6 +35,7 @@ var WithProps = (function () {
         this._lastUpdateEv = ed;
     };
     WithProps.prototype.remoteCall = function (p1, p2) {
+        lastLocalStubArgs = arguments;
         return null;
     };
     WithProps.statRemoteCall = function (p1, p2) {
@@ -2487,6 +2489,29 @@ describe('Db3 >', function () {
                 M.assert('Call param 1 is right').when(lastRemoteCallArgs[1]).is(M.undefinedValue);
                 M.assert('Ctx param is right').when(lastRemoteCallArgs[2]).is(M.exactly(ctx));
             });
+        });
+        it('should invoke local stub', function (done) {
+            lastLocalStubArgs = null;
+            var lastEmitArgs = null;
+            var mockDb = Db().fork({
+                clientSocket: {
+                    connect: function (conf) {
+                        return Promise.resolve({
+                            emit: function () {
+                                lastEmitArgs = arguments;
+                            }
+                        });
+                    }
+                }
+            });
+            var wp1 = mockDb(WithProps).get("wp1");
+            setTimeout(function () {
+                wp1.remoteCall('a', 1);
+                assert("local stub executed").when(lastLocalStubArgs).is(M.aTruthy);
+                assert("local stub had right params").when(lastLocalStubArgs[0]).is('a');
+                assert("local stub had right params").when(lastLocalStubArgs[1]).is(1);
+                done();
+            }, 50);
         });
     });
 });

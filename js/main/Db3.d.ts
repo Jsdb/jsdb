@@ -345,6 +345,10 @@ declare module Db {
              * be a slow operation. With most databases, the event callbacks will instead be fired instantly.
              */
             save(): Promise<any>;
+            /**
+             * Deletes the entity from the database. The returned promise will resolve when
+             * the deletion is completed.
+             */
             remove(): Promise<any>;
             /**
              * Creates a clone of this entity, using the most recent data from the database.
@@ -362,6 +366,12 @@ declare module Db {
              * Access to the db instance of this event.
              */
             db: IDb3Static;
+            /**
+             * Triggers a "mock" update event, as if the data was updated on the database.
+             * This is useful when an operation has a long roundtrip before database events will
+             * arrive, and an immediate feedback to the user is wanted without duplicating
+             * all the event system.
+             */
             triggerLocalSave(): any;
         }
         /**

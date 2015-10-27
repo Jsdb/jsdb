@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151027_220652_master_1.0.0_3313919
+ * TSDB version : 20151027_225208_master_1.0.0_870c3b4
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151027_220652_master_1.0.0_3313919';
+var Version = '20151027_225208_master_1.0.0_870c3b4';
 /**
  * The main Db module.
  */
@@ -3311,12 +3311,16 @@ var Db;
     Db.ignore = ignore;
     function remote(settings) {
         return function (target, propertyKey, descriptor) {
+            var localStub = descriptor.value;
             descriptor.value = function () {
                 var args = [];
                 for (var _i = 0; _i < arguments.length; _i++) {
                     args[_i - 0] = arguments[_i];
                 }
-                return Internal.remoteCall(this, propertyKey.toString(), args);
+                var prom = Internal.remoteCall(this, propertyKey.toString(), args);
+                if (localStub)
+                    localStub.apply(this, args);
+                return prom;
             };
         };
     }

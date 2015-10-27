@@ -1,22 +1,5 @@
 
 
-Local stub for server side methods
-----------------------------------
-
-While the server side method calls are there to grant security and consistency to the 
-application, the lag they introduce can be rather long :
-* The call is made to the server
-* The server executes the method loading, modifiying and saving data
-* The database backend dispatches the change
-
-It would be good if the client side version of the method could "stub" the server
-side part, when needed and when the assumption that the server side call will succeed
-is high enough. 
-
-The promise returned sill still be the server side one, but local modification of
-data and local triggering of the update event can "preview" what the server is doing
-giving the user an immediate feedback. 
-
 
 Find a different way of passing a database for static remote calls
 -----------------------------------------------------------
@@ -380,3 +363,23 @@ events could mean not having to use two event systems.
 > like a normal "value" events on the root entity would. 
 > It is triggered only if the entity was loaded, or the reference was referenced.
 > Not yet implemented for collections.
+
+
+Local stub for server side methods
+----------------------------------
+
+While the server side method calls are there to grant security and consistency to the 
+application, the lag they introduce can be rather long :
+* The call is made to the server
+* The server executes the method loading, modifiying and saving data
+* The database backend dispatches the change
+
+It would be good if the client side version of the method could "stub" the server
+side part, when needed and when the assumption that the server side call will succeed
+is high enough. 
+
+The promise returned sill still be the server side one, but local modification of
+data and local triggering of the update event can "preview" what the server is doing
+giving the user an immediate feedback. 
+
+> Done in very simple way. 

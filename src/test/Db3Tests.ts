@@ -10,6 +10,7 @@ var baseUrl :string = "https://swashp.firebaseio.com/test3/"
 var Db = Db3.configure(<Db3.Api.FirebaseConf>{baseUrl:baseUrl});
 
 var lastRemoteCallArgs :IArguments = null;
+var lastLocalStubArgs :IArguments = null;
 
 @Db3.root()
 class WithProps implements Db3.Api.IEntityHooks {
@@ -32,6 +33,7 @@ class WithProps implements Db3.Api.IEntityHooks {
 	
 	@Db3.remote()
 	remoteCall(p1 :string, p2 :number):Thenable<string> {
+		lastLocalStubArgs = arguments;
 		return null;
 	}
 	
@@ -2643,6 +2645,31 @@ describe('Db3 >', () => {
 			});
 		});
 		
+		it('should invoke local stub', (done)=>{
+			lastLocalStubArgs = null;
+			var lastEmitArgs :IArguments = null;
+			var mockDb = Db().fork({
+				clientSocket: {
+					connect : function(conf) {
+						return Promise.resolve({
+							emit: function() {
+								lastEmitArgs = arguments;
+							}
+						});
+					}
+				}
+			});
+			
+			var wp1 = mockDb(WithProps).get("wp1");
+			setTimeout(()=>{
+				wp1.remoteCall('a',1);
+				assert("local stub executed").when(lastLocalStubArgs).is(M.aTruthy);
+				assert("local stub had right params").when(lastLocalStubArgs[0]).is('a');
+				assert("local stub had right params").when(lastLocalStubArgs[1]).is(1);
+				done();
+			},50);
+			
+		});
 	});
 
 });
