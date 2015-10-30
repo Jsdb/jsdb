@@ -801,7 +801,7 @@ module Db {
 		 */
 		export interface DatabaseConf {
 			override? :string;
-			clientSocket? :IClientSideSocketFactory;
+			clientSocket? :IClientSideSocketFactory|string;
 		}
 		
 		/**
@@ -3078,7 +3078,15 @@ module Db {
 			configure(conf :Api.DatabaseConf) {
 				this.conf = conf;
 				if (conf.clientSocket) {
-					conf.clientSocket.connect(conf).then((sock) => {
+					var csf :Api.IClientSideSocketFactory = null;
+					if (conf.clientSocket === 'default') {
+						csf = new Api.DefaultClientSideSocketFactory();
+					} else if (typeof conf.clientSocket === 'string') {
+						// TODO what to do with it? eval? require?
+					} else {
+						csf = <Api.IClientSideSocketFactory>conf.clientSocket;
+					}
+					csf.connect(conf).then((sock) => {
 						this.serverIo = sock;
 					})
 				}

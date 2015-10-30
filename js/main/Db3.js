@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151027_225208_master_1.0.0_870c3b4
+ * TSDB version : 20151030_190244_master_1.0.0_424f5e0
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151027_225208_master_1.0.0_870c3b4';
+var Version = '20151030_190244_master_1.0.0_424f5e0';
 /**
  * The main Db module.
  */
@@ -2220,7 +2220,16 @@ var Db;
                 var _this = this;
                 this.conf = conf;
                 if (conf.clientSocket) {
-                    conf.clientSocket.connect(conf).then(function (sock) {
+                    var csf = null;
+                    if (conf.clientSocket === 'default') {
+                        csf = new Api.DefaultClientSideSocketFactory();
+                    }
+                    else if (typeof conf.clientSocket === 'string') {
+                    }
+                    else {
+                        csf = conf.clientSocket;
+                    }
+                    csf.connect(conf).then(function (sock) {
                         _this.serverIo = sock;
                     });
                 }

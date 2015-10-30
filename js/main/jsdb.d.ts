@@ -644,7 +644,7 @@ declare module 'jsdb' {
                         */
                     interface DatabaseConf {
                             override?: string;
-                            clientSocket?: IClientSideSocketFactory;
+                            clientSocket?: IClientSideSocketFactory | string;
                     }
                     /**
                         * Database configuration for Firebase backend.
