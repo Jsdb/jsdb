@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151101_081421_master_1.0.0_81350e4
+ * TSDB version : 20151101_091409_master_1.0.0_92a0800
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151101_081421_master_1.0.0_81350e4';
+var Version = '20151101_091409_master_1.0.0_92a0800';
 /**
  * The main Db module.
  */
@@ -3015,6 +3015,8 @@ var Db;
         }
         Utils.copyObj = copyObj;
         function serializeRefs(from) {
+            if (from === null || typeof from === 'undefined')
+                return null;
             if (Array.isArray(from)) {
                 var retArr = [];
                 for (var i = 0; i < from.length; i++) {
@@ -3039,6 +3041,8 @@ var Db;
         }
         Utils.serializeRefs = serializeRefs;
         function deserializeRefs(db, ctx, from) {
+            if (from === null || typeof from === 'undefined')
+                return Promise.resolve(null);
             var ret = {};
             var promises = [];
             intDeserializeRefs(db, ctx, promises, { base: from }, ret, 'base');

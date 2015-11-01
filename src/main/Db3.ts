@@ -3836,6 +3836,7 @@ module Db {
 		}
 		
 		export function serializeRefs(from :any) :any {
+			if (from === null || typeof from === 'undefined') return null;
 			if (Array.isArray(from)) {
 				var retArr = [];
 				for (var i = 0; i < from.length; i++) {
@@ -3860,6 +3861,7 @@ module Db {
 		}
 		
 		export function deserializeRefs(db :Api.IDb3Static, ctx :Object, from :any) :Promise<any> {
+			if (from === null || typeof from === 'undefined') return Promise.resolve(null);
 			var ret = {};
 			var promises :Promise<any>[] = [];
 			intDeserializeRefs(db, ctx, promises, {base:from}, ret, 'base');

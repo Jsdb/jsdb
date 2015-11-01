@@ -2383,6 +2383,15 @@ describe('Db3 >', () => {
 				assert("Serialized correctly").when(des).is(M.exactly(wp1));
 			});
 		});
+		
+		it('should serialize and deserialize refs on null', ()=>{
+			var to = Db3.Utils.serializeRefs(null);
+			assert("Serialized correctly").when(to).is(null);
+			
+			return Db3.Utils.deserializeRefs(Db, this, to).then((des)=>{
+				assert("Serialized correctly").when(des).is(null);
+			});
+		});
 
 		it('should serialize and deserialize refs on array', ()=>{
 			var wp1 = Db(WithProps).get("wp1");
