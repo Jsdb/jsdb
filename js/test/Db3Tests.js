@@ -1349,6 +1349,11 @@ describe('Db3 >', function () {
                 M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
                 M.assert("Url doesnt contain discriminator").when(Db(wp).getUrl()).is(M.not(M.stringContaining("*")));
             });
+            it('should assign right url with specified id to a new entity mapped on root', function () {
+                var wp = new WithProps();
+                Db(wp).assignUrl("wp55");
+                M.assert("Assigned right url").when(Db(wp).getUrl()).is(wpFb.toString() + '/wp55/');
+            });
             it('should assign right url to a new polimorphic entity mapped on root', function () {
                 var wp = new WithMoreProps();
                 Db(wp).assignUrl();

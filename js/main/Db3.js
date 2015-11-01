@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151101_171847_master_1.0.0_f29a39a
+ * TSDB version : 20151101_192250_master_1.0.0_197af39
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151101_171847_master_1.0.0_f29a39a';
+var Version = '20151101_192250_master_1.0.0_197af39';
 /**
  * The main Db module.
  */
@@ -1132,7 +1132,7 @@ var Db;
                 }
                 return ret;
             };
-            EntityEvent.prototype.assignUrl = function () {
+            EntityEvent.prototype.assignUrl = function (id) {
                 if (this.entity == null)
                     throw new Error("The entity is null, can't assign an url to a null entity");
                 if (this.getUrl())
@@ -1141,7 +1141,7 @@ var Db;
                 if (!er)
                     throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
                 var url = er.getUrl();
-                var id = Db.Utils.IdGenerator.next();
+                var id = id || Db.Utils.IdGenerator.next();
                 var disc = this.classMeta.discriminator || '';
                 if (disc)
                     disc += '*';

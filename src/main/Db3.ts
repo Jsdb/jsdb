@@ -430,8 +430,16 @@ module Db {
 			 * If this entity is a new entity, not loaded and not yet persisted on the database,
 			 * and the entity is a {@link root} entity, this method assign an id and computes the
 			 * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
+			 * 
+			 * The dafult id is automatically computer in an URL-friendly, mostly unique, time-progressing id, 
+			 * otherwise an id can be given as a parameter.
+			 * 
+			 * Note that in both case, if the class is polimorphic and this instance being saved is of a subclass,
+			 * the string "*" followed by the class discriminator will be added to the id.
+			 * 
+			 * @param id If passed, this will be the id of the new entity, otherwise an automatic id is computed.
 			 */
-			assignUrl():void;
+			assignUrl(id?:string):void;
 			
 			/**
 			 * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
@@ -1994,13 +2002,13 @@ module Db {
 				return ret;
 			}
 			
-			assignUrl() {
+			assignUrl(id? :string) {
 				if (this.entity == null) throw new Error("The entity is null, can't assign an url to a null entity");
 				if (this.getUrl()) return;
 				var er = this.state.entityRoot(this.classMeta);
 				if (!er) throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
 				var url = er.getUrl();
-				var id = Db.Utils.IdGenerator.next();
+				var id = id || Db.Utils.IdGenerator.next();
 				var disc = this.classMeta.discriminator || '';
 				if (disc) disc+= '*';
 				this.url = url + disc + id + '/';

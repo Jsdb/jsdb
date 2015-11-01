@@ -324,8 +324,16 @@ declare module Db {
              * If this entity is a new entity, not loaded and not yet persisted on the database,
              * and the entity is a {@link root} entity, this method assign an id and computes the
              * complete and final url of the entity, which can then be retrieved with {@link getUrl}.
+             *
+             * The dafult id is automatically computer in an URL-friendly, mostly unique, time-progressing id,
+             * otherwise an id can be given as a parameter.
+             *
+             * Note that in both case, if the class is polimorphic and this instance being saved is of a subclass,
+             * the string "*" followed by the class discriminator will be added to the id.
+             *
+             * @param id If passed, this will be the id of the new entity, otherwise an automatic id is computed.
              */
-            assignUrl(): void;
+            assignUrl(id?: string): void;
             /**
              * Save this entity on the database. If this entity is a new entity and has a {@link root}, then
              * it will first call {@link assignUrl} and then persist the new entity. If the entity was loaded from the
@@ -1266,7 +1274,7 @@ declare module Db {
              * 		to leave the eventually existing value completely untouched.
              */
             serialize(localsOnly?: boolean, fields?: string[]): Object;
-            assignUrl(): void;
+            assignUrl(id?: string): void;
             triggerLocalSave(): void;
             save(): Promise<any>;
             remove(): Promise<any>;
