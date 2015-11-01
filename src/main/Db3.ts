@@ -792,7 +792,7 @@ module Db {
 			
 		export class DefaultClientSideSocketFactory implements IClientSideSocketFactory {
 			connect(conf :DatabaseConf) :Socket {
-				if (io) {
+				if (typeof io === 'function') {
 					return io();
 				}
 				var n = 'socket.io-client';

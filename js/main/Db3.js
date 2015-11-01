@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151101_080731_master_1.0.0_654d0c0
+ * TSDB version : 20151101_081421_master_1.0.0_81350e4
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151101_080731_master_1.0.0_654d0c0';
+var Version = '20151101_081421_master_1.0.0_81350e4';
 /**
  * The main Db module.
  */
@@ -84,7 +84,7 @@ var Db;
             function DefaultClientSideSocketFactory() {
             }
             DefaultClientSideSocketFactory.prototype.connect = function (conf) {
-                if (io) {
+                if (typeof io === 'function') {
                     return io();
                 }
                 var n = 'socket.io-client';
