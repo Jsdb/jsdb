@@ -3400,7 +3400,7 @@ module Db {
 			if (!io) throw new Error("Database is not configured for remote method call");
 			return new Promise<any>((res,err) => {
 				io.emit('method', msg, function(resp) {
-					if (resp.error) {
+					if (resp && resp.error) {
 						err(resp);
 					} else {
 						// If the return value is an entity, it will be serialized as a _ref

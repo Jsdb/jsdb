@@ -2270,7 +2270,7 @@ describe('Db3 >', function () {
                 assert("Serialized correctly").when(des).is(M.exactly(wp1));
             });
         });
-        it.only('should serialize and deserialize refs on null', function () {
+        it('should serialize and deserialize refs on null', function () {
             var to = Db3.Utils.serializeRefs(null);
             assert("Serialized correctly").when(to).is(null);
             return Db3.Utils.deserializeRefs(Db, _this, to).then(function (des) {

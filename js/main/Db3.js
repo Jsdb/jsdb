@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151101_091409_master_1.0.0_92a0800
+ * TSDB version : 20151101_091746_master_1.0.0_e14806d
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151101_091409_master_1.0.0_92a0800';
+var Version = '20151101_091746_master_1.0.0_e14806d';
 /**
  * The main Db module.
  */
@@ -2547,7 +2547,7 @@ var Db;
                 throw new Error("Database is not configured for remote method call");
             return new Promise(function (res, err) {
                 io.emit('method', msg, function (resp) {
-                    if (resp.error) {
+                    if (resp && resp.error) {
                         err(resp);
                     }
                     else {
