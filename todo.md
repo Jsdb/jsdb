@@ -1,4 +1,30 @@
 
+Error when querying on an entity root
+--------------------------------------
+
+Steps to reproduce :
+* Start the swashp server
+* Create a new user and pirate
+* Refresh the page
+* Try to login with that same user
+
+The stacktrace will be :
+
+```
+Error: Storing in cache two different events for the same key https://swashp.firebaseio.com/testServ/login/0PSnvuFn5jTXHjnshxZsct/player/
+    at DbState.storeInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2387:27)
+    at EntityEvent.GenericEvent.saveChildrenInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:686:36)
+    at EntityEvent.GenericEvent.findCreateChildFor (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:670:22)
+    at EntityEvent.parseValue (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1033:46)
+    at QueryImpl.MapEvent.handleDbEvent (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1599:23)
+    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2204:69
+    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1458:105
+```
+
+Which is actually the player of that user. 
+
+
+
 
 
 Find a different way of passing a database for static remote calls
