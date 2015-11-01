@@ -634,10 +634,10 @@ declare module Db {
             emit(event: string, ...args: any[]): Socket;
         }
         interface IClientSideSocketFactory {
-            connect(conf: DatabaseConf): Promise<Socket>;
+            connect(conf: DatabaseConf): Socket;
         }
         class DefaultClientSideSocketFactory implements IClientSideSocketFactory {
-            connect(conf: DatabaseConf): Promise<Socket>;
+            connect(conf: DatabaseConf): Socket;
         }
         /**
          * Database configuration, use one subclass like {@link FirebaseConf}.

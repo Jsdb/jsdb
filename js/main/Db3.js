@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151030_190244_master_1.0.0_424f5e0
+ * TSDB version : 20151101_080731_master_1.0.0_654d0c0
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151030_190244_master_1.0.0_424f5e0';
+var Version = '20151101_080731_master_1.0.0_654d0c0';
 /**
  * The main Db module.
  */
@@ -84,7 +84,11 @@ var Db;
             function DefaultClientSideSocketFactory() {
             }
             DefaultClientSideSocketFactory.prototype.connect = function (conf) {
-                return Promise.resolve(io());
+                if (io) {
+                    return io();
+                }
+                var n = 'socket.io-client';
+                return require(n)();
             };
             return DefaultClientSideSocketFactory;
         })();
@@ -2217,7 +2221,6 @@ var Db;
                 this.db = function () { return me.internalDb.apply(me, arguments); };
             }
             DbState.prototype.configure = function (conf) {
-                var _this = this;
                 this.conf = conf;
                 if (conf.clientSocket) {
                     var csf = null;
@@ -2229,13 +2232,11 @@ var Db;
                     else {
                         csf = conf.clientSocket;
                     }
-                    csf.connect(conf).then(function (sock) {
-                        _this.serverIo = sock;
-                    });
+                    this.serverIo = csf.connect(conf);
                 }
                 // TODO filter metas
                 // TODO integrity tests on metas
-                // - doube roots
+                // - double roots
             };
             DbState.prototype.internalDb = function (param) {
                 if (lastExpect === lastCantBe) {

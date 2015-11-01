@@ -787,12 +787,16 @@ module Db {
 		}
 				
 		export interface IClientSideSocketFactory {
-			connect(conf :DatabaseConf) :Promise<Socket>;
+			connect(conf :DatabaseConf) :Socket;
 		}
 			
 		export class DefaultClientSideSocketFactory implements IClientSideSocketFactory {
-			connect(conf :DatabaseConf) :Promise<Socket> {
-				return Promise.resolve(io());
+			connect(conf :DatabaseConf) :Socket {
+				if (io) {
+					return io();
+				}
+				var n = 'socket.io-client';
+				return require(n)();
 			}
 		}
 		
@@ -3086,13 +3090,11 @@ module Db {
 					} else {
 						csf = <Api.IClientSideSocketFactory>conf.clientSocket;
 					}
-					csf.connect(conf).then((sock) => {
-						this.serverIo = sock;
-					})
+					this.serverIo = csf.connect(conf);
 				}
 				// TODO filter metas
 				// TODO integrity tests on metas
-				// - doube roots
+				// - double roots
 			}
 			
 			internalDb(param:any):any {
