@@ -1610,7 +1610,7 @@ declare module 'jsdb' {
             interface TypedMethodDecorator<T> {
                     (target: Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>): TypedPropertyDescriptor<T> | void;
             }
-            function remote(settings?: Api.RemoteCallParams): TypedMethodDecorator<(...args: any[]) => Thenable<any>>;
+            function remote(settings?: Api.RemoteCallParams): TypedMethodDecorator<(...args: any[]) => Promise<any>>;
             module meta {
                     function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Db.Internal.EmbeddedMetaDescriptor;
                     function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Db.Internal.ReferenceMetaDescriptor;

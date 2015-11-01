@@ -32,13 +32,13 @@ class WithProps implements Db3.Api.IEntityHooks {
 	}
 	
 	@Db3.remote()
-	remoteCall(p1 :string, p2 :number):Thenable<string> {
+	remoteCall(p1 :string, p2 :number):Promise<string> {
 		lastLocalStubArgs = arguments;
 		return null;
 	}
 	
 	@Db3.remote()
-	static statRemoteCall(p1 :string, p2 :number):Thenable<string> {
+	static statRemoteCall(p1 :string, p2 :number):Promise<string> {
 		return null;
 	}
 }
@@ -46,15 +46,15 @@ class WithProps implements Db3.Api.IEntityHooks {
 @Db3.override()
 class ServerWithProps extends WithProps {
 	serverStuff :string;
-	remoteCall():Thenable<string> {
+	remoteCall():Promise<string> {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localCallAck');
 	}
-	remoteCtxCall(str :string, num? :number, _ctx? :Object):Thenable<string> {
+	remoteCtxCall(str :string, num? :number, _ctx? :Object):Promise<string> {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localCallAck');
 	}
-	static statRemoteCall():Thenable<string> {
+	static statRemoteCall():Promise<string> {
 		lastRemoteCallArgs = arguments;
 		return Promise.resolve('localStaticCallAck');
 	}

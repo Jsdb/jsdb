@@ -4146,8 +4146,8 @@ module Db {
 	}
 
 	
-	export function remote(settings? :Api.RemoteCallParams) :TypedMethodDecorator<(...args :any[]) => Thenable<any>> {
-		return function(target :Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<(...args :any[]) => Thenable<any>>) {
+	export function remote(settings? :Api.RemoteCallParams) :TypedMethodDecorator<(...args :any[]) => Promise<any>> {
+		return function(target :Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<(...args :any[]) => Promise<any>>) {
 			var localStub = descriptor.value;
 			descriptor.value = function (...args :any[]) {
 				var prom = Internal.remoteCall(this, propertyKey.toString(), args);
