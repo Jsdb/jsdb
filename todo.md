@@ -1,32 +1,4 @@
 
-Error when querying on an entity root
---------------------------------------
-
-Steps to reproduce :
-* Start the swashp server
-* Create a new user and pirate
-* Refresh the page
-* Try to login with that same user
-
-The stacktrace will be :
-
-```
-Error: Storing in cache two different events for the same key https://swashp.firebaseio.com/testServ/login/0PSnvuFn5jTXHjnshxZsct/player/
-    at DbState.storeInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2387:27)
-    at EntityEvent.GenericEvent.saveChildrenInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:686:36)
-    at EntityEvent.GenericEvent.findCreateChildFor (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:670:22)
-    at EntityEvent.parseValue (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1033:46)
-    at QueryImpl.MapEvent.handleDbEvent (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1599:23)
-    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2204:69
-    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1458:105
-```
-
-Which is actually the player of that user. 
-
-
-
-
-
 Find a different way of passing a database for static remote calls
 -----------------------------------------------------------
 
@@ -409,3 +381,54 @@ data and local triggering of the update event can "preview" what the server is d
 giving the user an immediate feedback. 
 
 > Done in very simple way. 
+
+
+Error when querying on an entity root
+--------------------------------------
+
+Steps to reproduce :
+* Start the swashp server
+* Create a new user and pirate
+* Refresh the page
+* Try to login with that same user
+
+The stacktrace will be :
+
+```
+Error: Storing in cache two different events for the same key https://swashp.firebaseio.com/testServ/login/0PSnvuFn5jTXHjnshxZsct/player/
+    at DbState.storeInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2387:27)
+    at EntityEvent.GenericEvent.saveChildrenInCache (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:686:36)
+    at EntityEvent.GenericEvent.findCreateChildFor (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:670:22)
+    at EntityEvent.parseValue (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1033:46)
+    at QueryImpl.MapEvent.handleDbEvent (/home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1599:23)
+    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:2204:69
+    at /home/sym/workspaces/pp3d/jsdb/js/main/Db3.js:1458:105
+```
+
+Which is actually the player of that user. 
+
+
+
+References are not saved
+------------------------
+
+The save() method of ReferenceEvent does not save "the reference", and that's partially right maybe; at the
+same time the save() method of EntityEvent delegates to ReferenceEvent.save(), except if the entity
+is new or previously loaded. Moreover, the "new" is done checking if it has a url, which is not the case
+because of the assignUrl method.
+
+> Separated external save and internalsave, the internalsave is the one used for internal propagation.
+> They are the same for most of events except for references: the external save must not traverse 
+> references, so the internalsave will only save the reference but not the referenced entity, while the
+> external save now saves both, and does not complain in case the reference is null. 
+
+
+Sets are not loaded
+-------------------
+
+When loading an entity that has a set inside, the load method was never implemented.
+
+Even worse, loading an entity with a set returns error.
+
+> Forgot to implement the parseValue, so all the collections were loaded if loaded explicity,
+> but not if part of a main entity. 

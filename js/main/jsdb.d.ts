@@ -957,7 +957,7 @@ declare module 'jsdb' {
                         * Events are organized in a hierarchy, having multiple {@link EntityRoot} as roots.
                         *
                         */
-                    class GenericEvent implements Api.IUrled {
+                    abstract class GenericEvent implements Api.IUrled {
                             /** The entity bound to this event. */
                             entity: Api.Entity;
                             /** The url for the entity bound to this event. */
@@ -1135,6 +1135,8 @@ declare module 'jsdb' {
                                 * {@link entity} and not on a separate node of the database tree.
                                 */
                             isLocal(): boolean;
+                            save(): Promise<any>;
+                            abstract internalSave(): Promise<any>;
                     }
                     /**
                         * An utility base class for events that deal with a single databse reference.
@@ -1148,7 +1150,7 @@ declare module 'jsdb' {
                         *
                         * It also keeps the {@link loaded} boolean and offer base implementation of {@link isLoaded} and {@link assertLoaded}.
                         */
-                    class SingleDbHandlerEvent<E> extends GenericEvent {
+                    abstract class SingleDbHandlerEvent<E> extends GenericEvent {
                             /** true if data has been loaded */
                             loaded: boolean;
                             /**
@@ -1265,7 +1267,7 @@ declare module 'jsdb' {
                             serialize(localsOnly?: boolean, fields?: string[]): Object;
                             assignUrl(id?: string): void;
                             triggerLocalSave(): void;
-                            save(): Promise<any>;
+                            internalSave(): Promise<any>;
                             remove(): Promise<any>;
                             clone(): E;
                     }
@@ -1296,6 +1298,7 @@ declare module 'jsdb' {
                             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                             progDiscriminator: number;
                             setEntity(entity: Api.Entity): void;
+                            findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             /**
                                 * Load this reference AND the pointed entity.
                                 */
@@ -1315,7 +1318,8 @@ declare module 'jsdb' {
                             serialize(localsOnly?: boolean): Object;
                             assignUrl(): void;
                             triggerLocalSave(): void;
-                            save(): Promise<any>;
+                            internalSave(): Promise<any>;
+                            save(): Promise<any[]>;
                             remove(): Promise<any>;
                             clone(): E;
                     }
@@ -1365,9 +1369,10 @@ declare module 'jsdb' {
                             with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
                             isLoaded(): boolean;
                             assertLoaded(): void;
-                            save(): Promise<any>;
+                            internalSave(): Promise<any>;
                             clear(): Promise<any>;
                             serialize(localsOnly?: boolean, fields?: string[]): Object;
+                            parseValue(allds: FirebaseDataSnapshot): void;
                             query(): Api.IQuery<E>;
                     }
                     class EventedArray<E> {
@@ -1411,6 +1416,7 @@ declare module 'jsdb' {
                             parseValue(ds: FirebaseDataSnapshot): void;
                             serialize(): any;
                             isLocal(): boolean;
+                            internalSave(): any;
                     }
                     class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
@@ -1418,6 +1424,7 @@ declare module 'jsdb' {
                             parseValue(ds: FirebaseDataSnapshot): void;
                             serialize(): Api.Entity;
                             isLocal(): boolean;
+                            internalSave(): any;
                     }
                     class EntityRoot<E extends Api.Entity> extends GenericEvent implements Api.IEntityRoot<E> {
                             constructor(state: DbState, meta: ClassMetadata);
@@ -1428,6 +1435,7 @@ declare module 'jsdb' {
                             query(): Api.IQuery<E>;
                             getUrl(): string;
                             getRemainingUrl(url: string): string;
+                            internalSave(): any;
                     }
                     class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
                             constructor(ev: GenericEvent);
@@ -1439,6 +1447,7 @@ declare module 'jsdb' {
                             init(gh: EventHandler): void;
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             save(): Promise<any>;
+                            urlInited(): void;
                     }
                     class DbState implements Api.IDbOperations {
                             cache: {

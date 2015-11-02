@@ -1303,7 +1303,7 @@ module Db {
 		 * Events are organized in a hierarchy, having multiple {@link EntityRoot} as roots.
 		 * 
 		 */
-		export class GenericEvent implements Api.IUrled {
+		export abstract class GenericEvent implements Api.IUrled {
 			/** The entity bound to this event. */
 			entity :Api.Entity;
 			
@@ -1427,7 +1427,7 @@ module Db {
 				}
 				// Dependants are not needed after the url init has been propagated
 				this.dependants = [];
-				
+				this.state.storeInCache(this);
 				this.saveChildrenInCache();
 			}
 			
@@ -1534,6 +1534,7 @@ module Db {
 				this.children[meta.localName] = ret;
 				// TODO should we give then urlInited if the url is already present?
 				this.saveChildrenInCache();
+				Internal.clearLastStack();
 				return ret;
 			}
 			
@@ -1645,6 +1646,12 @@ module Db {
 			isLocal() :boolean {
 				return false;
 			}
+			
+			save() :Promise<any> {
+				return this.internalSave();
+			}
+			
+			abstract internalSave() :Promise<any>;
 		}
 		
 		/**
@@ -1659,7 +1666,7 @@ module Db {
 		 * 
 		 * It also keeps the {@link loaded} boolean and offer base implementation of {@link isLoaded} and {@link assertLoaded}.
 		 */
-		export class SingleDbHandlerEvent<E> extends GenericEvent {
+		export abstract class SingleDbHandlerEvent<E> extends GenericEvent {
 			/** true if data has been loaded */ 
 			loaded = false;
 			/** 
@@ -1999,6 +2006,7 @@ module Db {
 				if (this.classMeta.discriminator != null) {
 					ret['_dis'] = this.classMeta.discriminator;
 				}
+				Internal.clearLastStack();
 				return ret;
 			}
 			
@@ -2034,7 +2042,7 @@ module Db {
 			}
 			
 			
-			save():Promise<any> {
+			internalSave():Promise<any> {
 				// If this entity was previously loaded or saved, then perform a serialize and save
 				if (this.loaded) {
 					if (this.entity && this.entity['prePersist']) {
@@ -2057,7 +2065,9 @@ module Db {
 					for (var k in this.entity) {
 						if (k == 'constructor') continue;
 						var se = this.findCreateChildFor(k);
-						if (se && se['save']) {
+						if (se && se['internalSave']) {
+							proms.push((<GenericEvent>se).internalSave());
+						} else if (se && se['save']) {
 							proms.push((<Api.IEntityOrReferenceEvent<any>><any>se).save());
 						}
 					}
@@ -2152,6 +2162,10 @@ module Db {
 				}
 			}
 			
+			findCreateChildFor(metaOrkey :string|MetaDescriptor, force :boolean = false):GenericEvent {
+				throw new Error("Should never arrive here");	
+			}
+						
 			/**
 			 * Load this reference AND the pointed entity.
 			 */
@@ -2275,14 +2289,33 @@ module Db {
 				super.broadcast(evd);
 			}
 			
+			internalSave() {
+				return new Promise<any>((ok,err) => {
+					var fb = new Firebase(this.getUrl());
+					fb.set(this.serialize(false), (fberr) => {
+						if (fberr) {
+							err(fberr);
+						} else {
+							ok(null);
+						}
+					});
+				});
+			}
+			
 			save() {
-				if (!this.pointedEvent) throw new Error("The reference is null, can't save it");
-				return this.pointedEvent.save();
+				var proms = [this.internalSave()];
+				if (this.pointedEvent) {
+					proms.push(this.pointedEvent.save());
+				}
+				return Promise.all(proms);
 			}
 			
 			remove() {
-				if (!this.pointedEvent) throw new Error("The reference is null, can't remove it");
-				return this.pointedEvent.remove();
+				if (this.pointedEvent) {
+					return this.pointedEvent.remove();
+				} else {
+					return Promise.resolve(null);
+				}
 			}
 			
 			clone() :E {
@@ -2559,7 +2592,7 @@ module Db {
 				if (!this.loaded) throw new Error("Collection at url " + this.getUrl() + " is not loaded");
 			}
 			
-			save() :Promise<any> {
+			internalSave() :Promise<any> {
 				if (!this.isLoaded) {
 					console.log('not saving cause not loaded');
 					// TODO maybe we should save children that were loaded anyway
@@ -2606,6 +2639,28 @@ module Db {
 				} finally {
 					this.entity = preEntity;
 				}
+			}
+			
+			parseValue(allds :FirebaseDataSnapshot) {
+				var prevKey = null;
+				var det = new EventDetails<E>();
+				det.originalEvent = "child_added";
+				det.populating = true; 
+				det.type = Api.EventType.ADDED;
+				allds.forEach((ds)=>{
+					var subev = this.findCreateChildFor(ds.key());
+					var val :E = null;
+					subev.parseValue(ds);
+					val = <E>subev.entity;
+					det.originalKey = ds.key();
+					det.originalUrl = ds.ref().toString();
+					det.precedingKey = prevKey;
+					det.payload = val;
+					prevKey = ds.key();
+					subev.applyHooks(det);
+					
+					this.addToInternal('child_added',ds,val,det);
+				});				
 			}
 			
 			query() :Api.IQuery<E> {
@@ -2879,6 +2934,10 @@ module Db {
 			isLocal() :boolean {
 				return true;
 			}
+			
+			internalSave() {
+				return null;
+			}
 		}
 		
 		export class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
@@ -2903,6 +2962,10 @@ module Db {
 
 			isLocal() :boolean {
 				return true;
+			}
+			
+			internalSave() {
+				return null;
 			}
 		}
 
@@ -2989,6 +3052,10 @@ module Db {
 			getRemainingUrl(url :string) :string {
 				return url.substr(this.getUrl().length);
 			}
+			
+			internalSave() {
+				return null;
+			}
 		}
 		
 		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
@@ -3071,6 +3138,10 @@ module Db {
 			
 			save() :Promise<any> {
 				throw new Error("Can't save a query");
+			}
+			
+			urlInited() {
+				// Do nothing, we are not a proper event, should not be stored in cache or something
 			}
 		}
 		
@@ -4185,6 +4256,7 @@ module Db {
 		Object.defineProperty(target,propertyKey, {
 			enumerable: true,
 			set: function(v) {
+				Internal.clearLastStack();
 				this[nkey] = v;
 				var mye = entEvent.get(this);
 				if (mye) {

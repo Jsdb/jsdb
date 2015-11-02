@@ -183,6 +183,9 @@ var WithRef = (function () {
     __decorate([
         Db3.reference(SubEntity)
     ], WithRef.prototype, "othSubRef");
+    __decorate([
+        Db3.reference(WithRef)
+    ], WithRef.prototype, "cross");
     WithRef = __decorate([
         Db3.root('withRefs')
     ], WithRef);
@@ -1302,6 +1305,26 @@ describe('Db3 >', function () {
                     }
                 }));
             });
+            it('should serialize correctly cross references', function () {
+                var wr1 = new WithRef();
+                var wr2 = new WithRef();
+                Db(wr2).assignUrl('cr2');
+                Db(wr1).assignUrl('cr1');
+                wr1.cross = wr2;
+                wr2.cross = wr1;
+                var ee = Db(wr1);
+                M.assert("Serialization of wr1 is correct").when(ee.serialize()).is(M.objectMatching({
+                    cross: {
+                        _ref: baseUrl + 'withRefs/cr2/'
+                    }
+                }));
+                var ee = Db(wr2);
+                M.assert("Serialization of wr2 is correct").when(ee.serialize()).is(M.objectMatching({
+                    cross: {
+                        _ref: baseUrl + 'withRefs/cr1/'
+                    }
+                }));
+            });
             it('should serialize correctly reference projections', function () {
                 var wpr = new WithPreloads();
                 var wp1 = Db(WithProps).get('wp1');
@@ -1421,6 +1444,26 @@ describe('Db3 >', function () {
                 var wp1 = Db(WithProps).get('wp1');
                 var url = Db(wp1).getUrl();
                 var wrn = new WithRef();
+                wrn.str = 'abc';
+                wrn.ref = wp1;
+                return Db(wrn).save()
+                    .then(function () {
+                    return new Promise(function (ok) {
+                        new Firebase(Db(wrn).getUrl()).once('value', ok);
+                    });
+                })
+                    .then(function (ds) {
+                    M.assert("Serialized correctly").when(ds.val()).is(M.objectMatching({
+                        str: 'abc',
+                        ref: { _ref: url }
+                    }));
+                });
+            });
+            it('should save a reference correctly also on assigned url', function () {
+                var wp1 = Db(WithProps).get('wp1');
+                var url = Db(wp1).getUrl();
+                var wrn = new WithRef();
+                Db(wrn).assignUrl();
                 wrn.str = 'abc';
                 wrn.ref = wp1;
                 return Db(wrn).save()
@@ -1759,6 +1802,17 @@ describe('Db3 >', function () {
                     }));
                 });
             });
+            it('should load all the collection with the parent entity', function () {
+                var wm1 = Db(WithMap).get('wm1');
+                var recvs = [];
+                return Db(wm1).load(_this).then(function () {
+                    assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
+                        a: { str: 'aChild' },
+                        b: { str: 'bChild' },
+                        c: { str: 'cChild' }
+                    }));
+                });
+            });
             it('should load all the collection resolving references with load', function () {
                 var wm1 = Db(WithMap).get('wm2');
                 var recvs = [];
@@ -1961,6 +2015,33 @@ describe('Db3 >', function () {
             it('should load ref set in array', function () {
                 var ws1 = Db(WithSet).get('ws2');
                 return Db(ws1.refSet).load(_this).then(function () {
+                    assert('right length').when(ws1.refSet).is(M.withLength(3));
+                    assert('right type 0').when(ws1.refSet[0]).is(M.instanceOf(WithProps));
+                    assert('right type 1').when(ws1.refSet[1]).is(M.instanceOf(WithProps));
+                    assert('right type 2').when(ws1.refSet[2]).is(M.instanceOf(WithProps));
+                });
+            });
+            it('should load embed set in array when loading parent entity', function () {
+                var ws1 = Db(WithSet).get('ws1');
+                return Db(ws1).load(_this).then(function () {
+                    assert('right length').when(ws1.embedSet).is(M.withLength(3));
+                    assert('right type 0').when(ws1.embedSet[0]).is(M.instanceOf(SubEntity));
+                    assert('right value 0').when(ws1.embedSet[0]).is(M.objectMatching({
+                        str: '3 a'
+                    }));
+                    assert('right type 1').when(ws1.embedSet[1]).is(M.instanceOf(SubEntity));
+                    assert('right value 1').when(ws1.embedSet[1]).is(M.objectMatching({
+                        str: '2 b'
+                    }));
+                    assert('right type 2').when(ws1.embedSet[2]).is(M.instanceOf(SubEntity));
+                    assert('right value 2').when(ws1.embedSet[2]).is(M.objectMatching({
+                        str: '1 c'
+                    }));
+                });
+            });
+            it('should load ref set in array when loading parent entity', function () {
+                var ws1 = Db(WithSet).get('ws2');
+                return Db(ws1).load(_this).then(function () {
                     assert('right length').when(ws1.refSet).is(M.withLength(3));
                     assert('right type 0').when(ws1.refSet[0]).is(M.instanceOf(WithProps));
                     assert('right type 1').when(ws1.refSet[1]).is(M.instanceOf(WithProps));
@@ -2249,7 +2330,18 @@ describe('Db3 >', function () {
                 });
             });
             it('should work on entity roots', function () {
-                Db(WithProps).query().onField('num').equals(200).load(_this).then(function (vals) {
+                return Db(WithProps).query().onField('num').equals(200).load(_this).then(function (vals) {
+                    assert('the list has right size').when(vals).is(M.withLength(1));
+                    assert('the first element is right').when(vals[0].str).is('String 1');
+                });
+            });
+            // Tentative approach to find the double-event bug on entity root queries 
+            it('should work on entity roots twice', function () {
+                return Db(WithProps).query().onField('num').equals(200).load(_this).then(function (vals) {
+                    assert('the list has right size').when(vals).is(M.withLength(1));
+                    assert('the first element is right').when(vals[0].str).is('String 1');
+                    return Db(WithProps).query().onField('num').equals(200).load(_this);
+                }).then(function (vals) {
                     assert('the list has right size').when(vals).is(M.withLength(1));
                     assert('the first element is right').when(vals[0].str).is('String 1');
                 });

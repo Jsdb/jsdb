@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151101_192250_master_1.0.0_197af39
+ * TSDB version : 20151102_213748_master_1.0.0_c365731
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151101_192250_master_1.0.0_197af39';
+var Version = '20151102_213748_master_1.0.0_c365731';
 /**
  * The main Db module.
  */
@@ -564,6 +564,7 @@ var Db;
                 }
                 // Dependants are not needed after the url init has been propagated
                 this.dependants = [];
+                this.state.storeInCache(this);
                 this.saveChildrenInCache();
             };
             /**
@@ -668,6 +669,7 @@ var Db;
                 this.children[meta.localName] = ret;
                 // TODO should we give then urlInited if the url is already present?
                 this.saveChildrenInCache();
+                Internal.clearLastStack();
                 return ret;
             };
             /**
@@ -773,6 +775,9 @@ var Db;
              */
             GenericEvent.prototype.isLocal = function () {
                 return false;
+            };
+            GenericEvent.prototype.save = function () {
+                return this.internalSave();
             };
             return GenericEvent;
         })();
@@ -1130,6 +1135,7 @@ var Db;
                 if (this.classMeta.discriminator != null) {
                     ret['_dis'] = this.classMeta.discriminator;
                 }
+                Internal.clearLastStack();
                 return ret;
             };
             EntityEvent.prototype.assignUrl = function (id) {
@@ -1165,7 +1171,7 @@ var Db;
                     }
                 });
             };
-            EntityEvent.prototype.save = function () {
+            EntityEvent.prototype.internalSave = function () {
                 var _this = this;
                 // If this entity was previously loaded or saved, then perform a serialize and save
                 if (this.loaded) {
@@ -1192,7 +1198,10 @@ var Db;
                         if (k == 'constructor')
                             continue;
                         var se = this.findCreateChildFor(k);
-                        if (se && se['save']) {
+                        if (se && se['internalSave']) {
+                            proms.push(se.internalSave());
+                        }
+                        else if (se && se['save']) {
                             proms.push(se.save());
                         }
                     }
@@ -1290,6 +1299,10 @@ var Db;
                 else {
                     this.pointedEvent = null;
                 }
+            };
+            ReferenceEvent.prototype.findCreateChildFor = function (metaOrkey, force) {
+                if (force === void 0) { force = false; }
+                throw new Error("Should never arrive here");
             };
             /**
              * Load this reference AND the pointed entity.
@@ -1418,15 +1431,34 @@ var Db;
                 evd.synthetic = true;
                 _super.prototype.broadcast.call(this, evd);
             };
+            ReferenceEvent.prototype.internalSave = function () {
+                var _this = this;
+                return new Promise(function (ok, err) {
+                    var fb = new Firebase(_this.getUrl());
+                    fb.set(_this.serialize(false), function (fberr) {
+                        if (fberr) {
+                            err(fberr);
+                        }
+                        else {
+                            ok(null);
+                        }
+                    });
+                });
+            };
             ReferenceEvent.prototype.save = function () {
-                if (!this.pointedEvent)
-                    throw new Error("The reference is null, can't save it");
-                return this.pointedEvent.save();
+                var proms = [this.internalSave()];
+                if (this.pointedEvent) {
+                    proms.push(this.pointedEvent.save());
+                }
+                return Promise.all(proms);
             };
             ReferenceEvent.prototype.remove = function () {
-                if (!this.pointedEvent)
-                    throw new Error("The reference is null, can't remove it");
-                return this.pointedEvent.remove();
+                if (this.pointedEvent) {
+                    return this.pointedEvent.remove();
+                }
+                else {
+                    return Promise.resolve(null);
+                }
             };
             ReferenceEvent.prototype.clone = function () {
                 return this.pointedEvent.clone();
@@ -1700,7 +1732,7 @@ var Db;
                 if (!this.loaded)
                     throw new Error("Collection at url " + this.getUrl() + " is not loaded");
             };
-            MapEvent.prototype.save = function () {
+            MapEvent.prototype.internalSave = function () {
                 var _this = this;
                 if (!this.isLoaded) {
                     console.log('not saving cause not loaded');
@@ -1751,6 +1783,27 @@ var Db;
                 finally {
                     this.entity = preEntity;
                 }
+            };
+            MapEvent.prototype.parseValue = function (allds) {
+                var _this = this;
+                var prevKey = null;
+                var det = new EventDetails();
+                det.originalEvent = "child_added";
+                det.populating = true;
+                det.type = Api.EventType.ADDED;
+                allds.forEach(function (ds) {
+                    var subev = _this.findCreateChildFor(ds.key());
+                    var val = null;
+                    subev.parseValue(ds);
+                    val = subev.entity;
+                    det.originalKey = ds.key();
+                    det.originalUrl = ds.ref().toString();
+                    det.precedingKey = prevKey;
+                    det.payload = val;
+                    prevKey = ds.key();
+                    subev.applyHooks(det);
+                    _this.addToInternal('child_added', ds, val, det);
+                });
             };
             MapEvent.prototype.query = function () {
                 var ret = new QueryImpl(this);
@@ -2028,6 +2081,9 @@ var Db;
             IgnoreEvent.prototype.isLocal = function () {
                 return true;
             };
+            IgnoreEvent.prototype.internalSave = function () {
+                return null;
+            };
             return IgnoreEvent;
         })(GenericEvent);
         Internal.IgnoreEvent = IgnoreEvent;
@@ -2053,6 +2109,9 @@ var Db;
             };
             ObservableEvent.prototype.isLocal = function () {
                 return true;
+            };
+            ObservableEvent.prototype.internalSave = function () {
+                return null;
             };
             return ObservableEvent;
         })(SingleDbHandlerEvent);
@@ -2129,6 +2188,9 @@ var Db;
             };
             EntityRoot.prototype.getRemainingUrl = function (url) {
                 return url.substr(this.getUrl().length);
+            };
+            EntityRoot.prototype.internalSave = function () {
+                return null;
             };
             return EntityRoot;
         })(GenericEvent);
@@ -2209,6 +2271,9 @@ var Db;
             };
             QueryImpl.prototype.save = function () {
                 throw new Error("Can't save a query");
+            };
+            QueryImpl.prototype.urlInited = function () {
+                // Do nothing, we are not a proper event, should not be stored in cache or something
             };
             return QueryImpl;
         })(ArrayCollectionEvent);
@@ -3355,6 +3420,7 @@ var Db;
         Object.defineProperty(target, propertyKey, {
             enumerable: true,
             set: function (v) {
+                Internal.clearLastStack();
                 this[nkey] = v;
                 var mye = entEvent.get(this);
                 if (mye) {
