@@ -10,13 +10,13 @@
             "taskName": "test:clean",
             "args": [],
             "isTestCommand": true,
-            "problemMatcher": "$gulp-tsc"
+            "problemMatcher": "$tsc"
         },
         {
             "taskName": "ts",
             "args": [],
             "isBuildCommand": true,
-            "problemMatcher": "$gulp-tsc"
+            "problemMatcher": "$tsc"
         }      
     ]
 }
