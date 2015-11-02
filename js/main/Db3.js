@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151102_213748_master_1.0.0_c365731
+ * TSDB version : 20151103_000353_master_1.0.0_8c02bde
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151102_213748_master_1.0.0_c365731';
+var Version = '20151103_000353_master_1.0.0_8c02bde';
 /**
  * The main Db module.
  */
@@ -2820,7 +2820,9 @@ var Db;
                 ret.url = this.getRemoteName();
                 // TODO i need this search? can't i cache this?
                 // TODO maybe we should assert here that there is a metadata for this type
-                ret.classMeta = allMetadata.findMeta(this.ctor);
+                if (this.ctor) {
+                    ret.classMeta = allMetadata.findMeta(this.ctor);
+                }
                 ret.nameOnParent = this.localName;
                 ret.project = this.project;
                 return ret;
@@ -3306,8 +3308,7 @@ var Db;
     Db.embedded = embedded;
     function reference(def, project) {
         return function (target, propertyKey) {
-            if (!def)
-                throw new Error("Cannot find referenced class for " + propertyKey.toString());
+            //if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
             var ret = meta.reference(def, project);
             addDescriptor(target, propertyKey, ret);
             installMetaGetter(target, propertyKey.toString(), ret);
@@ -3461,12 +3462,11 @@ var Db;
         }
         meta_1.embedded = embedded;
         function reference(def, project) {
-            if (def.type) {
+            if (arguments.length == 1 && def && (def.type || def.projections)) {
                 project = project || def.projections;
                 def = def.type;
             }
-            if (!def)
-                throw new Error("Cannot find referenced class");
+            //if (!def) throw new Error("Cannot find referenced class");
             var ret = new Db.Internal.ReferenceMetaDescriptor();
             ret.setType(def);
             ret.project = project;

@@ -432,3 +432,26 @@ Even worse, loading an entity with a set returns error.
 
 > Forgot to implement the parseValue, so all the collections were loaded if loaded explicity,
 > but not if part of a main entity. 
+
+
+Do we need a type for references?
+---------------------------------
+
+When there is a reference, either it's null, or it has a URL, or it has a local
+instance (if it's not saved yet). Since the URL is annotated with the discriminator, 
+in all the three cases, we could determine the runtime type without having to know.
+
+However, right now, references require a type, because discriminator alone is not enough
+without a base class.
+
+Not requiring a type would :
+* reduce the amout of typing in the system, in general
+* permit to have polimorphic references on interfaces
+* same goes for collections of references 
+
+> In fact, in ReferenceEvent classMeta is never used, in anchestors is used only in GenericEvent 
+> and only in findCreateChild that is overridden by ReferenceEvent with a no-op.
+
+> The discriminator is enough, because the URL is first resolved, thus yielding the base type. 
+
+> Type for references is now optional, everything seems to work even without

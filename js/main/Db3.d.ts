@@ -692,7 +692,7 @@ declare module Db {
             /**
              * Type of the referenced entity.
              */
-            type: Api.EntityType<any> | Api.EntityTypeProducer<any>;
+            type?: Api.EntityType<any> | Api.EntityTypeProducer<any>;
             /**
              * Projections of the entity to save embedded in the parent entity document.
              */
@@ -1643,7 +1643,7 @@ declare module Db {
     function bind(localName: string, targetName: string, live?: boolean): Api.IBinding;
     function sortBy(field: string, desc?: boolean): Api.SortingData;
     function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): PropertyDecorator;
-    function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): PropertyDecorator;
+    function reference(def?: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): PropertyDecorator;
     function map(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;
     function set(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;
     function list(valueType: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): PropertyDecorator;

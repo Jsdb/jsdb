@@ -186,6 +186,9 @@ var WithRef = (function () {
     __decorate([
         Db3.reference(WithRef)
     ], WithRef.prototype, "cross");
+    __decorate([
+        Db3.reference(null)
+    ], WithRef.prototype, "anything");
     WithRef = __decorate([
         Db3.root('withRefs')
     ], WithRef);
@@ -315,6 +318,7 @@ describe('Db3 >', function () {
     var wr1Fb;
     var wr2Fb;
     var wr3Fb;
+    var wr4Fb;
     var wcFb;
     var wc1Fb;
     var wc2Fb;
@@ -473,6 +477,14 @@ describe('Db3 >', function () {
             },
             othSubRef: {
                 _ref: ws3Fb.toString() + '/nested/sub/*oth'
+            }
+        }, opCnter);
+        wr4Fb = wrFb.child('wr4');
+        opcnt++;
+        wr4Fb.set({
+            str: 'String 4',
+            anything: {
+                _ref: wp1Fb.toString() + '/'
             }
         }, opCnter);
         wcFb = new Firebase(baseUrl + '/withCols');
@@ -1125,6 +1137,33 @@ describe('Db3 >', function () {
                 return Db(wr1.othSubRef).load(_this).then(function (det) {
                     M.assert("Loaded the ref").when(wr1.othSubRef).is(M.aTruthy);
                     M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntityOth));
+                });
+            });
+            it('should dereference a totally polimorphic reference', function () {
+                var wr1 = Db(WithRef).get('wr4');
+                var refevent = Db(wr1.anything);
+                return refevent.dereference(_this).then(function (det) {
+                    M.assert("Loaded the ref").when(wr1.anything).is(M.aTruthy);
+                    M.assert("Right type for ref").when(wr1.anything).is(M.instanceOf(WithProps));
+                    M.assert("Right event").when(refevent).is(M.objectMatching({
+                        nameOnParent: 'anything',
+                    }));
+                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+                });
+            });
+            it('should load totally polimorphic reference', function () {
+                var wr1 = Db(WithRef).get('wr4');
+                return Db(wr1.anything).load(_this).then(function (det) {
+                    M.assert("Loaded the ref").when(wr1.anything).is(M.aTruthy);
+                    M.assert("Right type for ref").when(wr1.anything).is(M.instanceOf(WithProps));
+                    M.assert("Loaded the ref data").when(wr1.anything).is(M.objectMatching({
+                        str: 'String 1',
+                        num: 200,
+                        arr: [1, 2, 3],
+                        subobj: {
+                            substr: 'Sub String'
+                        }
+                    }));
                 });
             });
         });

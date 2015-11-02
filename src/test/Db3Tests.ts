@@ -130,10 +130,16 @@ class ServerWithSubentity extends WithSubentity {
 class WithRef {
 	@Db3.reference(WithProps)
 	ref :WithProps;
+	
 	@Db3.reference(SubEntity) 
 	othSubRef :SubEntity;
+	
 	@Db3.reference(WithRef)
 	cross :WithRef;
+	
+	@Db3.reference(null)
+	anything :any;
+	
 	str :string;
 }
 
@@ -231,6 +237,7 @@ describe('Db3 >', () => {
 	var wr1Fb :Firebase;
 	var wr2Fb :Firebase;
 	var wr3Fb :Firebase;
+	var wr4Fb :Firebase;
 	
 	var wcFb :Firebase;
 	var wc1Fb :Firebase;
@@ -410,6 +417,15 @@ describe('Db3 >', () => {
 			},
 			othSubRef : {
 				_ref: ws3Fb.toString() + '/nested/sub/*oth'
+			}
+		}, opCnter);
+
+		wr4Fb = wrFb.child('wr4');
+		opcnt++;
+		wr4Fb.set({
+			str: 'String 4',
+			anything: {
+				_ref: wp1Fb.toString() + '/'
 			}
 		}, opCnter);
 		
@@ -1134,6 +1150,37 @@ describe('Db3 >', () => {
 					M.assert("Right type for ref").when(wr1.othSubRef).is(M.instanceOf(SubEntityOth));
 				});
 			});
+			
+			it('should dereference a totally polimorphic reference', () => {
+				var wr1 = Db(WithRef).get('wr4');
+				var refevent = <Db3.Internal.ReferenceEvent<any>>Db(wr1.anything);
+				return refevent.dereference(this).then((det) => {
+					M.assert("Loaded the ref").when(wr1.anything).is(M.aTruthy);
+					M.assert("Right type for ref").when(wr1.anything).is(M.instanceOf(WithProps));
+					M.assert("Right event").when(refevent).is(M.objectMatching({
+						nameOnParent: 'anything',
+					}));
+					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+				});
+			});
+
+			it('should load totally polimorphic reference', () => {
+				var wr1 = Db(WithRef).get('wr4');
+				
+				return Db(wr1.anything).load(this).then((det) => {
+					M.assert("Loaded the ref").when(wr1.anything).is(M.aTruthy);
+					M.assert("Right type for ref").when(wr1.anything).is(M.instanceOf(WithProps));
+					M.assert("Loaded the ref data").when(wr1.anything).is(M.objectMatching({
+						str: 'String 1',
+						num: 200,
+						arr: [1,2,3],
+						subobj: {
+							substr: 'Sub String'
+						}
+					}));					
+				});
+			});
+			
 		});
 		
 		describe('Urls >', ()=>{

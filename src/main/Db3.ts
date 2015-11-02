@@ -857,7 +857,7 @@ module Db {
 			/**
 			 * Type of the referenced entity.
 			 */
-			type :Api.EntityType<any>|Api.EntityTypeProducer<any>;
+			type? :Api.EntityType<any>|Api.EntityTypeProducer<any>;
 			/**
 			 * Projections of the entity to save embedded in the parent entity document.
 			 */
@@ -3681,7 +3681,9 @@ module Db {
 				ret.url = this.getRemoteName();
 				// TODO i need this search? can't i cache this?
 				// TODO maybe we should assert here that there is a metadata for this type
-				ret.classMeta = allMetadata.findMeta(this.ctor);
+				if (this.ctor) {
+					ret.classMeta = allMetadata.findMeta(this.ctor);
+				}
 				ret.nameOnParent = this.localName;
 				ret.project = this.project;
 				return ret;
@@ -4145,9 +4147,9 @@ module Db {
 		}
 	}
 	
-	export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :PropertyDecorator {
+	export function reference(def? :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
-			if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
+			//if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
 			var ret = meta.reference(def, project);
 			addDescriptor(target, propertyKey, ret);
 			installMetaGetter(target, propertyKey.toString(), ret);
@@ -4296,11 +4298,11 @@ module Db {
 		}
 		
 		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
-			if ((<Api.ReferenceParams>def).type) {
+			if (arguments.length == 1 && def && ((<Api.ReferenceParams>def).type || (<Api.ReferenceParams>def).projections)) {
 				project = project || (<Api.ReferenceParams>def).projections;
 				def = (<Api.ReferenceParams>def).type;
 			}
-			if (!def) throw new Error("Cannot find referenced class");
+			//if (!def) throw new Error("Cannot find referenced class");
 			var ret = new Db.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
 			ret.project = project;
