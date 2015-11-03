@@ -106,6 +106,7 @@ declare module 'jsdb' {
                         */
                     interface IRemoteCallContext {
                             db?: IDb3Static;
+                            checkExecuting?(entity?: Entity, methodName?: string, params?: any[], fn?: Function, payload?: any): boolean | Promise<boolean>;
                     }
                     /**
                         * Operations on a db.
@@ -260,6 +261,20 @@ declare module 'jsdb' {
                                 * @param ctx the context object, to use with {@link off}
                                 */
                             load(ctx: Object): Promise<IEventDetails<E>>;
+                            /**
+                                * Check if the entity, or the reference, or the referenced entity, exists on the database.
+                                *
+                                * On entities, it return true if on the database there is some data.
+                                *
+                                * On references, it returns true if on the database there is a reference, and the
+                                * referenced entity also exists.
+                                *
+                                * In all other cases, it returns false.
+                                *
+                                * Note that an entity that does not exists can be loaded anyway, simply will have all
+                                * it's fields set to default values or undefined.
+                                */
+                            exists(ctx: Object): Promise<boolean>;
                             /**
                                 * Registers a callback to get notified about updates to the entity.
                                 *
@@ -1250,6 +1265,7 @@ declare module 'jsdb' {
                             parseValue(ds: FirebaseDataSnapshot): void;
                             internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
+                            exists(ctx: Object): Promise<boolean>;
                             live(ctx: Object): void;
                             dereference(ctx: Object): Promise<EventDetails<E>>;
                             referenced(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
@@ -1315,6 +1331,7 @@ declare module 'jsdb' {
                                 * Load this reference AND the pointed entity.
                                 */
                             load(ctx: Object): Promise<EventDetails<E>>;
+                            exists(ctx: Object): Promise<boolean>;
                             /**
                                 * Notifies of modifications on the reference AND on the pointed entity.
                                 */

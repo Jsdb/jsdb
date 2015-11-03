@@ -179,6 +179,7 @@ module Db {
 		 */
 		export interface IRemoteCallContext {
 			db? :IDb3Static;
+			checkExecuting?(entity? :Entity, methodName? :string, params? :any[], fn? :Function, payload? :any) :boolean|Promise<boolean>;
 		}
 
 		/**
@@ -363,6 +364,21 @@ module Db {
 			 * @param ctx the context object, to use with {@link off}
 			 */
 			load(ctx:Object) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * Check if the entity, or the reference, or the referenced entity, exists on the database.
+			 * 
+			 * On entities, it return true if on the database there is some data.
+			 * 
+			 * On references, it returns true if on the database there is a reference, and the
+			 * referenced entity also exists.
+			 * 
+			 * In all other cases, it returns false.
+			 * 
+			 * Note that an entity that does not exists can be loaded anyway, simply will have all
+			 * it's fields set to default values or undefined.
+			 */
+			exists(ctx:Object) :Promise<boolean>;
 			
 			/**
 			 * Registers a callback to get notified about updates to the entity.
@@ -1982,6 +1998,10 @@ module Db {
 				});
 			}
 			
+			exists(ctx:Object) :Promise<boolean> {
+				return this.load(ctx).then(()=>this.lastDs.exists());
+			}
+			
 			live(ctx:Object) {
 				this.updated(ctx,()=>{});
 			}
@@ -2224,6 +2244,13 @@ module Db {
 					ed.offMe();
 					if (this.pointedEvent) return this.pointedEvent.load(ctx).then((ed)=>ed);
 					return ed;
+				});
+			}
+			
+			exists(ctx:Object) :Promise<boolean> {
+				return this.load(ctx).then(()=>{
+					if (!this.pointedEvent) return false;
+					return this.pointedEvent.exists(ctx);
 				});
 			}
 			
@@ -3463,15 +3490,27 @@ module Db {
 						
 					promises.push(Utils.deserializeRefs(this.db, ctx,<any[]>payload.args));
 					
+					var entity :any;
+					var params :any[];
 					return Promise.all(promises).then((values) => {
-						var entity = values[0].payload;
+						entity = values[0].payload;
+						params = values[1];
 						// Inject the ctx, if any
-						var params :any[] = values[1];
 						if (appendCtx > -1) {
 							while (params.length < appendCtx) params.push(undefined);
 							params.push(ctx);
 						}
-						return <Promise<any>>fn.apply(entity,params);
+						if (ctx.checkExecuting) {
+							return ctx.checkExecuting(entity, payload.method, params, fn, payload);
+						} else {
+							return true;
+						}
+					}).then((exec)=>{
+						if (exec) {
+							return <Promise<any>>fn.apply(entity,params);
+						} else {
+							throw new Error("Context check failed");
+						}
 					}).then((ret) => {
 						return Utils.serializeRefs(ret);
 					});

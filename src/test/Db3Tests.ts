@@ -899,6 +899,19 @@ describe('Db3 >', () => {
 			}, 10);
 		});
 		
+		it('should report existing and non existing', ()=>{
+			var wp1 = Db(WithProps).get('wp1');
+			var wp100 = Db(WithProps).get('wp100');
+			M.assert("Inited existing entity").when(wp1).is(M.aTruthy);
+			M.assert("Inited non existing entity").when(wp100).is(M.aTruthy);
+			return Db(wp1).exists(this).then((val)=>{
+				assert('Found existing').when(val).is(true);
+				return Db(wp100).exists(this);
+			}).then((val)=>{
+				assert('Found non existing').when(val).is(false);
+			});
+		});
+		
 		it('should load polimorphic on rooted',() => {
 			var wp3 = Db(WithProps).get('more*wp3');
 			assert('it\'s right entity type').when(wp3).is(M.instanceOf(WithMoreProps));

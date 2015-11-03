@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151103_124110_master_1.0.0_93989b1
+ * TSDB version : 20151104_003258_master_1.0.0_b175964
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151103_124110_master_1.0.0_93989b1';
+var Version = '20151104_003258_master_1.0.0_b175964';
 /**
  * The main Db module.
  */
@@ -1110,6 +1110,10 @@ var Db;
                     }, _this.progDiscriminator++);
                 });
             };
+            EntityEvent.prototype.exists = function (ctx) {
+                var _this = this;
+                return this.load(ctx).then(function () { return _this.lastDs.exists(); });
+            };
             EntityEvent.prototype.live = function (ctx) {
                 this.updated(ctx, function () { });
             };
@@ -1364,6 +1368,14 @@ var Db;
                     if (_this.pointedEvent)
                         return _this.pointedEvent.load(ctx).then(function (ed) { return ed; });
                     return ed;
+                });
+            };
+            ReferenceEvent.prototype.exists = function (ctx) {
+                var _this = this;
+                return this.load(ctx).then(function () {
+                    if (!_this.pointedEvent)
+                        return false;
+                    return _this.pointedEvent.exists(ctx);
                 });
             };
             ReferenceEvent.prototype.makeCascadingCallback = function (ed, cb) {
@@ -2590,16 +2602,30 @@ var Db;
                     var parnames = Utils.findParameterNames(fn);
                     var appendCtx = (parnames.length > 0 && parnames[parnames.length - 1] == '_ctx') ? parnames.length - 1 : -1;
                     promises.push(Utils.deserializeRefs(this.db, ctx, payload.args));
+                    var entity;
+                    var params;
                     return Promise.all(promises).then(function (values) {
-                        var entity = values[0].payload;
+                        entity = values[0].payload;
+                        params = values[1];
                         // Inject the ctx, if any
-                        var params = values[1];
                         if (appendCtx > -1) {
                             while (params.length < appendCtx)
                                 params.push(undefined);
                             params.push(ctx);
                         }
-                        return fn.apply(entity, params);
+                        if (ctx.checkExecuting) {
+                            return ctx.checkExecuting(entity, payload.method, params, fn, payload);
+                        }
+                        else {
+                            return true;
+                        }
+                    }).then(function (exec) {
+                        if (exec) {
+                            return fn.apply(entity, params);
+                        }
+                        else {
+                            throw new Error("Context check failed");
+                        }
                     }).then(function (ret) {
                         return Utils.serializeRefs(ret);
                     });
