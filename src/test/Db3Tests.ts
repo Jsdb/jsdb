@@ -1275,6 +1275,39 @@ describe('Db3 >', () => {
 					M.assert("Updated the subentity").when(wpl1.oth._ref.str).is('cde');
 				});
 			});
+			
+			it('should bind when loading only parent entity', () => {
+				var wpl1 = Db(WithPreloads).get('wpl1');
+				
+				return Db(wpl1).load(this).then(() => {
+					M.assert("Inited the subentity").when(wpl1.sub).is(M.aTruthy);
+					M.assert("Loaded the subentity").when(wpl1.sub.str).is('abc');
+					M.assert("Inited the bound").when(wpl1.oth._sub).is(M.aTruthy);
+					M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
+					M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
+				});
+			});
+			
+			
+			it('should bind and keep live when only loading parent entity', () => {
+				var wpl1 = Db(WithPreloads).get('wpl1');
+				
+				return Db(wpl1).load(this).then(() => {
+					M.assert("Inited the subentity").when(wpl1.sub).is(M.aTruthy);
+					M.assert("Loaded the subentity").when(wpl1.sub.str).is('abc');
+					M.assert("Inited the bound").when(wpl1.oth._sub).is(M.aTruthy);
+					M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
+					M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
+				}).then(() => {
+					var fbsub = new Firebase(Db(wpl1.sub).getUrl());
+					return new Promise((ok) => {
+						fbsub.update({str:'cde'},ok);
+					});
+				}).then(() => {
+					M.assert("Updated the subentity").when(wpl1.oth._sub.str).is('cde');
+				});
+			});
+			
 		});
 	});
 	describe('Entity writing >', ()=>{

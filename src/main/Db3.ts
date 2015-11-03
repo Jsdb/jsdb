@@ -962,6 +962,7 @@ module Db {
 					var k = this.keys[i];
 					if (k === 'this') {
 						proms.push(Promise.resolve(parent));
+						evts.push(state.createEvent(parent,[]));
 						continue;
 					}
 					var descr = metadata.descriptors[k];
@@ -1858,6 +1859,7 @@ module Db {
 			
 			protected broadcast(ed :EventDetails<E>) {
 				if (!this.bindingPromise) {
+					this.internalApplyBinding(true);
 					this.applyHooks(ed);
 					super.broadcast(ed);
 					return;
@@ -1865,6 +1867,7 @@ module Db {
 				// wait here for resolution of the binding, if any
 				this.bindingPromise.then((state) => {
 					this.binding.resolve(ed.payload, state);
+					this.internalApplyBinding(true);
 					this.applyHooks(ed);
 					super.broadcast(ed);
 				});
@@ -1921,6 +1924,33 @@ module Db {
 				}
 				// if it's embedded should set the value on the parent entity
 				this.setEntityOnParent();
+			}
+			
+			internalApplyBinding(skipMe = false) {
+				if (!skipMe && this.binding && this.entity && this.parent) {
+					var mockState :BindingState = {
+						vals:[],
+						evts:[]
+					};
+					
+					for (var i = 0; i < this.binding.keys.length; i++) {
+						var k = this.binding.keys[i];
+						var evt :GenericEvent;
+						if (k == 'this') {
+							evt = this.parent;
+						} else {
+							evt = this.parent.findCreateChildFor(k);
+						}
+						mockState.evts[i] = evt;
+						mockState.vals[i] = evt.entity;
+					}
+					
+					this.binding.resolve(this.entity, mockState);
+				}
+				// Propagate to children
+				this.eachChildren((name,child)=>{
+					if (child instanceof EntityEvent) child.internalApplyBinding();
+				})				
 			}
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {

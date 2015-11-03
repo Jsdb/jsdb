@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151103_000353_master_1.0.0_8c02bde
+ * TSDB version : 20151103_023353_master_1.0.0_11c027e
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151103_000353_master_1.0.0_8c02bde';
+var Version = '20151103_023353_master_1.0.0_11c027e';
 /**
  * The main Db module.
  */
@@ -148,6 +148,7 @@ var Db;
                     var k = this.keys[i];
                     if (k === 'this') {
                         proms.push(Promise.resolve(parent));
+                        evts.push(state.createEvent(parent, []));
                         continue;
                     }
                     var descr = metadata.descriptors[k];
@@ -984,6 +985,7 @@ var Db;
             EntityEvent.prototype.broadcast = function (ed) {
                 var _this = this;
                 if (!this.bindingPromise) {
+                    this.internalApplyBinding(true);
                     this.applyHooks(ed);
                     _super.prototype.broadcast.call(this, ed);
                     return;
@@ -991,6 +993,7 @@ var Db;
                 // wait here for resolution of the binding, if any
                 this.bindingPromise.then(function (state) {
                     _this.binding.resolve(ed.payload, state);
+                    _this.internalApplyBinding(true);
                     _this.applyHooks(ed);
                     _super.prototype.broadcast.call(_this, ed);
                 });
@@ -1050,6 +1053,33 @@ var Db;
                 }
                 // if it's embedded should set the value on the parent entity
                 this.setEntityOnParent();
+            };
+            EntityEvent.prototype.internalApplyBinding = function (skipMe) {
+                if (skipMe === void 0) { skipMe = false; }
+                if (!skipMe && this.binding && this.entity && this.parent) {
+                    var mockState = {
+                        vals: [],
+                        evts: []
+                    };
+                    for (var i = 0; i < this.binding.keys.length; i++) {
+                        var k = this.binding.keys[i];
+                        var evt;
+                        if (k == 'this') {
+                            evt = this.parent;
+                        }
+                        else {
+                            evt = this.parent.findCreateChildFor(k);
+                        }
+                        mockState.evts[i] = evt;
+                        mockState.vals[i] = evt.entity;
+                    }
+                    this.binding.resolve(this.entity, mockState);
+                }
+                // Propagate to children
+                this.eachChildren(function (name, child) {
+                    if (child instanceof EntityEvent)
+                        child.internalApplyBinding();
+                });
             };
             EntityEvent.prototype.load = function (ctx) {
                 var _this = this;

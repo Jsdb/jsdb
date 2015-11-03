@@ -1237,6 +1237,7 @@ declare module 'jsdb' {
                             applyHooks(ed: EventDetails<E>): void;
                             protected broadcast(ed: EventDetails<E>): void;
                             parseValue(ds: FirebaseDataSnapshot): void;
+                            internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
                             live(ctx: Object): void;
                             dereference(ctx: Object): Promise<EventDetails<E>>;

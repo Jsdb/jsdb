@@ -1,4 +1,24 @@
 
+Create a static IDb3Static
+--------------------------
+
+Currintly, if I have a "ship" object, and want to be nitified of changes
+in it's "anagraphic" embedded, i have to write :
+
+```typescript
+Tsdb.of(ship).db(ship.anagraphic).updated(....)
+```
+
+This is long and cumbersome. Using the metadata getters we could write simply :
+
+```typescript
+Tsdb.of(ship.anagraphic).updated...
+```
+
+The only difference from a normal "db" is taking the db from the main entity
+of the metadata getter chain, and then passing the rest.
+
+
 Find a different way of passing a database for static remote calls
 -----------------------------------------------------------
 
@@ -455,3 +475,13 @@ Not requiring a type would :
 > The discriminator is enough, because the URL is first resolved, thus yielding the base type. 
 
 > Type for references is now optional, everything seems to work even without
+
+
+
+Binding does not work as expected when loading an entire entity
+---------------------------------------------------------------
+
+Seems like if a main entity has two embeddeds, which have bindings between them,
+loading the entire entity does not trigger binding as it should.
+ 
+> this could also be the base for automatic binding.
