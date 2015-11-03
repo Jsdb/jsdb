@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151103_023353_master_1.0.0_11c027e
+ * TSDB version : 20151103_124110_master_1.0.0_93989b1
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151103_023353_master_1.0.0_11c027e';
+var Version = '20151103_124110_master_1.0.0_93989b1';
 /**
  * The main Db module.
  */
@@ -33,10 +33,30 @@ var Db;
         }
     }
     Db.configure = configure;
-    function of(e) {
-        return entEvent.get(e);
-    }
-    Db.of = of;
+    /**
+     * Static way of accessing the database. This works only
+     * if the entity passed in was already connected to a database,
+     * so it can't be used for saving. However, it is very useful for
+     * libraries that wants to interact with the database regarding an
+     * entity, and does not want to pollute all method calls with a "db"
+     * parameter. This method is preferrable to {@link getDefaultDb} in a library
+     * context, because different entities could be bound to different
+     * database instances, especially in a server side environment that
+     * opts for a share-nothing architecture.
+     */
+    Db.of = function (param) {
+        var e = lastEntity;
+        if (!e) {
+            if (!param)
+                throw new Error("A parameter is needed to find the database");
+            return entEvent.get(param);
+        }
+        var evt = entEvent.get(e);
+        if (!evt)
+            return null;
+        var db = evt.db;
+        return db.apply(db, arguments);
+    };
     /**
      * Return the {@link defaultDb} if any has been created.
      */
@@ -3123,7 +3143,7 @@ var Db;
             }
             if (typeof (from) === 'object') {
                 // Check if it's an entity
-                var ev = of(from);
+                var ev = Db.of(from);
                 if (ev && ev.getUrl()) {
                     return { _ref: ev.getUrl() };
                 }

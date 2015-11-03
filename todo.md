@@ -1,3 +1,20 @@
+Global error handling / retying / notification on anomalous situations
+----------------------------------------------------------------------
+
+While we can chain promises and/or return errors to callbacks, usually we will
+have a ton of callbacks in place, and maybe also a few promises running at the same time,
+so notifying errors there is a good thing, but only for local error handling.
+
+On the opposite, if the user application wants to display a banner to inform
+the user that the DB is not responding, to check the connection, to retry etc..,
+doing it on the local error handling is hard.
+
+That's why we should provide :
+* A global (per db) error handling callback, to which we report database and/or remote calls problems
+* An automatic retry strategy, configurable and sensitive, that notifies that a retry is in progress
+* Automatic monitoring for slow operations, before the operation actually fails if it takes more than
+a configurable amount of time for no apparent reason, a callback should be notified.   
+
 
 Create a static IDb3Static
 --------------------------

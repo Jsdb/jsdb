@@ -53,8 +53,28 @@ module Db {
 		}
 	}
 	
-	export function of<E extends Api.Entity>(e :E) :Db.Api.IEntityOrReferenceEvent<E> {
-		return entEvent.get(e);
+	/**
+	 * Static way of accessing the database. This works only
+	 * if the entity passed in was already connected to a database,
+	 * so it can't be used for saving. However, it is very useful for
+	 * libraries that wants to interact with the database regarding an 
+	 * entity, and does not want to pollute all method calls with a "db"
+	 * parameter. This method is preferrable to {@link getDefaultDb} in a library
+	 * context, because different entities could be bound to different
+	 * database instances, especially in a server side environment that
+	 * opts for a share-nothing architecture.
+	 */
+	export var of :Api.IDb3Static = function(param? :any) {
+		var e = lastEntity;
+		if (!e) {
+			if (!param) throw new Error("A parameter is needed to find the database");	
+			return entEvent.get(param);
+		}
+		
+		var evt = entEvent.get(e);
+		if (!evt) return null;
+		var db = evt.db;
+		return db.apply(db, arguments); 
 	}
 	
 	/**
