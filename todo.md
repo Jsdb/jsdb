@@ -16,26 +16,6 @@ That's why we should provide :
 a configurable amount of time for no apparent reason, a callback should be notified.   
 
 
-Create a static IDb3Static
---------------------------
-
-Currintly, if I have a "ship" object, and want to be nitified of changes
-in it's "anagraphic" embedded, i have to write :
-
-```typescript
-Tsdb.of(ship).db(ship.anagraphic).updated(....)
-```
-
-This is long and cumbersome. Using the metadata getters we could write simply :
-
-```typescript
-Tsdb.of(ship.anagraphic).updated...
-```
-
-The only difference from a normal "db" is taking the db from the main entity
-of the metadata getter chain, and then passing the rest.
-
-
 Find a different way of passing a database for static remote calls
 -----------------------------------------------------------
 
@@ -43,10 +23,10 @@ Even if the static calls are 99% of times probably made from a client applicatio
 has only one db active, it would be still be good to have a way to pass in the database
 on which to execute the call.
 
-Currently, one option is to pass it as a parameter, which works but gives error
-from typescript. 
+Currently, one option is to pass it as a parameter, which works but gives compile
+time error from typescript because of the different signature. 
 
-Another options could be :
+Other options could be :
 ```typescript
 
 var db = Tsdb.configure();
@@ -86,10 +66,13 @@ ref :TheType
 > the normal annotations, but there we can replace it with a function returning the type as late as possible 
 > (already done), while here we have to wait for the language to support it properly.
 
+> Note that in the meantime, references does not need to specify a type anymore,
+> so this would apply to embeddeds only, which s stilla great part of the use
+> cases anyway.
 
 
 
-TEST Support binding and prjections on collections
+TEST Support binding and projections on collections
 ---------------------------------------------
 
 Basic support should already be there, since it's built into the events.
@@ -177,6 +160,8 @@ to be resolved, like binding does.
 
 This is somehow an alternative to projections, which are used for the same reason
 but with better data access.
+
+> I hit this on user application.
 
 
 Un-evented unboxing
@@ -502,3 +487,25 @@ Seems like if a main entity has two embeddeds, which have bindings between them,
 loading the entire entity does not trigger binding as it should.
  
 > this could also be the base for automatic binding.
+
+
+Create a static IDb3Static
+--------------------------
+
+Currintly, if I have a "ship" object, and want to be nitified of changes
+in it's "anagraphic" embedded, i have to write :
+
+```typescript
+Tsdb.of(ship).db(ship.anagraphic).updated(....)
+```
+
+This is long and cumbersome. Using the metadata getters we could write simply :
+
+```typescript
+Tsdb.of(ship.anagraphic).updated...
+```
+
+The only difference from a normal "db" is taking the db from the main entity
+of the metadata getter chain, and then passing the rest.
+
+
