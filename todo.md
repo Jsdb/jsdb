@@ -1,3 +1,41 @@
+Find an easier solution for Promise.all
+---------------------------------------
+
+Often, in user application, we want to perform some operation
+after making sure a number of entities are fully loaded.
+
+Currently this can be obtained with this, rather cumbersome, code :
+
+```typescript
+Promise.all<any>([
+	Tsdb.of(entityA).load(this),
+	Tsdb.of(entityB.ref).load(this),
+	Tsdb.of(entityC).load(this),
+]).then(()=>{
+	// freely use the entities here
+});
+```
+
+A better support/syntax could be nice, something like :
+
+```typescript
+Tsdb.on(entityA).and(entityB.ref).and(entityC).load(this).then(()=>{
+	
+});
+```
+
+We would need a way to build a "proxy" with all the possible functions
+on the events of the given entities, that then desugars into :
+
+```typescript
+var proms :Promise<any>[] = [];
+for (var i = 0; i < this.events.length; i++) {
+	proms.push(this.events[i][methodName](ctx));
+}
+return Promise.all(proms);
+```
+
+
 Global error handling / retying / notification on anomalous situations
 ----------------------------------------------------------------------
 
