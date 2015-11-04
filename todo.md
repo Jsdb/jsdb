@@ -17,7 +17,9 @@ seems to be bound to an event, but the event does not have a bound entity.
 
 This latter incoherency may happen also on non-rooted entities.  
 
-> Solved by reconciling two events when assigning tha same url explicitly.
+> Solved by disconnecting the event when entity is null, and reconciling two events when 
+> assigning the same url explicitly.
+
 > This means that when an event receive an order to assignUrl with a specific id,
 > it will check if there is another event already in cache for that url,
 > in that case it will de-assign itself from the entity, and assign the entity
