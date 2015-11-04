@@ -1,3 +1,38 @@
+Check if exists, otherwise create it
+-----------------------------------
+
+Currently, this can't be done :
+* Doing a get, returns an instance, that then is removed from the event when 
+doing .exists (or .load), so subsequently saving saves again null.
+* Creating a new instance and assigning url, gives error because there is 
+already an event in the cache due to the previous exists.
+
+The main problem seems to be how to deal with a .get that returns a local-only
+instance, followed by a .load or .exists that find a NULL on the DB. 
+
+Currently the event sets its entity to "null" so that, if it's an embedded, it 
+sets null on the parent. However, this is unacceptable for root entities,
+cause it creates the situation in which the cache is polluted, the entity
+seems to be bound to an event, but the event does not have a bound entity.
+
+This latter incoherency may happen also on non-rooted entities.  
+
+> Solved by reconciling two events when assigning tha same url explicitly.
+> This means that when an event receive an order to assignUrl with a specific id,
+> it will check if there is another event already in cache for that url,
+> in that case it will de-assign itself from the entity, and assign the entity
+> to the previously existing event.
+
+> I don't think this is a solution, it's reather a monkey patch. The situations 
+> involving discrepancies between instances and events and cache must be
+> handled better.
+
+> I still think that having the event set it's instance to null is dangerous,
+> apart from this case, also in an embedded there could still be the instance floating
+> around, which could by mistake end up being a new row on the db if saved.
+
+
+
 Find an easier solution for Promise.all
 ---------------------------------------
 

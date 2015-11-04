@@ -1555,6 +1555,34 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			it('should save a new entity after checking exist', ()=>{
+				var wp90 = Db(WithProps).get('wp90');
+				return Db(wp90).exists(this).then((ex)=>{
+					assert("Entity does not exist already").when(ex).is(false);
+					wp90.num = 100;
+					Db(wp90).assignUrl('wp90');
+					return Db(wp90).save();
+				}).then(()=>{
+					assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+				});
+			});
+			
+			it('should save a new entity instance after checking exist', ()=>{
+				var wp90 = Db(WithProps).get('wp90');
+				return Db(wp90).exists(this).then((ex)=>{
+					assert("Entity does not exist already").when(ex).is(false);
+					wp90 = new WithProps();
+					wp90.num = 100;
+					Db(wp90).assignUrl('wp90');
+					return Db(wp90).save();
+				}).then(()=>{
+					assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+				});
+			});
+			
+			
+			
+			
 			// write entity in entity, as full object
 			it('should save correctly sub entities', () => {
 				var ws = new WithSubentity();

@@ -1849,12 +1849,13 @@ module Db {
 			progDiscriminator = 1;
 			
 			setEntity(entity :Api.Entity) {
+				if (this.entity) {
+					this.state.bindEntity(this.entity, null);
+				}
 				super.setEntity(entity);
 				// Update the local classMeta if entity type changed
 				if (this.entity) {
 					this.classMeta = this.state.myMeta.findMeta(this.entity);
-				}
-				if (this.entity) {
 					this.state.bindEntity(this.entity, this);
 				}
 			}
@@ -2086,10 +2087,19 @@ module Db {
 				var er = this.state.entityRoot(this.classMeta);
 				if (!er) throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
 				var url = er.getUrl();
-				var id = id || Db.Utils.IdGenerator.next();
+				var nid = id || Db.Utils.IdGenerator.next();
 				var disc = this.classMeta.discriminator || '';
 				if (disc) disc+= '*';
-				this.url = url + disc + id + '/';
+				this.url = url + disc + nid + '/';
+				if (id) {
+					var oth = this.state.fetchFromCache(this.url);
+					if (oth && oth !== this) {
+						var ent = this.entity;
+						this.setEntity(null);
+						oth.setEntity(ent);
+						return;
+					}
+				}
 				this.urlInited();
 			}
 			

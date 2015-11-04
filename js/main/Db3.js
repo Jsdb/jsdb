@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151104_003258_master_1.0.0_b175964
+ * TSDB version : 20151104_030054_master_1.0.0_862b612
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151104_003258_master_1.0.0_b175964';
+var Version = '20151104_030054_master_1.0.0_862b612';
 /**
  * The main Db module.
  */
@@ -960,12 +960,13 @@ var Db;
                 this.progDiscriminator = 1;
             }
             EntityEvent.prototype.setEntity = function (entity) {
+                if (this.entity) {
+                    this.state.bindEntity(this.entity, null);
+                }
                 _super.prototype.setEntity.call(this, entity);
                 // Update the local classMeta if entity type changed
                 if (this.entity) {
                     this.classMeta = this.state.myMeta.findMeta(this.entity);
-                }
-                if (this.entity) {
                     this.state.bindEntity(this.entity, this);
                 }
             };
@@ -1201,11 +1202,20 @@ var Db;
                 if (!er)
                     throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
                 var url = er.getUrl();
-                var id = id || Db.Utils.IdGenerator.next();
+                var nid = id || Db.Utils.IdGenerator.next();
                 var disc = this.classMeta.discriminator || '';
                 if (disc)
                     disc += '*';
-                this.url = url + disc + id + '/';
+                this.url = url + disc + nid + '/';
+                if (id) {
+                    var oth = this.state.fetchFromCache(this.url);
+                    if (oth && oth !== this) {
+                        var ent = this.entity;
+                        this.setEntity(null);
+                        oth.setEntity(ent);
+                        return;
+                    }
+                }
                 this.urlInited();
             };
             EntityEvent.prototype.triggerLocalSave = function () {
