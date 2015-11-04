@@ -1,3 +1,17 @@
+declare class Db {
+    /**
+     * Static way of accessing the database. This works only
+     * if the entity passed in was already connected to a database,
+     * so it can't be used for saving. However, it is very useful for
+     * libraries that wants to interact with the database regarding an
+     * entity, and does not want to pollute all method calls with a "db"
+     * parameter. This method is preferrable to {@link getDefaultDb} in a library
+     * context, because different entities could be bound to different
+     * database instances, especially in a server side environment that
+     * opts for a share-nothing architecture.
+     */
+    static of: Db.Api.IDb3Static;
+}
 /**
  * The main Db module.
  */
@@ -11,18 +25,6 @@ declare module Db {
      * @return An initialized and configured db instance
      */
     function configure(conf: Api.DatabaseConf): Db.Api.IDb3Static;
-    /**
-     * Static way of accessing the database. This works only
-     * if the entity passed in was already connected to a database,
-     * so it can't be used for saving. However, it is very useful for
-     * libraries that wants to interact with the database regarding an
-     * entity, and does not want to pollute all method calls with a "db"
-     * parameter. This method is preferrable to {@link getDefaultDb} in a library
-     * context, because different entities could be bound to different
-     * database instances, especially in a server side environment that
-     * opts for a share-nothing architecture.
-     */
-    var of: Api.IDb3Static;
     /**
      * Return the {@link defaultDb} if any has been created.
      */
@@ -1143,18 +1145,11 @@ declare module Db {
             parseValue(ds: FirebaseDataSnapshot): void;
             applyHooks(ed: EventDetails<any>): void;
             /**
-             * Return true if this event creates a logica "traversal" on the normal tree structure
-             * of events. For example, a reference will traverse to another branch of the tree, so it's
-             * children will not be grandchildren of its parent.
-             */
-            isTraversingTree(): boolean;
-            /**
-             * If {@link isTraversingTree} returns true, then getTraversed returns the event
-             * to which this events makes a traversal to.
+             * If this event creates a logica "traversal" on the normal tree structure
+             * of events, getTraversed returns the event to which this events makes a traversal to.
              *
-             * TODO this has not been implemented by relevant subclasses, like ReferenceEvent. Moreover,+
-             * until we don't load the reference we don't know how to properly init the event (cause eventually
-             * we would need to reuse an existing one from the cache).
+             * For example, a reference will traverse to another branch of the tree, so it's
+             * children will not be grandchildren of its parent.
              */
             getTraversed(): GenericEvent;
             /**
@@ -1363,6 +1358,7 @@ declare module Db {
             save(): Promise<any[]>;
             remove(): Promise<any>;
             clone(): E;
+            getTraversed(): GenericEvent;
         }
         /**
          * An event handler for collections.

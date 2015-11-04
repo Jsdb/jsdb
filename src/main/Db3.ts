@@ -31,6 +31,35 @@ interface WeakMapConstructor {
 }
 declare var WeakMap: WeakMapConstructor;
 
+class Db {
+	/**
+	 * Static way of accessing the database. This works only
+	 * if the entity passed in was already connected to a database,
+	 * so it can't be used for saving. However, it is very useful for
+	 * libraries that wants to interact with the database regarding an 
+	 * entity, and does not want to pollute all method calls with a "db"
+	 * parameter. This method is preferrable to {@link getDefaultDb} in a library
+	 * context, because different entities could be bound to different
+	 * database instances, especially in a server side environment that
+	 * opts for a share-nothing architecture.
+	 */
+	static get of():Db.Api.IDb3Static {
+		Db.Internal.clearLastStack();
+		return function(param? :any) {
+			var e = Db.Internal.getLastEntity();
+			if (!e) {
+				if (!param) throw new Error("A parameter is needed to find the database");	
+				return entEvent.get(param);
+			}
+			
+			var evt = entEvent.get(e);
+			if (!evt) return null;
+			var db = evt.db;
+			return db.apply(db, arguments); 
+		};
+	}
+}
+
 /**
  * The main Db module.
  */
@@ -53,17 +82,7 @@ module Db {
 		}
 	}
 	
-	/**
-	 * Static way of accessing the database. This works only
-	 * if the entity passed in was already connected to a database,
-	 * so it can't be used for saving. However, it is very useful for
-	 * libraries that wants to interact with the database regarding an 
-	 * entity, and does not want to pollute all method calls with a "db"
-	 * parameter. This method is preferrable to {@link getDefaultDb} in a library
-	 * context, because different entities could be bound to different
-	 * database instances, especially in a server side environment that
-	 * opts for a share-nothing architecture.
-	 */
+	/*
 	export var of :Api.IDb3Static = function(param? :any) {
 		var e = lastEntity;
 		if (!e) {
@@ -76,6 +95,7 @@ module Db {
 		var db = evt.db;
 		return db.apply(db, arguments); 
 	}
+	*/
 	
 	/**
 	 * Return the {@link defaultDb} if any has been created.
@@ -1643,21 +1663,11 @@ module Db {
 			}
 				
 			/**
-			 * Return true if this event creates a logica "traversal" on the normal tree structure 
-			 * of events. For example, a reference will traverse to another branch of the tree, so it's
-			 * children will not be grandchildren of its parent.
-			 */
-			isTraversingTree() :boolean {
-				return false;
-			}
-			
-			/**
-			 * If {@link isTraversingTree} returns true, then getTraversed returns the event 
-			 * to which this events makes a traversal to.
+			 * If this event creates a logica "traversal" on the normal tree structure 
+			 * of events, getTraversed returns the event to which this events makes a traversal to.
 			 * 
-			 * TODO this has not been implemented by relevant subclasses, like ReferenceEvent. Moreover,+
-			 * until we don't load the reference we don't know how to properly init the event (cause eventually
-			 * we would need to reuse an existing one from the cache).
+			 * For example, a reference will traverse to another branch of the tree, so it's
+			 * children will not be grandchildren of its parent. 
 			 */
 			getTraversed() :GenericEvent {
 				return null;
@@ -2408,6 +2418,12 @@ module Db {
 			clone() :E {
 				return this.pointedEvent.clone();
 			}
+			
+			getTraversed() :GenericEvent {
+				if (!this.pointedEvent) throw new Error("Cannot traverse reference '" + this.nameOnParent + "' cause it's null or has not yet been loaded");
+				return this.pointedEvent;
+			}
+			
 		}
 		
 		
@@ -2639,8 +2655,11 @@ module Db {
 			
 			addToInternal(event :string, ds :FirebaseDataSnapshot, val :Api.Entity, det :EventDetails<E>) {
 				if (event == 'child_removed') {
-					delete this.realField[ds.key()];
+					if (this.realField) {
+						delete this.realField[ds.key()];
+					}
 				} else {
+					this.realField = this.realField || {};
 					this.realField[ds.key()] = val;
 				}
 				this.setEntityOnParent(this.realField);
@@ -2784,6 +2803,11 @@ module Db {
 			
 			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
 				var key = ds.key();
+				if (!this.keys || !this.arrayValue || !this.collection.realField) {
+					this.keys = [];
+					this.arrayValue = [];
+					this.collection.realField = {};
+				}
 				var curpos = this.findPositionFor(key);
 				if (event == 'child_removed') {
 					delete this.collection.realField[ds.key()];
@@ -3365,15 +3389,12 @@ module Db {
 				// Follow each call stack
 				var acp = roote;
 				for (var i = 0; i < stack.length; i++) {
+					// check if we have to traverse first
+					acp = acp.getTraversed() || acp;
 					// search child event if any
 					var sube = acp.findCreateChildFor(stack[i]);
 					if (!sube) throw new Error("Cannot find an event for " + stack[i]);
 					sube.state = this;
-					if (sube.isTraversingTree()) {
-						roote = sube.getTraversed();
-						acp = roote;
-						continue;
-					}
 					acp = sube;
 				}
 				return acp;
@@ -4027,7 +4048,7 @@ module Db {
 			}
 			if (typeof(from) === 'object') {
 				// Check if it's an entity
-				var ev = of(from);
+				var ev = Db.of(from);
 				if (ev && ev.getUrl()) {
 					return {_ref:ev.getUrl()};
 				}

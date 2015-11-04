@@ -246,7 +246,6 @@ var WithMap = (function () {
 var WithSet = (function () {
     function WithSet() {
         this.embedSet = [];
-        this.refSet = [];
         this.sortedSet = [];
     }
     __decorate([
@@ -319,6 +318,7 @@ describe('Db3 >', function () {
     var wr2Fb;
     var wr3Fb;
     var wr4Fb;
+    var wr5Fb;
     var wcFb;
     var wc1Fb;
     var wc2Fb;
@@ -485,6 +485,14 @@ describe('Db3 >', function () {
             str: 'String 4',
             anything: {
                 _ref: wp1Fb.toString() + '/'
+            }
+        }, opCnter);
+        wr5Fb = wrFb.child('wr5');
+        opcnt++;
+        wr5Fb.set({
+            str: 'String 5',
+            anything: {
+                _ref: ws1Fb.toString() + '/'
             }
         }, opCnter);
         wcFb = new Firebase(baseUrl + '/withCols');
@@ -1176,6 +1184,15 @@ describe('Db3 >', function () {
                             substr: 'Sub String'
                         }
                     }));
+                });
+            });
+            it("should cross metadata when encountering references", function () {
+                var wr1 = Db(WithRef).get('wr5');
+                return Db(wr1.anything).load(_this).then(function () {
+                    var ot = wr1.anything;
+                    var trev = Db(ot.sub);
+                    assert("Found the event").when(trev).is(M.aTruthy);
+                    assert("It's entity event").when(trev).is(M.instanceOf(Db3.Internal.EntityEvent));
                 });
             });
         });

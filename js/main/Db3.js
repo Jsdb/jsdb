@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151104_031553_master_1.0.0_4f18718
+ * TSDB version : 20151104_140209_master_1.0.0_e0da5f9
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,43 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151104_031553_master_1.0.0_4f18718';
+var Version = '20151104_140209_master_1.0.0_e0da5f9';
+var Db = (function () {
+    function Db() {
+    }
+    Object.defineProperty(Db, "of", {
+        /**
+         * Static way of accessing the database. This works only
+         * if the entity passed in was already connected to a database,
+         * so it can't be used for saving. However, it is very useful for
+         * libraries that wants to interact with the database regarding an
+         * entity, and does not want to pollute all method calls with a "db"
+         * parameter. This method is preferrable to {@link getDefaultDb} in a library
+         * context, because different entities could be bound to different
+         * database instances, especially in a server side environment that
+         * opts for a share-nothing architecture.
+         */
+        get: function () {
+            Db.Internal.clearLastStack();
+            return function (param) {
+                var e = Db.Internal.getLastEntity();
+                if (!e) {
+                    if (!param)
+                        throw new Error("A parameter is needed to find the database");
+                    return entEvent.get(param);
+                }
+                var evt = entEvent.get(e);
+                if (!evt)
+                    return null;
+                var db = evt.db;
+                return db.apply(db, arguments);
+            };
+        },
+        enumerable: true,
+        configurable: true
+    });
+    return Db;
+})();
 /**
  * The main Db module.
  */
@@ -33,30 +69,20 @@ var Db;
         }
     }
     Db.configure = configure;
-    /**
-     * Static way of accessing the database. This works only
-     * if the entity passed in was already connected to a database,
-     * so it can't be used for saving. However, it is very useful for
-     * libraries that wants to interact with the database regarding an
-     * entity, and does not want to pollute all method calls with a "db"
-     * parameter. This method is preferrable to {@link getDefaultDb} in a library
-     * context, because different entities could be bound to different
-     * database instances, especially in a server side environment that
-     * opts for a share-nothing architecture.
-     */
-    Db.of = function (param) {
+    /*
+    export var of :Api.IDb3Static = function(param? :any) {
         var e = lastEntity;
         if (!e) {
-            if (!param)
-                throw new Error("A parameter is needed to find the database");
+            if (!param) throw new Error("A parameter is needed to find the database");
             return entEvent.get(param);
         }
+        
         var evt = entEvent.get(e);
-        if (!evt)
-            return null;
+        if (!evt) return null;
         var db = evt.db;
         return db.apply(db, arguments);
-    };
+    }
+    */
     /**
      * Return the {@link defaultDb} if any has been created.
      */
@@ -759,20 +785,11 @@ var Db;
                 }
             };
             /**
-             * Return true if this event creates a logica "traversal" on the normal tree structure
-             * of events. For example, a reference will traverse to another branch of the tree, so it's
-             * children will not be grandchildren of its parent.
-             */
-            GenericEvent.prototype.isTraversingTree = function () {
-                return false;
-            };
-            /**
-             * If {@link isTraversingTree} returns true, then getTraversed returns the event
-             * to which this events makes a traversal to.
+             * If this event creates a logica "traversal" on the normal tree structure
+             * of events, getTraversed returns the event to which this events makes a traversal to.
              *
-             * TODO this has not been implemented by relevant subclasses, like ReferenceEvent. Moreover,+
-             * until we don't load the reference we don't know how to properly init the event (cause eventually
-             * we would need to reuse an existing one from the cache).
+             * For example, a reference will traverse to another branch of the tree, so it's
+             * children will not be grandchildren of its parent.
              */
             GenericEvent.prototype.getTraversed = function () {
                 return null;
@@ -1535,6 +1552,11 @@ var Db;
             ReferenceEvent.prototype.clone = function () {
                 return this.pointedEvent.clone();
             };
+            ReferenceEvent.prototype.getTraversed = function () {
+                if (!this.pointedEvent)
+                    throw new Error("Cannot traverse reference '" + this.nameOnParent + "' cause it's null or has not yet been loaded");
+                return this.pointedEvent;
+            };
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
         Internal.ReferenceEvent = ReferenceEvent;
@@ -1766,9 +1788,12 @@ var Db;
             };
             MapEvent.prototype.addToInternal = function (event, ds, val, det) {
                 if (event == 'child_removed') {
-                    delete this.realField[ds.key()];
+                    if (this.realField) {
+                        delete this.realField[ds.key()];
+                    }
                 }
                 else {
+                    this.realField = this.realField || {};
                     this.realField[ds.key()] = val;
                 }
                 this.setEntityOnParent(this.realField);
@@ -1907,6 +1932,11 @@ var Db;
             };
             EventedArray.prototype.addToInternal = function (event, ds, val, det) {
                 var key = ds.key();
+                if (!this.keys || !this.arrayValue || !this.collection.realField) {
+                    this.keys = [];
+                    this.arrayValue = [];
+                    this.collection.realField = {};
+                }
                 var curpos = this.findPositionFor(key);
                 if (event == 'child_removed') {
                     delete this.collection.realField[ds.key()];
@@ -2474,16 +2504,13 @@ var Db;
                 // Follow each call stack
                 var acp = roote;
                 for (var i = 0; i < stack.length; i++) {
+                    // check if we have to traverse first
+                    acp = acp.getTraversed() || acp;
                     // search child event if any
                     var sube = acp.findCreateChildFor(stack[i]);
                     if (!sube)
                         throw new Error("Cannot find an event for " + stack[i]);
                     sube.state = this;
-                    if (sube.isTraversingTree()) {
-                        roote = sube.getTraversed();
-                        acp = roote;
-                        continue;
-                    }
                     acp = sube;
                 }
                 return acp;

@@ -178,7 +178,7 @@ class WithSet {
 	embedSet :SubEntity[] = [];
 	
 	@Db3.set(WithProps, true)
-	refSet :WithProps[] = [];
+	refSet :WithProps[];
 	
 	@Db3.set({type:SubEntity, sorting: Db3.sortBy('str')})
 	sortedSet :SubEntity[] = [];
@@ -238,6 +238,7 @@ describe('Db3 >', () => {
 	var wr2Fb :Firebase;
 	var wr3Fb :Firebase;
 	var wr4Fb :Firebase;
+	var wr5Fb :Firebase;
 	
 	var wcFb :Firebase;
 	var wc1Fb :Firebase;
@@ -426,6 +427,15 @@ describe('Db3 >', () => {
 			str: 'String 4',
 			anything: {
 				_ref: wp1Fb.toString() + '/'
+			}
+		}, opCnter);
+
+		wr5Fb = wrFb.child('wr5');
+		opcnt++;
+		wr5Fb.set({
+			str: 'String 5',
+			anything: {
+				_ref: ws1Fb.toString() + '/'
 			}
 		}, opCnter);
 		
@@ -1193,6 +1203,18 @@ describe('Db3 >', () => {
 					}));					
 				});
 			});
+			
+			it("should cross metadata when encountering references", ()=>{
+				var wr1 = Db(WithRef).get('wr5');
+				return Db(wr1.anything).load(this).then(()=>{
+					var ot = <WithSubentity>wr1.anything;
+					var trev = Db(ot.sub);
+					assert("Found the event").when(trev).is(M.aTruthy);
+					assert("It's entity event").when(trev).is(M.instanceOf(Db3.Internal.EntityEvent));
+				});
+			});
+		
+			
 			
 		});
 		

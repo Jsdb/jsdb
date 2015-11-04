@@ -1,3 +1,25 @@
+Serialize references in a way that's possible to query
+------------------------------------------------------
+
+Currently references are objects, containing a _ref field and eventually 
+projections. This is done to minimize the database roundtrips, but comes
+at a real cost, because missing queries is a problem.
+
+Adding a @Tsdb.indexed annotation would benefit both :
+* normal fields, cause it would create indexes on the database (maybe also on firebase)
+* references, cause it would create a copy of the ref for indexing only purposes 
+(at least on firebase)
+
+
+Add a named annotation
+----------------------
+
+If the code is uglified, names could not match with those on the database or
+with those on the server.
+
+While using the names cache in uglify could help, having an explicitly "named"
+annotation to use on methods and properties could be another option.
+
 Check if exists, otherwise create it
 -----------------------------------
 
@@ -71,6 +93,9 @@ for (var i = 0; i < this.events.length; i++) {
 }
 return Promise.all(proms);
 ```
+
+> It could be a composing of events, adding an "and" method on any event that
+> returns an IDb3Static that adds the events to a list.
 
 
 Global error handling / retying / notification on anomalous situations

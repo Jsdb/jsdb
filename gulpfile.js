@@ -24,7 +24,7 @@ var spawnMocha = require("gulp-spawn-mocha");
 var istanbul = require('gulp-istanbul');
 var replace = require('gulp-replace');
 var moment = require('moment');
-var execSync = require('exec-sync');
+var execSync = require('sync-exec');
 
 var packg = {};
 try {
@@ -155,8 +155,8 @@ function versionTag() {
 	var gitVer = '';
 	var gitBranch = 'local';
 	try {
-		gitVer = execSync('git log -1 --pretty=%h');
-		gitBranch = execSync('git rev-parse --abbrev-ref HEAD');
+		gitVer = execSync('git log -1 --pretty=%h').stdout.trim();
+		gitBranch = execSync('git rev-parse --abbrev-ref HEAD').stdout.trim();
 	} catch (e) {
 	}
 	gitVer = packg.version + '_' + gitVer;
