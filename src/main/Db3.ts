@@ -179,7 +179,7 @@ module Db {
 		 */
 		export interface IRemoteCallContext {
 			db? :IDb3Static;
-			checkExecuting?(entity? :Entity, methodName? :string, params? :any[], fn? :Function, payload? :any) :boolean|Promise<boolean>;
+			checkExecuting?(entity? :Entity, methodName? :string, stat? :boolean, params? :any[], fn? :Function, payload? :any) :boolean|Promise<boolean>;
 		}
 
 		/**
@@ -3473,8 +3473,9 @@ module Db {
 				try {
 					var promises :Promise<any>[] = [];
 					var fn :Function = null;
-					
+					var stat = false;
 					if (payload.entityUrl.indexOf('staticCall:') === 0) {
+						stat = true;
 						var clname = payload.entityUrl.substr(11);
 						var meta = this.myMeta.findNamed(clname);
 						if (!meta) throw new Error("Can't find class named " + clname);
@@ -3511,7 +3512,7 @@ module Db {
 							params.push(ctx);
 						}
 						if (ctx.checkExecuting) {
-							return ctx.checkExecuting(entity, payload.method, params, fn, payload);
+							return ctx.checkExecuting(entity, payload.method, stat, params, fn, payload);
 						} else {
 							return true;
 						}

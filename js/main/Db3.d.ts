@@ -106,7 +106,7 @@ declare module Db {
          */
         interface IRemoteCallContext {
             db?: IDb3Static;
-            checkExecuting?(entity?: Entity, methodName?: string, params?: any[], fn?: Function, payload?: any): boolean | Promise<boolean>;
+            checkExecuting?(entity?: Entity, methodName?: string, stat?: boolean, params?: any[], fn?: Function, payload?: any): boolean | Promise<boolean>;
         }
         /**
          * Operations on a db.

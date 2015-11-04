@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151104_030054_master_1.0.0_862b612
+ * TSDB version : 20151104_031553_master_1.0.0_4f18718
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151104_030054_master_1.0.0_862b612';
+var Version = '20151104_031553_master_1.0.0_4f18718';
 /**
  * The main Db module.
  */
@@ -2582,7 +2582,9 @@ var Db;
                 try {
                     var promises = [];
                     var fn = null;
+                    var stat = false;
                     if (payload.entityUrl.indexOf('staticCall:') === 0) {
+                        stat = true;
                         var clname = payload.entityUrl.substr(11);
                         var meta = this.myMeta.findNamed(clname);
                         if (!meta)
@@ -2624,7 +2626,7 @@ var Db;
                             params.push(ctx);
                         }
                         if (ctx.checkExecuting) {
-                            return ctx.checkExecuting(entity, payload.method, params, fn, payload);
+                            return ctx.checkExecuting(entity, payload.method, stat, params, fn, payload);
                         }
                         else {
                             return true;
