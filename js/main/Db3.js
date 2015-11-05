@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151104_140209_master_1.0.0_e0da5f9
+ * TSDB version : 20151105_215202_master_1.0.0_ea4846d
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151104_140209_master_1.0.0_e0da5f9';
+var Version = '20151105_215202_master_1.0.0_ea4846d';
 var Db = (function () {
     function Db() {
     }
@@ -140,12 +140,224 @@ var Db;
         })();
         Api.DefaultClientSideSocketFactory = DefaultClientSideSocketFactory;
     })(Api = Db.Api || (Db.Api = {}));
+    var Spi;
+    (function (Spi) {
+        Spi.registry = {};
+        function getRoot(conf) {
+            var adapter = conf.adapter || 'firebase';
+            var fact;
+            if (typeof adapter === 'string') {
+                fact = Spi.registry[adapter];
+                if (!fact) {
+                    try {
+                        fact = require(adapter);
+                    }
+                    catch (e) {
+                    }
+                }
+            }
+            else {
+                fact = adapter;
+            }
+            if (!fact)
+                throw new Error("Can't find adapter " + adapter);
+            return fact(conf);
+        }
+        Spi.getRoot = getRoot;
+        var FirebaseDbTreeRoot = (function () {
+            function FirebaseDbTreeRoot(conf) {
+                this.conf = conf;
+                if (this.conf.baseUrl.charAt(this.conf.baseUrl.length - 1) != '/') {
+                    this.conf.baseUrl += '/';
+                }
+            }
+            FirebaseDbTreeRoot.prototype.getUrl = function (url) {
+                return new Firebase(this.conf.baseUrl + url);
+            };
+            FirebaseDbTreeRoot.prototype.makeRelative = function (url) {
+                if (url.indexOf(this.conf.baseUrl) != 0)
+                    return null;
+                return "/" + url.substr(this.conf.baseUrl.length);
+            };
+            FirebaseDbTreeRoot.create = function (conf) {
+                return new FirebaseDbTreeRoot(conf);
+            };
+            return FirebaseDbTreeRoot;
+        })();
+        Spi.FirebaseDbTreeRoot = FirebaseDbTreeRoot;
+        Spi.registry['firebase'] = FirebaseDbTreeRoot.create;
+        var MonitoringDbTreeRoot = (function () {
+            function MonitoringDbTreeRoot(conf) {
+                this.conf = conf;
+                this.delegateRoot = getRoot(this.conf.realConfiguration);
+                this.log = this.conf.log || console.log;
+                this.filter = this.conf.filter || { '.*': { types: ['RCV', 'WRT', 'TRC', 'ACK', 'ERR'], dump: true } };
+                this.prefix = this.conf.prefix;
+                this.dtlog("Starting monitor:");
+                this.dtlog("\tunderlying conf", this.conf.realConfiguration);
+            }
+            MonitoringDbTreeRoot.create = function (conf) {
+                return new MonitoringDbTreeRoot(conf);
+            };
+            MonitoringDbTreeRoot.prototype.getUrl = function (url) {
+                return new MonitoringDbTree(this, this.delegateRoot.getUrl(url));
+            };
+            MonitoringDbTreeRoot.prototype.makeRelative = function (url) {
+                return this.delegateRoot.makeRelative(url);
+            };
+            MonitoringDbTreeRoot.prototype.dtlog = function () {
+                var args = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    args[_i - 0] = arguments[_i];
+                }
+                var allargs = [new Date().toISOString()];
+                if (this.prefix)
+                    allargs.unshift(this.prefix);
+                allargs = allargs.concat(args);
+                this.log.apply(this, allargs);
+            };
+            MonitoringDbTreeRoot.prototype.emit = function (url, type, name, val, others) {
+                for (var flt in this.filter) {
+                    var re = new RegExp(flt);
+                    if (!re.test(url))
+                        continue;
+                    var rec = this.filter[flt];
+                    var typs = rec.types;
+                    if (typs && typs.indexOf(type) == -1)
+                        continue;
+                    this.dtlog.apply(this, [type, name, url].concat(others));
+                    if (rec.dump && val)
+                        this.log(val);
+                    if (rec.trace) {
+                        var err = new Error();
+                        var stack = err['stack'] || 'stack not available';
+                        this.dtlog(stack);
+                    }
+                }
+            };
+            return MonitoringDbTreeRoot;
+        })();
+        Spi.MonitoringDbTreeRoot = MonitoringDbTreeRoot;
+        var MonitoringDbTree = (function () {
+            function MonitoringDbTree(root, delegate) {
+                this.root = root;
+                this.delegate = delegate;
+                this.myurl = delegate.toString();
+            }
+            MonitoringDbTree.prototype.emit = function (type, name, val) {
+                var others = [];
+                for (var _i = 3; _i < arguments.length; _i++) {
+                    others[_i - 3] = arguments[_i];
+                }
+                this.root.emit(this.myurl, type, name, val, others);
+            };
+            MonitoringDbTree.prototype.emitAckWrap = function (fn, name) {
+                var _this = this;
+                return function (error) {
+                    if (error) {
+                        _this.emit('ERR', name);
+                    }
+                    else {
+                        _this.emit('ACK', name);
+                    }
+                    fn(error);
+                };
+            };
+            MonitoringDbTree.prototype.emitDataWrap = function (fn, name) {
+                var _this = this;
+                var ret = function (dataSnapshot, prevChildName) {
+                    _this.emit('RCV', name, dataSnapshot.val(), prevChildName ? "prev name " + prevChildName : '');
+                    fn(dataSnapshot, prevChildName);
+                };
+                fn['__monitorcb'] = ret;
+                return ret;
+            };
+            MonitoringDbTree.prototype.unwrapEmitData = function (fn) {
+                if (!fn)
+                    return undefined;
+                return fn['__monitorcb'] || fn;
+            };
+            MonitoringDbTree.prototype.toString = function () {
+                return this.delegate.toString();
+            };
+            MonitoringDbTree.prototype.set = function (value, onComplete) {
+                this.emit('WRT', 'set', value);
+                this.delegate.set(value, this.emitAckWrap(onComplete, 'set'));
+            };
+            MonitoringDbTree.prototype.update = function (value, onComplete) {
+                this.emit('WRT', 'update', value);
+                this.delegate.update(value, this.emitAckWrap(onComplete, 'update'));
+            };
+            MonitoringDbTree.prototype.remove = function (onComplete) {
+                this.emit('WRT', 'remove');
+                this.delegate.remove(this.emitAckWrap(onComplete, 'remove'));
+            };
+            MonitoringDbTree.prototype.on = function (eventType, callback, cancelCallback, context) {
+                var name = 'on ' + eventType;
+                this.emit('TRC', name);
+                return this.delegate.on(eventType, this.emitDataWrap(callback, name), this.emitAckWrap(cancelCallback, name + " cancel"), context);
+            };
+            MonitoringDbTree.prototype.off = function (eventType, callback, context) {
+                this.emit('TRC', 'off ' + eventType);
+                this.delegate.off(eventType, this.unwrapEmitData(callback), context);
+            };
+            MonitoringDbTree.prototype.once = function (eventType, successCallback, failureCallback, context) {
+                var name = 'once ' + eventType;
+                this.emit('TRC', name);
+                this.delegate.once(eventType, this.emitDataWrap(successCallback, name), this.emitAckWrap(failureCallback, name + " failure"), context);
+            };
+            MonitoringDbTree.prototype.orderByChild = function (key) {
+                this.emit('TRC', 'orderByChild', key);
+                this.delegate.orderByChild(key);
+                return this;
+            };
+            MonitoringDbTree.prototype.orderByKey = function () {
+                this.emit('TRC', 'orderByKey');
+                this.delegate.orderByKey();
+                return this;
+            };
+            MonitoringDbTree.prototype.limit = function (limit) {
+                this.emit('TRC', 'limit', limit);
+                this.delegate.limit(limit);
+                return this;
+            };
+            MonitoringDbTree.prototype.startAt = function (value, key) {
+                this.emit('TRC', 'startAt', value, key);
+                this.delegate.startAt(value, key);
+                return this;
+            };
+            MonitoringDbTree.prototype.endAt = function (value, key) {
+                this.emit('TRC', 'endAt', value, key);
+                this.delegate.endAt(value, key);
+                return this;
+            };
+            MonitoringDbTree.prototype.equalTo = function (value, key) {
+                this.emit('TRC', 'equalTo', value, key);
+                this.delegate.equalTo(value, key);
+                return this;
+            };
+            MonitoringDbTree.prototype.limitToFirst = function (limit) {
+                this.emit('TRC', 'limitToFirst', limit);
+                this.delegate.limitToFirst(limit);
+                return this;
+            };
+            MonitoringDbTree.prototype.limitToLast = function (limit) {
+                this.emit('TRC', 'limitToLast', limit);
+                this.delegate.limitToLast(limit);
+                return this;
+            };
+            return MonitoringDbTree;
+        })();
+        Spi.MonitoringDbTree = MonitoringDbTree;
+        Spi.registry['monitor'] = MonitoringDbTreeRoot.create;
+    })(Spi = Db.Spi || (Db.Spi = {}));
     /**
      * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
      * they should never be used directly.
      */
     var Internal;
     (function (Internal) {
+        Internal.VERSION = Version;
         /**
          * Creates a Db based on the given configuration.
          */
@@ -863,7 +1075,7 @@ var Db;
                     this.dbhandler = new DbEventHandler(this, this.mockCb);
                     // TODO this should not be here, the url could be not yet set
                     // TODO are you sure? the init of handlers should be after the url is set
-                    this.dbhandler.ref = new Firebase(this.getUrl());
+                    this.dbhandler.ref = this.state.getTree(this.getUrl());
                     this.dbhandler.hook('value', function (ds, prev) { return _this.handleDbEvent(ds, prev); });
                 }
                 else {
@@ -1000,6 +1212,7 @@ var Db;
                 if (this.loaded)
                     return;
                 _super.prototype.handleDbEvent.call(this, ds, null, true);
+                this.loaded = false;
             };
             EntityEvent.prototype.init = function (h) {
                 if (this.dbhandler == null) {
@@ -1213,8 +1426,11 @@ var Db;
             EntityEvent.prototype.assignUrl = function (id) {
                 if (this.entity == null)
                     throw new Error("The entity is null, can't assign an url to a null entity");
-                if (this.getUrl())
+                if (this.getUrl()) {
+                    if (id)
+                        throw new Error("Can't assign specific url to an entity that already has an url");
                     return;
+                }
                 var er = this.state.entityRoot(this.classMeta);
                 if (!er)
                     throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
@@ -1233,6 +1449,8 @@ var Db;
                         return;
                     }
                 }
+                // Since it's a new entity, then it can be considered loaded from this point on
+                this.loaded = true;
                 this.urlInited();
             };
             EntityEvent.prototype.triggerLocalSave = function () {
@@ -1260,7 +1478,7 @@ var Db;
                         this.entity.prePersist();
                     }
                     return new Promise(function (ok, err) {
-                        var fb = new Firebase(_this.getUrl());
+                        var fb = _this.state.getTree(_this.getUrl());
                         fb.set(_this.serialize(false), function (fberr) {
                             if (fberr) {
                                 err(fberr);
@@ -1291,7 +1509,7 @@ var Db;
                         var upd = this.serialize(true);
                         if (!Utils.isEmpty(upd)) {
                             proms.push(new Promise(function (ok, err) {
-                                var fb = new Firebase(_this.getUrl());
+                                var fb = _this.state.getTree(_this.getUrl());
                                 fb.update(upd, function (fberr) {
                                     if (fberr) {
                                         err(fberr);
@@ -1310,14 +1528,14 @@ var Db;
                     this.assignUrl();
                     // A newly created entity can be considered like a loaded one once it's saved
                     this.loaded = true;
-                    return this.save();
+                    return this.internalSave();
                 }
             };
             EntityEvent.prototype.remove = function () {
                 var _this = this;
                 if (this.getUrl()) {
                     return new Promise(function (ok, err) {
-                        var fb = new Firebase(_this.getUrl());
+                        var fb = _this.state.getTree(_this.getUrl());
                         fb.set(null, function (fberr) {
                             if (fberr) {
                                 err(fberr);
@@ -1523,7 +1741,7 @@ var Db;
             ReferenceEvent.prototype.internalSave = function () {
                 var _this = this;
                 return new Promise(function (ok, err) {
-                    var fb = new Firebase(_this.getUrl());
+                    var fb = _this.state.getTree(_this.getUrl());
                     fb.set(_this.serialize(false), function (fberr) {
                         if (fberr) {
                             err(fberr);
@@ -1606,7 +1824,7 @@ var Db;
                 this.binding = null;
                 this.sorting = null;
                 this.realField = null;
-                this.loaded = false;
+                this.collectionLoaded = false;
             }
             MapEvent.prototype.setEntity = function (entity) {
                 var preEntity = this.entity || {};
@@ -1679,7 +1897,7 @@ var Db;
             MapEvent.prototype.init = function (h) {
                 var _this = this;
                 var sh = h;
-                sh.ref = new Firebase(this.getUrl());
+                sh.ref = this.state.getTree(this.getUrl());
                 if (this.sorting) {
                     sh.ref = sh.ref.orderByChild(this.sorting.field);
                 }
@@ -1713,7 +1931,7 @@ var Db;
                 if (event == 'value') {
                     handler.unhook('value');
                     if (handler.ispopulating) {
-                        this.loaded = true;
+                        this.collectionLoaded = true;
                     }
                     handler.ispopulating = false;
                     det.type = Api.EventType.LIST_END;
@@ -1741,6 +1959,7 @@ var Db;
                 handler.handle(det);
             };
             MapEvent.prototype.add = function (key, value) {
+                var _this = this;
                 var k = null;
                 var v = value;
                 if (!v) {
@@ -1753,7 +1972,7 @@ var Db;
                 var evt = this.findCreateChildFor(k);
                 evt.setEntity(v);
                 return new Promise(function (ok, err) {
-                    var fb = new Firebase(evt.getUrl());
+                    var fb = _this.state.getTree(evt.getUrl());
                     fb.set(evt.serialize(false), function (fberr) {
                         if (fberr) {
                             err(fberr);
@@ -1802,7 +2021,7 @@ var Db;
                 var _this = this;
                 var key = this.normalizeKey(keyOrValue);
                 return new Promise(function (ok, err) {
-                    var fb = new Firebase(_this.getUrl() + key + '/');
+                    var fb = _this.state.getTree(_this.getUrl() + key + '/');
                     fb.remove(function (fberr) {
                         if (fberr) {
                             err(fberr);
@@ -1823,21 +2042,21 @@ var Db;
                 return this.findCreateChildFor(k);
             };
             MapEvent.prototype.isLoaded = function () {
-                return this.loaded;
+                return this.collectionLoaded;
             };
             MapEvent.prototype.assertLoaded = function () {
-                if (!this.loaded)
+                if (!this.collectionLoaded)
                     throw new Error("Collection at url " + this.getUrl() + " is not loaded");
             };
             MapEvent.prototype.internalSave = function () {
                 var _this = this;
-                if (!this.isLoaded) {
-                    console.log('not saving cause not loaded');
+                if (!this.isLoaded()) {
+                    //console.log('not saving cause not loaded');
                     // TODO maybe we should save children that were loaded anyway
                     return;
                 }
                 return new Promise(function (ok, err) {
-                    var fb = new Firebase(_this.getUrl());
+                    var fb = _this.state.getTree(_this.getUrl());
                     var obj = _this.serialize();
                     fb.set(obj, function (fberr) {
                         if (fberr) {
@@ -1852,7 +2071,7 @@ var Db;
             MapEvent.prototype.clear = function () {
                 var _this = this;
                 return new Promise(function (ok, err) {
-                    var fb = new Firebase(_this.getUrl());
+                    var fb = _this.state.getTree(_this.getUrl());
                     var obj = {};
                     fb.set(obj, function (fberr) {
                         if (fberr) {
@@ -2289,6 +2508,9 @@ var Db;
                 return this.state.getUrl() + this.classMeta.root + '/';
             };
             EntityRoot.prototype.getRemainingUrl = function (url) {
+                url = this.state.makeRelativeUrl(url);
+                if (!url)
+                    return null;
                 return url.substr(this.getUrl().length);
             };
             EntityRoot.prototype.internalSave = function () {
@@ -2335,7 +2557,7 @@ var Db;
             QueryImpl.prototype.init = function (gh) {
                 var _this = this;
                 var h = gh;
-                h.ref = new Firebase(this.parent.getUrl());
+                h.ref = this.state.getTree(this.parent.getUrl());
                 if (this.sorting) {
                     h.ref = h.ref.orderByChild(this.sorting.field);
                     if (this._equals) {
@@ -2401,9 +2623,13 @@ var Db;
                     }
                     this.serverIo = csf.connect(conf);
                 }
+                this.treeRoot = Spi.getRoot(conf);
                 // TODO filter metas
                 // TODO integrity tests on metas
                 // - double roots
+            };
+            DbState.prototype.getTree = function (url) {
+                return this.treeRoot.getUrl(url);
             };
             DbState.prototype.internalDb = function (param) {
                 if (lastExpect === lastCantBe) {
@@ -2465,8 +2691,19 @@ var Db;
                 meta = meta.findOverridden(this.conf.override);
                 return new EntityRoot(this, meta);
             };
+            DbState.prototype.makeRelativeUrl = function (url) {
+                if (url.indexOf(this.getUrl()) != 0) {
+                    url = this.treeRoot.makeRelative(url);
+                    if (!url)
+                        return null;
+                }
+                return url;
+            };
             DbState.prototype.entityRootFromUrl = function (url) {
                 // Check if the given url pertains to me
+                url = this.makeRelativeUrl(url);
+                if (!url)
+                    return null;
                 if (url.indexOf(this.getUrl()) != 0)
                     return null;
                 // Make the url relative
@@ -2477,7 +2714,8 @@ var Db;
                 return this.entityRoot(meta);
             };
             DbState.prototype.getUrl = function () {
-                return this.conf['baseUrl'];
+                //return this.conf['baseUrl'];
+                return '/';
             };
             DbState.prototype.bindEntity = function (e, ev) {
                 // TODO probably we should check and raise an error is the entity was already bound
@@ -2709,22 +2947,22 @@ var Db;
                 }
                 if (!state) {
                     if (!defaultDb)
-                        throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method");
+                        throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method, while invoking " + Utils.findName(inst) + "." + name);
                     state = defaultDb();
                 }
             }
             else {
                 var ev = Db.of(inst);
                 if (!ev)
-                    throw new Error("The object is not bound to a database, cannot invoke remote method");
+                    throw new Error("The object is not bound to a database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
                 if (!ev.getUrl())
-                    throw new Error("The object is not saved on the database, cannot invoke remote method");
+                    throw new Error("The object is not saved on the database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
                 state = ev.state;
             }
             var msg = createRemoteCallPayload(inst, name, params);
             var io = state.serverIo;
             if (!io)
-                throw new Error("Database is not configured for remote method call");
+                throw new Error("Database is not configured for remote method call, while invoking " + Utils.findName(inst) + "." + name);
             return new Promise(function (res, err) {
                 io.emit('method', msg, function (resp) {
                     if (resp && resp.error) {

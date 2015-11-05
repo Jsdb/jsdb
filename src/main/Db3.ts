@@ -868,18 +868,9 @@ module Db {
 		 * Database configuration, use one subclass like {@link FirebaseConf}.
 		 */
 		export interface DatabaseConf {
+			adapter? :string|Spi.DbTreeFactory;
 			override? :string;
 			clientSocket? :IClientSideSocketFactory|string;
-		}
-		
-		/**
-		 * Database configuration for Firebase backend.
-		 */
-		export interface FirebaseConf extends DatabaseConf {
-			/**
-			 * Url of the Firebase server.
-			 */
-			baseUrl :string;
 		}
 		
 		/**
@@ -956,11 +947,370 @@ module Db {
 		}
 	}
 	
+	export module Spi {
+		export interface DbTreeRoot {
+			getUrl(url :string) :DbTree;
+			makeRelative(url :string) :string;
+		}
+		
+		export interface DbTreeSnap {
+			/**
+			* Returns true if this DbTreeSnap contains any data.
+			* It is slightly more efficient than using snapshot.val() !== null.
+			*/
+			exists(): boolean;
+			/**
+			* Gets the JavaScript object representation of the DbTreeSnap.
+			*/
+			val(): any;
+			/**
+			* Gets a DbTreeSnapt for the location at the specified relative path.
+			*/
+			child(childPath: string): DbTreeSnap;
+			/**
+			* Enumerates through the DbTreeSnap’s children (in the default order).
+			*/
+			forEach(childAction: (childSnapshot: DbTreeSnap) => void): boolean;
+			forEach(childAction: (childSnapshot: DbTreeSnap) => boolean): boolean;
+			/**
+			* Gets the key name of the location that generated this DbTreeSnap.
+			*/
+			key(): string;
+			
+			ref(): DbTree;
+		}
+		
+		export interface DbTreeQuery {
+			/**
+			* Listens for data changes at a particular location.
+			*/
+			on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
+			/**
+			* Detaches a callback previously attached with on().
+			*/
+			off(eventType?: string, callback?: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, context?: Object): void;
+			/**
+			* Listens for exactly one event of the specified event type, and then stops listening.
+			*/
+			once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
+			once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, failureCallback?: (error: any) => void, context?: Object): void;
+			
+			/**
+			* Generates a new Query object ordered by the specified child key.
+			*/
+			orderByChild(key: string): DbTreeQuery;
+			/**
+			* Generates a new Query object ordered by key name.
+			*/
+			orderByKey(): DbTreeQuery;
+			
+			/**
+			* @deprecated Use limitToFirst() and limitToLast() instead.
+			* Generates a new Query object limited to the specified number of children.
+			*/
+			limit(limit: number): DbTreeQuery;
+			/**
+			* Creates a Query with the specified starting point. 
+			* The generated Query includes children which match the specified starting point.
+			*/
+			startAt(value: string|number, key?: string): DbTreeQuery;
+			/**
+			* Creates a Query with the specified ending point. 
+			* The generated Query includes children which match the specified ending point.
+			*/
+			endAt(value: string|number, key?: string): DbTreeQuery;
+			/**
+			* Creates a Query which includes children which match the specified value.
+			*/
+			equalTo(value: string|number, key?: string): DbTreeQuery;
+			/**
+			* Generates a new Query object limited to the first certain number of children.
+			*/
+			limitToFirst(limit: number): DbTreeQuery;
+			/**
+			* Generates a new Query object limited to the last certain number of children.
+			*/
+			limitToLast(limit: number): DbTreeQuery;
+		}
+		
+		export interface DbTree extends DbTreeQuery {
+			/**
+			* Gets the absolute URL corresponding to this DbTree reference's location.
+			*/
+			toString(): string;
+			/**
+			* Writes data to this DbTree location.
+			*/
+			set(value: any, onComplete?: (error: any) => void): void;
+			/**
+			* Writes the enumerated children to this DbTree location.
+			*/
+			update(value: Object, onComplete?: (error: any) => void): void;
+			/**
+			* Removes the data at this DbTree location.
+			*/
+			remove(onComplete?: (error: any) => void): void;
+		}
+		
+		export type DbTreeFactory = (conf:Api.DatabaseConf)=>DbTreeRoot;
+		
+		export var registry :{[index:string]:DbTreeFactory} = {};
+		
+		export function getRoot(conf :Api.DatabaseConf) {			
+			var adapter = conf.adapter || 'firebase';
+			var fact :DbTreeFactory;
+			if (typeof adapter === 'string') {
+				fact = registry[adapter];
+				if (!fact) {
+					try {
+						fact = require(adapter);
+					} catch (e) {
+						
+					}
+				}
+			} else {
+				fact = adapter;
+			}
+			if (!fact) throw new Error("Can't find adapter " + adapter);
+			return fact(conf);
+		}
+		
+		
+		// Firebase support
+		
+		/**
+		 * Database configuration for Firebase backend.
+		 */
+		export interface FirebaseConf extends Api.DatabaseConf {
+			/**
+			 * Url of the Firebase server.
+			 */
+			baseUrl :string;
+		}
+		
+		export class FirebaseDbTreeRoot implements DbTreeRoot {
+			private conf :FirebaseConf;
+			constructor(conf :Api.DatabaseConf) {
+				this.conf = <FirebaseConf>conf;
+				if (this.conf.baseUrl.charAt(this.conf.baseUrl.length - 1) != '/') {
+					this.conf.baseUrl += '/';
+				}
+			}
+			getUrl(url :string) :DbTree {
+				return new Firebase(this.conf.baseUrl + url);
+			}
+			makeRelative(url :string):string {
+				if (url.indexOf(this.conf.baseUrl) != 0) return null;
+				return "/" + url.substr(this.conf.baseUrl.length);
+			}
+			static create(conf :Api.DatabaseConf) {
+				return new FirebaseDbTreeRoot(conf);
+			}
+		}
+		
+		registry['firebase'] = FirebaseDbTreeRoot.create;
+		
+		// Monitoring adapter
+		
+		
+		export interface MonitoringConf extends Api.DatabaseConf {
+			realConfiguration :Api.DatabaseConf;
+			log :(...args :any[])=>void;
+			prefix? :string;
+			filter? :{[index:string]:{types?:string[], dump?:boolean, trace?:boolean}};
+		}
+
+		export class MonitoringDbTreeRoot implements DbTreeRoot {
+			
+			static create(conf :Api.DatabaseConf) {
+				return new MonitoringDbTreeRoot(conf);
+			}
+			
+			conf :MonitoringConf;
+			log :(...args :any[])=>void;
+			filter :{[index:string]:{types?:string[], dump?:boolean, trace?:boolean}};
+			prefix :string;
+			
+			delegateRoot :DbTreeRoot;
+			
+			constructor(conf :Api.DatabaseConf) {
+				this.conf = <MonitoringConf>conf;
+				this.delegateRoot = getRoot(this.conf.realConfiguration);
+				this.log = this.conf.log || console.log;
+				this.filter = this.conf.filter || {'.*':{types:['RCV','WRT','TRC','ACK','ERR'],dump:true}};
+				this.prefix = this.conf.prefix;
+				this.dtlog("Starting monitor:");
+				this.dtlog("\tunderlying conf", this.conf.realConfiguration);
+			}
+			getUrl(url :string) :DbTree {
+				return new MonitoringDbTree(this, this.delegateRoot.getUrl(url));
+			}
+			makeRelative(url :string) :string {
+				return this.delegateRoot.makeRelative(url);
+			}
+			
+			private dtlog(...args :any[]) {
+				var allargs :any[] = [new Date().toISOString()];
+				if (this.prefix) allargs.unshift(this.prefix);
+				allargs = allargs.concat(args);
+				this.log.apply(this, allargs);
+			}
+			
+			emit(url :string, type :string, name :string, val :any, others :any[]) {
+				for (var flt in this.filter) {
+					var re = new RegExp(flt);
+					if (!re.test(url)) continue;
+					var rec = this.filter[flt];
+					var typs = rec.types;
+					if (typs && typs.indexOf(type) == -1) continue;
+					this.dtlog.apply(this,[type, name, url].concat(others));
+					if (rec.dump && val) this.log(val);
+					if (rec.trace) {
+						var err = new Error();
+						var stack = err['stack'] || 'stack not available';
+						this.dtlog(stack);
+					}
+				}
+			}
+			
+		}
+		
+		export class MonitoringDbTree implements DbTree {
+			private myurl :string;
+			constructor(private root :MonitoringDbTreeRoot, private delegate :DbTree) {
+				this.myurl = delegate.toString();
+			}
+			
+			emit(type :string, name :string, val? :any, ...others :any[]) {
+				this.root.emit(this.myurl, type, name, val, others);
+			}
+
+			emitAckWrap(fn :(error: any) => void, name :string) :(error: any) => void {
+				return (error:any) => {
+					if (error) {
+						this.emit('ERR', name);
+					} else {
+						this.emit('ACK', name);
+					}
+					fn(error);
+				}
+			}
+			
+			emitDataWrap(fn :(dataSnapshot: DbTreeSnap, prevChildName?: string) => void, name :string) {
+				var ret = (dataSnapshot: DbTreeSnap, prevChildName?: string) => {
+					this.emit('RCV', name, dataSnapshot.val(), prevChildName ? "prev name " + prevChildName : '');
+					fn(dataSnapshot, prevChildName);	
+				};
+				fn['__monitorcb'] = ret;
+				return ret;
+			}
+			
+			unwrapEmitData<T>(fn :T) :T {
+				if (!fn) return undefined;
+				return <T>fn['__monitorcb'] || fn;
+			}
+			
+			toString(): string {
+				return this.delegate.toString();
+			}
+			
+			set(value: any, onComplete?: (error: any) => void): void {
+				this.emit('WRT','set',value);
+				this.delegate.set(value, this.emitAckWrap(onComplete,'set'));
+			}
+			
+			update(value: Object, onComplete?: (error: any) => void): void {
+				this.emit('WRT','update',value);
+				this.delegate.update(value, this.emitAckWrap(onComplete,'update'));
+			}
+			
+			remove(onComplete?: (error: any) => void): void {
+				this.emit('WRT','remove');
+				this.delegate.remove(this.emitAckWrap(onComplete,'remove'));
+			}
+			
+			on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void {
+				var name = 'on ' + eventType;
+				this.emit('TRC',name);
+				return this.delegate.on(eventType, this.emitDataWrap(callback,name), this.emitAckWrap(cancelCallback,name + " cancel"), context);
+			}
+			
+			off(eventType?: string, callback?: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, context?: Object): void {
+				this.emit('TRC','off ' + eventType);
+				this.delegate.off(eventType, this.unwrapEmitData(callback), context);
+			}
+			
+			once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
+			once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, failureCallback?: (error: any) => void, context?: Object): void {
+				var name = 'once ' + eventType;
+				this.emit('TRC',name);
+				this.delegate.once(eventType, this.emitDataWrap(successCallback, name), this.emitAckWrap(failureCallback, name + " failure"), context);
+			}
+			
+			orderByChild(key: string): DbTreeQuery {
+				this.emit('TRC','orderByChild',key);
+				this.delegate.orderByChild(key);
+				return this;
+			}
+
+			orderByKey(): DbTreeQuery {
+				this.emit('TRC','orderByKey');
+				this.delegate.orderByKey();
+				return this;
+			}
+			
+			limit(limit: number): DbTreeQuery {
+				this.emit('TRC','limit',limit);
+				this.delegate.limit(limit);
+				return this;
+			}
+
+			startAt(value: string|number, key?: string): DbTreeQuery {
+				this.emit('TRC','startAt',value,key);
+				this.delegate.startAt(value, key);
+				return this;
+			}
+
+			endAt(value: string|number, key?: string): DbTreeQuery {
+				this.emit('TRC','endAt',value,key);
+				this.delegate.endAt(value, key);
+				return this;
+			}
+
+			equalTo(value: string|number, key?: string): DbTreeQuery {
+				this.emit('TRC','equalTo',value,key);
+				this.delegate.equalTo(value,key);
+				return this;
+			}
+
+			limitToFirst(limit: number): DbTreeQuery {
+				this.emit('TRC','limitToFirst',limit);
+				this.delegate.limitToFirst(limit);
+				return this;
+			}
+
+			limitToLast(limit: number): DbTreeQuery {
+				this.emit('TRC','limitToLast',limit);
+				this.delegate.limitToLast(limit);
+				return this;
+			}
+			
+		}
+		
+		registry['monitor'] = MonitoringDbTreeRoot.create;
+
+		
+		
+		
+	}
+	
 	/**
 	 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
 	 * they should never be used directly.
 	 */
 	export module Internal {
+		
+		export var VERSION = Version;
 		
 		/**
 		 * Creates a Db based on the given configuration.
@@ -1313,12 +1663,12 @@ module Db {
 			/**
 			 * The underlying database reference.
 			 */
-			ref :FirebaseQuery;
+			ref :Spi.DbTreeQuery;
 			
 			/**
 			 * The callbacks registered by this handler on the underlying database reference.
 			 */
-			protected cbs :{event:string; fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void}[] = [];
+			protected cbs :{event:string; fn :(dataSnapshot: Spi.DbTreeSnap, prevChildName?: string) => void}[] = [];
 
 			/**
 			 * Hooks to the underlying database.
@@ -1326,7 +1676,7 @@ module Db {
 			 * @param event the event to hook to
 			 * @param fn the callback to hook to the database
 			 */
-			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void) {
+			hook(event :string, fn :(dataSnapshot: Spi.DbTreeSnap, prevChildName?: string) => void) {
 				if (this.canceled) return;
 				this.cbs.push({event:event, fn:fn});
 				// TODO do something on cancelCallback? It's here only because of method signature
@@ -1652,7 +2002,7 @@ module Db {
 			 * The noral behaviour is to parse the given database data and apply it to
 			 * the {@link entity} this event is working on. 
 			 */
-			parseValue(ds :FirebaseDataSnapshot) {
+			parseValue(ds :Spi.DbTreeSnap) {
 				throw new Error("Please override parseValue in subclasses of GenericEvent");
 			}
 			
@@ -1741,7 +2091,7 @@ module Db {
 					this.dbhandler = new DbEventHandler(this, this.mockCb);
 					// TODO this should not be here, the url could be not yet set
 					// TODO are you sure? the init of handlers should be after the url is set
-					this.dbhandler.ref = new Firebase(this.getUrl());
+					this.dbhandler.ref = this.state.getTree(this.getUrl());
 					this.dbhandler.hook('value', (ds,prev) => this.handleDbEvent(ds,prev));
 				} else {
 					if (this.lastDetail) {
@@ -1798,7 +2148,7 @@ module Db {
 			 * Upon receiving data from the database, it creates an {@link EventDetails} object
 			 * based on current state and received data, and {@link broadcast}s it.
 			 */
-			handleDbEvent(ds :FirebaseDataSnapshot, prevName :string, projected = false) {
+			handleDbEvent(ds :Spi.DbTreeSnap, prevName :string, projected = false) {
 				var evd = new EventDetails<E>();
 				evd.type = Api.EventType.UPDATE;
 				if (!this.loaded) {
@@ -1853,7 +2203,7 @@ module Db {
 			/**
 			 * Latest data from the database, if any, used in {@link clone}.
 			 */
-			lastDs :FirebaseDataSnapshot = null;
+			lastDs :Spi.DbTreeSnap = null;
 			
 			/** a progressive counter used as a discriminator when registering the same callbacks more than once */
 			progDiscriminator = 1;
@@ -1879,9 +2229,10 @@ module Db {
 			 * Used to receive the projections when {@link ReferenceEvent} is loading the arget 
 			 * event and has found some projections.
 			 */
-			handleProjection(ds :FirebaseDataSnapshot) {
+			handleProjection(ds :Spi.DbTreeSnap) {
 				if (this.loaded) return;
 				super.handleDbEvent(ds, null, true);
+				this.loaded = false;
 			}
 			
 			init(h :EventHandler) {
@@ -1922,7 +2273,7 @@ module Db {
 			
 
 			
-			parseValue(ds :FirebaseDataSnapshot) {
+			parseValue(ds :Spi.DbTreeSnap) {
 				this.loaded = true;
 				// Save last data for use in clone later
 				this.lastDs = ds;
@@ -2093,7 +2444,10 @@ module Db {
 			
 			assignUrl(id? :string) {
 				if (this.entity == null) throw new Error("The entity is null, can't assign an url to a null entity");
-				if (this.getUrl()) return;
+				if (this.getUrl()) {
+					if (id) throw new Error("Can't assign specific url to an entity that already has an url");
+					return;
+				}
 				var er = this.state.entityRoot(this.classMeta);
 				if (!er) throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
 				var url = er.getUrl();
@@ -2110,6 +2464,8 @@ module Db {
 						return;
 					}
 				}
+				// Since it's a new entity, then it can be considered loaded from this point on
+				this.loaded = true;
 				this.urlInited();
 			}
 			
@@ -2139,7 +2495,7 @@ module Db {
 						(<Api.IEntityHooks>this.entity).prePersist();
 					}
 					return new Promise<any>((ok,err) => {
-						var fb = new Firebase(this.getUrl());
+						var fb = this.state.getTree(this.getUrl());
 						fb.set(this.serialize(false), (fberr) => {
 							if (fberr) {
 								err(fberr);
@@ -2166,7 +2522,7 @@ module Db {
 						var upd = this.serialize(true);
 						if (!Utils.isEmpty(upd)) {
 							proms.push(new Promise<any>((ok,err) => {
-								var fb = new Firebase(this.getUrl());
+								var fb = this.state.getTree(this.getUrl());
 								fb.update(upd, (fberr) => {
 									if (fberr) {
 										err(fberr);
@@ -2183,14 +2539,14 @@ module Db {
 					this.assignUrl();
 					// A newly created entity can be considered like a loaded one once it's saved
 					this.loaded = true;
-					return this.save();
+					return this.internalSave();
 				}
 			}
 			
 			remove():Promise<any> {
 				if (this.getUrl()) {
 					return new Promise<any>((ok,err) => {
-						var fb = new Firebase(this.getUrl());
+						var fb = this.state.getTree(this.getUrl());
 						fb.set(null, (fberr) => {
 							if (fberr) {
 								err(fberr);
@@ -2320,7 +2676,7 @@ module Db {
 				super.on(h);
 			}
 			
-			parseValue(ds :FirebaseDataSnapshot) {
+			parseValue(ds :Spi.DbTreeSnap) {
 				var val = ds.val();
 				if (val && val._ref) {
 					// We have a value, and the value is a reference.
@@ -2388,7 +2744,7 @@ module Db {
 			
 			internalSave() {
 				return new Promise<any>((ok,err) => {
-					var fb = new Firebase(this.getUrl());
+					var fb = this.state.getTree(this.getUrl());
 					fb.set(this.serialize(false), (fberr) => {
 						if (fberr) {
 							err(fberr);
@@ -2439,14 +2795,14 @@ module Db {
 			istracking = false;
 			ispopulating = false;
 			
-			hookAll(fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?:string) => void) {
+			hookAll(fn :(dataSnapshot: Spi.DbTreeSnap, prevChildName?: string, event?:string) => void) {
 				for (var i = 0; i < this.dbEvents.length; i++) {
 					this.hook(this.dbEvents[i], fn);
 				}
 			}
 			
-			hook(event :string, fn :(dataSnapshot: FirebaseDataSnapshot, prevChildName?: string,event?:string) => void) {
-				super.hook(event, (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => fn(dataSnapshot, prevChildName || '', event));
+			hook(event :string, fn :(dataSnapshot: Spi.DbTreeSnap, prevChildName?: string,event?:string) => void) {
+				super.hook(event, (dataSnapshot: Spi.DbTreeSnap, prevChildName?: string) => fn(dataSnapshot, prevChildName || '', event));
 			}
 			
 			unhook(event :string) {
@@ -2469,7 +2825,7 @@ module Db {
 			sorting :Api.SortingData = null;
 			
 			realField :any = null;
-			loaded :boolean = false;
+			collectionLoaded :boolean = false;
 			
 			setEntity(entity :Api.Entity) {
 				var preEntity = this.entity || {};
@@ -2545,7 +2901,7 @@ module Db {
 			
 			init(h :EventHandler) {
 				var sh = <CollectionDbEventHandler>h;
-				sh.ref = new Firebase(this.getUrl());
+				sh.ref = this.state.getTree(this.getUrl());
 				if (this.sorting) {
 					sh.ref = sh.ref.orderByChild(this.sorting.field);
 				}
@@ -2570,7 +2926,7 @@ module Db {
 			}
 
 			
-			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :FirebaseDataSnapshot, prevKey :string) {
+			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :Spi.DbTreeSnap, prevKey :string) {
 				var det = new EventDetails<E>();
 				det.originalEvent = event;
 				det.originalKey = ds.key();
@@ -2580,7 +2936,7 @@ module Db {
 				if (event == 'value') {
 					handler.unhook('value');
 					if (handler.ispopulating) {
-						this.loaded = true;
+						this.collectionLoaded = true;
 					}
 					handler.ispopulating = false;
 					det.type = Api.EventType.LIST_END;
@@ -2621,7 +2977,7 @@ module Db {
 				var evt = this.findCreateChildFor(k);
 				evt.setEntity(v);
 				return new Promise<any>((ok,err) => {
-					var fb = new Firebase(evt.getUrl());
+					var fb = this.state.getTree(evt.getUrl());
 					fb.set(evt.serialize(false), (fberr) => {
 						if (fberr) {
 							err(fberr);
@@ -2653,7 +3009,7 @@ module Db {
 				return <string>key;
 			}
 			
-			addToInternal(event :string, ds :FirebaseDataSnapshot, val :Api.Entity, det :EventDetails<E>) {
+			addToInternal(event :string, ds :Spi.DbTreeSnap, val :Api.Entity, det :EventDetails<E>) {
 				if (event == 'child_removed') {
 					if (this.realField) {
 						delete this.realField[ds.key()];
@@ -2668,7 +3024,7 @@ module Db {
 			remove(keyOrValue :string|number|Api.Entity) :Promise<any> {
 				var key = this.normalizeKey(keyOrValue);
 				return new Promise<any>((ok,err) => {
-					var fb = new Firebase(this.getUrl() + key +'/');
+					var fb = this.state.getTree(this.getUrl() + key +'/');
 					fb.remove((fberr) => {
 						if (fberr) {
 							err(fberr);
@@ -2691,21 +3047,21 @@ module Db {
 			}
 			
 			isLoaded() {
-				return this.loaded;
+				return this.collectionLoaded;
 			}
 			
 			assertLoaded() {
-				if (!this.loaded) throw new Error("Collection at url " + this.getUrl() + " is not loaded");
+				if (!this.collectionLoaded) throw new Error("Collection at url " + this.getUrl() + " is not loaded");
 			}
 			
 			internalSave() :Promise<any> {
-				if (!this.isLoaded) {
-					console.log('not saving cause not loaded');
+				if (!this.isLoaded()) {
+					//console.log('not saving cause not loaded');
 					// TODO maybe we should save children that were loaded anyway
 					return;
 				}
 				return new Promise<any>((ok,err) => {
-					var fb = new Firebase(this.getUrl());
+					var fb = this.state.getTree(this.getUrl());
 					var obj = this.serialize();
 					fb.set(obj, (fberr) => {
 						if (fberr) {
@@ -2719,7 +3075,7 @@ module Db {
 			
 			clear() :Promise<any> {
 				return new Promise<any>((ok,err) => {
-					var fb = new Firebase(this.getUrl());
+					var fb = this.state.getTree(this.getUrl());
 					var obj = {};
 					fb.set(obj, (fberr) => {
 						if (fberr) {
@@ -2747,7 +3103,7 @@ module Db {
 				}
 			}
 			
-			parseValue(allds :FirebaseDataSnapshot) {
+			parseValue(allds :Spi.DbTreeSnap) {
 				var prevKey = null;
 				var det = new EventDetails<E>();
 				det.originalEvent = "child_added";
@@ -2801,7 +3157,7 @@ module Db {
 			}
   			
 			
-			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
+			addToInternal(event :string, ds :Spi.DbTreeSnap, val :E, det :EventDetails<E>) {
 				var key = ds.key();
 				if (!this.keys || !this.arrayValue || !this.collection.realField) {
 					this.keys = [];
@@ -2902,7 +3258,7 @@ module Db {
 				return super.add(key,value);
 			}
 
-			addToInternal(event :string, ds :FirebaseDataSnapshot, val :E, det :EventDetails<E>) {
+			addToInternal(event :string, ds :Spi.DbTreeSnap, val :E, det :EventDetails<E>) {
 				this.evarray.addToInternal(event, ds, val, det);
 				this.setEntityOnParent(this.evarray.arrayValue);
 			}
@@ -3034,7 +3390,7 @@ module Db {
 				// can't set entity, will refuse it, it's unmutable
 			}
 			
-			parseValue(ds :FirebaseDataSnapshot) {
+			parseValue(ds :Spi.DbTreeSnap) {
 				this.val = ds.val();
 			}
 			
@@ -3062,7 +3418,7 @@ module Db {
 				this.updated(ctx,()=>{});
 			}
 			
-			parseValue(ds :FirebaseDataSnapshot) {
+			parseValue(ds :Spi.DbTreeSnap) {
 				this.setEntity(ds.val());
 				this.setEntityOnParent();
 			}
@@ -3161,6 +3517,8 @@ module Db {
 			}
 			
 			getRemainingUrl(url :string) :string {
+				url = this.state.makeRelativeUrl(url);
+				if (!url) return null;
 				return url.substr(this.getUrl().length);
 			}
 			
@@ -3212,7 +3570,7 @@ module Db {
 
 			init(gh :EventHandler) {
 				var h = <CollectionDbEventHandler>gh;
-				h.ref = new Firebase(this.parent.getUrl());
+				h.ref = this.state.getTree(this.parent.getUrl());
 				if (this.sorting) {
 					h.ref = h.ref.orderByChild(this.sorting.field);
 					if (this._equals) {
@@ -3263,6 +3621,7 @@ module Db {
 			myMeta = allMetadata;
 			serverIo :Api.Socket;
 			db :Api.IDb3Static;
+			treeRoot :Spi.DbTreeRoot;
 			
 			constructor() {
 				var me = this;
@@ -3282,9 +3641,14 @@ module Db {
 					}
 					this.serverIo = csf.connect(conf);
 				}
+				this.treeRoot = Spi.getRoot(conf);
 				// TODO filter metas
 				// TODO integrity tests on metas
 				// - double roots
+			}
+			
+			getTree(url:string) :Spi.DbTree {
+				return this.treeRoot.getUrl(url);
 			}
 			
 			internalDb(param:any):any {
@@ -3352,8 +3716,18 @@ module Db {
 				return new EntityRoot<any>(this, meta);
 			}
 			
+			makeRelativeUrl(url :string) :string {
+				if (url.indexOf(this.getUrl()) != 0) {
+					url = this.treeRoot.makeRelative(url);
+					if (!url) return null;
+				}
+				return url;
+			}
+			
 			entityRootFromUrl(url :string) :EntityRoot<any> {
 				// Check if the given url pertains to me
+				url = this.makeRelativeUrl(url);
+				if (!url) return null;
 				if (url.indexOf(this.getUrl()) != 0) return null;
 				// Make the url relative
 				var relurl = url.substring(this.getUrl().length);
@@ -3363,7 +3737,8 @@ module Db {
 			}
 			
 			getUrl() :string {
-				return this.conf['baseUrl'];
+				//return this.conf['baseUrl'];
+				return '/';
 			}
 			
 			bindEntity(e :Api.Entity, ev :EntityEvent<any>) {
@@ -3401,6 +3776,7 @@ module Db {
 			}
 			
 			loadEvent(url :string) :GenericEvent {
+				
 				if (url.charAt(url.length - 1) != '/') url += '/';
 				var ret = this.cache[url];
 				if (ret) return ret;
@@ -3584,20 +3960,20 @@ module Db {
 					}
 				}
 				if (!state) {
-					if (!defaultDb) throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method");
+					if (!defaultDb) throw Error("No db given as parameter, and no default db, create a db before invoking a static remote method, while invoking " + Utils.findName(inst) + "." + name);
 					state = <DbState>defaultDb();
 				}
 			} else {
 				var ev = <GenericEvent><any>Db.of(inst);
-				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method");
-				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method");
+				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
+				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
 				state = ev.state;
 			}
 			
 			var msg = createRemoteCallPayload(inst, name, params);
 			
 			var io = state.serverIo;
-			if (!io) throw new Error("Database is not configured for remote method call");
+			if (!io) throw new Error("Database is not configured for remote method call, while invoking " + Utils.findName(inst) + "." + name);
 			return new Promise<any>((res,err) => {
 				io.emit('method', msg, function(resp) {
 					if (resp && resp.error) {

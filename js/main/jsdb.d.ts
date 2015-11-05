@@ -679,17 +679,9 @@ declare module 'jsdb' {
                         * Database configuration, use one subclass like {@link FirebaseConf}.
                         */
                     interface DatabaseConf {
+                            adapter?: string | Spi.DbTreeFactory;
                             override?: string;
                             clientSocket?: IClientSideSocketFactory | string;
-                    }
-                    /**
-                        * Database configuration for Firebase backend.
-                        */
-                    interface FirebaseConf extends DatabaseConf {
-                            /**
-                                * Url of the Firebase server.
-                                */
-                            baseUrl: string;
                     }
                     /**
                         * Parameters for an entity declaration.
@@ -754,11 +746,183 @@ declare module 'jsdb' {
                     interface RemoteCallParams {
                     }
             }
+            module Spi {
+                    interface DbTreeRoot {
+                            getUrl(url: string): DbTree;
+                            makeRelative(url: string): string;
+                    }
+                    interface DbTreeSnap {
+                            /**
+                             * Returns true if this DbTreeSnap contains any data.
+                             * It is slightly more efficient than using snapshot.val() !== null.
+                             */
+                            exists(): boolean;
+                            /**
+                             * Gets the JavaScript object representation of the DbTreeSnap.
+                             */
+                            val(): any;
+                            /**
+                             * Gets a DbTreeSnapt for the location at the specified relative path.
+                             */
+                            child(childPath: string): DbTreeSnap;
+                            /**
+                             * Enumerates through the DbTreeSnap’s children (in the default order).
+                             */
+                            forEach(childAction: (childSnapshot: DbTreeSnap) => void): boolean;
+                            forEach(childAction: (childSnapshot: DbTreeSnap) => boolean): boolean;
+                            /**
+                             * Gets the key name of the location that generated this DbTreeSnap.
+                             */
+                            key(): string;
+                            ref(): DbTree;
+                    }
+                    interface DbTreeQuery {
+                            /**
+                             * Listens for data changes at a particular location.
+                             */
+                            on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
+                            /**
+                             * Detaches a callback previously attached with on().
+                             */
+                            off(eventType?: string, callback?: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, context?: Object): void;
+                            /**
+                             * Listens for exactly one event of the specified event type, and then stops listening.
+                             */
+                            once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
+                            once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, failureCallback?: (error: any) => void, context?: Object): void;
+                            /**
+                             * Generates a new Query object ordered by the specified child key.
+                             */
+                            orderByChild(key: string): DbTreeQuery;
+                            /**
+                             * Generates a new Query object ordered by key name.
+                             */
+                            orderByKey(): DbTreeQuery;
+                            /**
+                             * @deprecated Use limitToFirst() and limitToLast() instead.
+                             * Generates a new Query object limited to the specified number of children.
+                             */
+                            limit(limit: number): DbTreeQuery;
+                            /**
+                             * Creates a Query with the specified starting point.
+                             * The generated Query includes children which match the specified starting point.
+                             */
+                            startAt(value: string | number, key?: string): DbTreeQuery;
+                            /**
+                             * Creates a Query with the specified ending point.
+                             * The generated Query includes children which match the specified ending point.
+                             */
+                            endAt(value: string | number, key?: string): DbTreeQuery;
+                            /**
+                             * Creates a Query which includes children which match the specified value.
+                             */
+                            equalTo(value: string | number, key?: string): DbTreeQuery;
+                            /**
+                             * Generates a new Query object limited to the first certain number of children.
+                             */
+                            limitToFirst(limit: number): DbTreeQuery;
+                            /**
+                             * Generates a new Query object limited to the last certain number of children.
+                             */
+                            limitToLast(limit: number): DbTreeQuery;
+                    }
+                    interface DbTree extends DbTreeQuery {
+                            /**
+                             * Gets the absolute URL corresponding to this DbTree reference's location.
+                             */
+                            toString(): string;
+                            /**
+                             * Writes data to this DbTree location.
+                             */
+                            set(value: any, onComplete?: (error: any) => void): void;
+                            /**
+                             * Writes the enumerated children to this DbTree location.
+                             */
+                            update(value: Object, onComplete?: (error: any) => void): void;
+                            /**
+                             * Removes the data at this DbTree location.
+                             */
+                            remove(onComplete?: (error: any) => void): void;
+                    }
+                    type DbTreeFactory = (conf: Api.DatabaseConf) => DbTreeRoot;
+                    var registry: {
+                            [index: string]: DbTreeFactory;
+                    };
+                    function getRoot(conf: Api.DatabaseConf): DbTreeRoot;
+                    /**
+                        * Database configuration for Firebase backend.
+                        */
+                    interface FirebaseConf extends Api.DatabaseConf {
+                            /**
+                                * Url of the Firebase server.
+                                */
+                            baseUrl: string;
+                    }
+                    class FirebaseDbTreeRoot implements DbTreeRoot {
+                            constructor(conf: Api.DatabaseConf);
+                            getUrl(url: string): DbTree;
+                            makeRelative(url: string): string;
+                            static create(conf: Api.DatabaseConf): FirebaseDbTreeRoot;
+                    }
+                    interface MonitoringConf extends Api.DatabaseConf {
+                            realConfiguration: Api.DatabaseConf;
+                            log: (...args: any[]) => void;
+                            prefix?: string;
+                            filter?: {
+                                    [index: string]: {
+                                            types?: string[];
+                                            dump?: boolean;
+                                            trace?: boolean;
+                                    };
+                            };
+                    }
+                    class MonitoringDbTreeRoot implements DbTreeRoot {
+                            static create(conf: Api.DatabaseConf): MonitoringDbTreeRoot;
+                            conf: MonitoringConf;
+                            log: (...args: any[]) => void;
+                            filter: {
+                                    [index: string]: {
+                                            types?: string[];
+                                            dump?: boolean;
+                                            trace?: boolean;
+                                    };
+                            };
+                            prefix: string;
+                            delegateRoot: DbTreeRoot;
+                            constructor(conf: Api.DatabaseConf);
+                            getUrl(url: string): DbTree;
+                            makeRelative(url: string): string;
+                            emit(url: string, type: string, name: string, val: any, others: any[]): void;
+                    }
+                    class MonitoringDbTree implements DbTree {
+                            constructor(root: MonitoringDbTreeRoot, delegate: DbTree);
+                            emit(type: string, name: string, val?: any, ...others: any[]): void;
+                            emitAckWrap(fn: (error: any) => void, name: string): (error: any) => void;
+                            emitDataWrap(fn: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, name: string): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
+                            unwrapEmitData<T>(fn: T): T;
+                            toString(): string;
+                            set(value: any, onComplete?: (error: any) => void): void;
+                            update(value: Object, onComplete?: (error: any) => void): void;
+                            remove(onComplete?: (error: any) => void): void;
+                            on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
+                            off(eventType?: string, callback?: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, context?: Object): void;
+                            once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
+                            orderByChild(key: string): DbTreeQuery;
+                            orderByKey(): DbTreeQuery;
+                            limit(limit: number): DbTreeQuery;
+                            startAt(value: string | number, key?: string): DbTreeQuery;
+                            endAt(value: string | number, key?: string): DbTreeQuery;
+                            equalTo(value: string | number, key?: string): DbTreeQuery;
+                            limitToFirst(limit: number): DbTreeQuery;
+                            limitToLast(limit: number): DbTreeQuery;
+                    }
+            }
             /**
                 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
                 * they should never be used directly.
                 */
             module Internal {
+                    var VERSION: string;
                     /**
                         * Creates a Db based on the given configuration.
                         */
@@ -953,13 +1117,13 @@ declare module 'jsdb' {
                             /**
                                 * The underlying database reference.
                                 */
-                            ref: FirebaseQuery;
+                            ref: Spi.DbTreeQuery;
                             /**
                                 * The callbacks registered by this handler on the underlying database reference.
                                 */
                             protected cbs: {
                                     event: string;
-                                    fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void;
+                                    fn: (dataSnapshot: Spi.DbTreeSnap, prevChildName?: string) => void;
                             }[];
                             /**
                                 * Hooks to the underlying database.
@@ -967,7 +1131,7 @@ declare module 'jsdb' {
                                 * @param event the event to hook to
                                 * @param fn the callback to hook to the database
                                 */
-                            hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string) => void): void;
+                            hook(event: string, fn: (dataSnapshot: Spi.DbTreeSnap, prevChildName?: string) => void): void;
                             /**
                                 * Extends the decommission function to also detach database callbacks registered thru {@link hook}.
                                 */
@@ -1131,7 +1295,7 @@ declare module 'jsdb' {
                                 * The noral behaviour is to parse the given database data and apply it to
                                 * the {@link entity} this event is working on.
                                 */
-                            parseValue(ds: FirebaseDataSnapshot): void;
+                            parseValue(ds: Spi.DbTreeSnap): void;
                             applyHooks(ed: EventDetails<any>): void;
                             /**
                                 * If this event creates a logica "traversal" on the normal tree structure
@@ -1218,7 +1382,7 @@ declare module 'jsdb' {
                                 * Upon receiving data from the database, it creates an {@link EventDetails} object
                                 * based on current state and received data, and {@link broadcast}s it.
                                 */
-                            handleDbEvent(ds: FirebaseDataSnapshot, prevName: string, projected?: boolean): void;
+                            handleDbEvent(ds: Spi.DbTreeSnap, prevName: string, projected?: boolean): void;
                             isLoaded(): boolean;
                             assertLoaded(): void;
                     }
@@ -1244,7 +1408,7 @@ declare module 'jsdb' {
                             /**
                                 * Latest data from the database, if any, used in {@link clone}.
                                 */
-                            lastDs: FirebaseDataSnapshot;
+                            lastDs: Spi.DbTreeSnap;
                             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                             progDiscriminator: number;
                             setEntity(entity: Api.Entity): void;
@@ -1253,11 +1417,11 @@ declare module 'jsdb' {
                                 * Used to receive the projections when {@link ReferenceEvent} is loading the arget
                                 * event and has found some projections.
                                 */
-                            handleProjection(ds: FirebaseDataSnapshot): void;
+                            handleProjection(ds: Spi.DbTreeSnap): void;
                             init(h: EventHandler): void;
                             applyHooks(ed: EventDetails<E>): void;
                             protected broadcast(ed: EventDetails<E>): void;
-                            parseValue(ds: FirebaseDataSnapshot): void;
+                            parseValue(ds: Spi.DbTreeSnap): void;
                             internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
                             exists(ctx: Object): Promise<boolean>;
@@ -1337,7 +1501,7 @@ declare module 'jsdb' {
                             live(ctx: Object): void;
                             dereference(ctx: Object): Promise<EventDetails<E>>;
                             referenced(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
-                            parseValue(ds: FirebaseDataSnapshot): void;
+                            parseValue(ds: Spi.DbTreeSnap): void;
                             getReferencedUrl(): string;
                             serialize(localsOnly?: boolean): Object;
                             assignUrl(): void;
@@ -1359,8 +1523,8 @@ declare module 'jsdb' {
                             dbEvents: string[];
                             istracking: boolean;
                             ispopulating: boolean;
-                            hookAll(fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?: string) => void): void;
-                            hook(event: string, fn: (dataSnapshot: FirebaseDataSnapshot, prevChildName?: string, event?: string) => void): void;
+                            hookAll(fn: (dataSnapshot: Spi.DbTreeSnap, prevChildName?: string, event?: string) => void): void;
+                            hook(event: string, fn: (dataSnapshot: Spi.DbTreeSnap, prevChildName?: string, event?: string) => void): void;
                             unhook(event: string): void;
                     }
                     /**
@@ -1372,7 +1536,7 @@ declare module 'jsdb' {
                             binding: BindingImpl;
                             sorting: Api.SortingData;
                             realField: any;
-                            loaded: boolean;
+                            collectionLoaded: boolean;
                             setEntity(entity: Api.Entity): void;
                             added(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
                             removed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
@@ -1384,11 +1548,11 @@ declare module 'jsdb' {
                             dereference(ctx: Object): Promise<any>;
                             init(h: EventHandler): void;
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
-                            handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: FirebaseDataSnapshot, prevKey: string): void;
+                            handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: Spi.DbTreeSnap, prevKey: string): void;
                             add(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
                             createKeyFor(value: Api.Entity): string;
                             normalizeKey(key: string | number | Api.Entity): string;
-                            addToInternal(event: string, ds: FirebaseDataSnapshot, val: Api.Entity, det: EventDetails<E>): void;
+                            addToInternal(event: string, ds: Spi.DbTreeSnap, val: Api.Entity, det: EventDetails<E>): void;
                             remove(keyOrValue: string | number | Api.Entity): Promise<any>;
                             fetch(ctx: Object, key: string | number | Api.Entity): Promise<EventDetails<E>>;
                             with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
@@ -1397,7 +1561,7 @@ declare module 'jsdb' {
                             internalSave(): Promise<any>;
                             clear(): Promise<any>;
                             serialize(localsOnly?: boolean, fields?: string[]): Object;
-                            parseValue(allds: FirebaseDataSnapshot): void;
+                            parseValue(allds: Spi.DbTreeSnap): void;
                             query(): Api.IQuery<E>;
                     }
                     class EventedArray<E> {
@@ -1405,7 +1569,7 @@ declare module 'jsdb' {
                             arrayValue: E[];
                             keys: string[];
                             constructor(collection: MapEvent<E>);
-                            addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
+                            addToInternal(event: string, ds: Spi.DbTreeSnap, val: E, det: EventDetails<E>): void;
                             prepareSerializeSet(): void;
                             prepareSerializeList(): void;
                     }
@@ -1414,7 +1578,7 @@ declare module 'jsdb' {
                             setEntity(entity: Api.Entity): void;
                             add(value?: Api.Entity): Promise<any>;
                             intSuperAdd(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
-                            addToInternal(event: string, ds: FirebaseDataSnapshot, val: E, det: EventDetails<E>): void;
+                            addToInternal(event: string, ds: Spi.DbTreeSnap, val: E, det: EventDetails<E>): void;
                             load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
                     }
@@ -1438,7 +1602,7 @@ declare module 'jsdb' {
                     class IgnoreEvent<E extends Api.Entity> extends GenericEvent {
                             val: any;
                             setEntity(): void;
-                            parseValue(ds: FirebaseDataSnapshot): void;
+                            parseValue(ds: Spi.DbTreeSnap): void;
                             serialize(): any;
                             isLocal(): boolean;
                             internalSave(): any;
@@ -1446,7 +1610,7 @@ declare module 'jsdb' {
                     class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
                             live(ctx: Object): void;
-                            parseValue(ds: FirebaseDataSnapshot): void;
+                            parseValue(ds: Spi.DbTreeSnap): void;
                             serialize(): Api.Entity;
                             isLocal(): boolean;
                             internalSave(): any;
@@ -1482,14 +1646,17 @@ declare module 'jsdb' {
                             myMeta: Metadata;
                             serverIo: Api.Socket;
                             db: Api.IDb3Static;
+                            treeRoot: Spi.DbTreeRoot;
                             constructor();
                             configure(conf: Api.DatabaseConf): void;
+                            getTree(url: string): Spi.DbTree;
                             internalDb(param: any): any;
                             fork(conf: any): Api.IDb3Static;
                             erase(): void;
                             reset(): void;
                             entityRoot(ctor: Api.EntityType<any>): EntityRoot<any>;
                             entityRoot(meta: ClassMetadata): EntityRoot<any>;
+                            makeRelativeUrl(url: string): string;
                             entityRootFromUrl(url: string): EntityRoot<any>;
                             getUrl(): string;
                             bindEntity(e: Api.Entity, ev: EntityEvent<any>): void;

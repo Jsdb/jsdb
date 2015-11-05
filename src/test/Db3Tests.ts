@@ -7,7 +7,7 @@ import assert = M.assert;
 
 var baseUrl :string = "https://swashp.firebaseio.com/test3/"
 
-var Db = Db3.configure(<Db3.Api.FirebaseConf>{baseUrl:baseUrl});
+var Db = Db3.configure(<Db3.Spi.FirebaseConf>{baseUrl:baseUrl});
 
 var lastRemoteCallArgs :IArguments = null;
 var lastLocalStubArgs :IArguments = null;
@@ -731,10 +731,10 @@ describe('Db3 >', () => {
 			var ge = <Db3.Internal.GenericEvent><any>Db(ws1.sub);
 			assert("returned a generic event").when(ge).is(M.aTruthy);
 			var state = ge.state;
-			var ws1event = ge.state.cache[baseUrl + 'withSubs/ws1/'];
+			var ws1event = ge.state.cache['/withSubs/ws1/'];
 			assert("found state for main entity").when(ws1event).is(M.aTruthy);
 			assert("it's parent is the right one").when(ge.parent).is(M.exactly(ws1event));
-			assert("it has the right url").when(ge.getUrl()).is(baseUrl + 'withSubs/ws1/sub/');
+			assert("it has the right url").when(ge.getUrl()).is('/withSubs/ws1/sub/');
 			assert("it's right type").when(ge).is(M.instanceOf(Db3.Internal.EntityEvent));
 		});
 		
@@ -748,7 +748,7 @@ describe('Db3 >', () => {
 			
 			var wr1e = Db(wr1);
 			assert("Didn't got confused by subsequent entity only call").when(wr1e).is(M.not(M.exactly(<any>ge2)));
-			assert("Returned the right event").when(wr1e.getUrl()).is(baseUrl + 'withRefs/wr1/');
+			assert("Returned the right event").when(wr1e.getUrl()).is('/withRefs/wr1/');
 			
 			var wp2 = Db(WithProps).get('wp2');
 			var ge = Db(wr1.ref);
@@ -845,7 +845,7 @@ describe('Db3 >', () => {
 		it('should return an entity root', () => {
 			var er = Db(WithProps);
 			assert("returned an entity root").when(er).is(M.objectMatching({get: M.aFunction}));
-			assert("root has right url").when(er.getUrl()).is(baseUrl + 'withProps/');
+			assert("root has right url").when(er.getUrl()).is('/withProps/');
 		});
 		
 		it('should pre-init an entity',() => {
@@ -855,7 +855,7 @@ describe('Db3 >', () => {
 			var wp2 = er.get('wp1');
 			M.assert("Same instance").when(wp2).is(M.exactly(wp1));
 			
-			M.assert("Has right url").when(Db(wp1).getUrl()).is(baseUrl + 'withProps/wp1/');
+			M.assert("Has right url").when(Db(wp1).getUrl()).is('/withProps/wp1/');
 		});
 		
 		it('should load simple entities', () => {
@@ -1072,7 +1072,7 @@ describe('Db3 >', () => {
 					M.assert("Right event").when(refevent).is(M.objectMatching({
 						nameOnParent: 'ref',
 					}));
-					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
 				});
 			});
 			
@@ -1096,7 +1096,7 @@ describe('Db3 >', () => {
 					M.assert("Right event").when(refevent).is(M.objectMatching({
 						nameOnParent: 'ref',
 					}));
-					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/more*wp3/');
+					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/more*wp3/');
 				});
 			});
 			
@@ -1111,12 +1111,12 @@ describe('Db3 >', () => {
 						M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
 						M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithProps));
 						wp1 = wr1.ref;
-						M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
-						wr1Fb.child('ref/_ref').set(baseUrl + 'withProps/wp2/');
+						M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
+						wr1Fb.child('ref/_ref').set('/withProps/wp2/');
 					} else if (cnt == 2) {
 						M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
 						M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithProps));
-						M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp2/');
+						M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp2/');
 						M.assert("Changed the entity").when(wr1.ref).is(M.not(M.exactly(wp1)));
 						det.offMe();
 						done();
@@ -1133,7 +1133,7 @@ describe('Db3 >', () => {
 					// At this point, the reference is loaded but the internal entity is not, which is right
 					var refd = wr1.ref;
 					Db();
-					M.assert("Right url for ref").when(Db(refd).getUrl()).is(baseUrl + 'withProps/wp1/');
+					M.assert("Right url for ref").when(Db(refd).getUrl()).is('/withProps/wp1/');
 				});
 			});
 		
@@ -1183,7 +1183,7 @@ describe('Db3 >', () => {
 					M.assert("Right event").when(refevent).is(M.objectMatching({
 						nameOnParent: 'anything',
 					}));
-					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+					M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
 				});
 			});
 
@@ -1267,7 +1267,7 @@ describe('Db3 >', () => {
 					M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
 					M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
 				}).then(() => {
-					var fbsub = new Firebase(Db(wpl1.sub).getUrl());
+					var fbsub = new Firebase(baseUrl + Db(wpl1.sub).getUrl());
 					return new Promise((ok) => {
 						fbsub.update({str:'cde'},ok);
 					});
@@ -1285,7 +1285,7 @@ describe('Db3 >', () => {
 					M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
 					M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
 				}).then(() => {
-					var fbsub = new Firebase(Db(wpl1.ref).getUrl());
+					var fbsub = new Firebase(baseUrl + Db(wpl1.ref).getUrl());
 					return new Promise((ok) => {
 						fbsub.update({_ref:wp2Fb.toString()},ok);
 					});
@@ -1302,7 +1302,7 @@ describe('Db3 >', () => {
 					M.assert("Loaded the ref").when(wpl1.ref).is(M.aTruthy);
 					M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
 					M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
-					var fbsub = new Firebase(Db(wpl1.ref).getReferencedUrl());
+					var fbsub = new Firebase(baseUrl + Db(wpl1.ref).getReferencedUrl());
 					return new Promise((ok)=> {
 						fbsub.update({str:'cde'},ok);
 					});
@@ -1334,7 +1334,7 @@ describe('Db3 >', () => {
 					M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
 					M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
 				}).then(() => {
-					var fbsub = new Firebase(Db(wpl1.sub).getUrl());
+					var fbsub = new Firebase(baseUrl + Db(wpl1.sub).getUrl());
 					return new Promise((ok) => {
 						fbsub.update({str:'cde'},ok);
 					});
@@ -1445,7 +1445,7 @@ describe('Db3 >', () => {
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr);
 				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
 					ref: {
-						_ref: baseUrl + 'withProps/wp1/'
+						_ref: '/withProps/wp1/'
 					}
 				}));
 			});
@@ -1461,13 +1461,13 @@ describe('Db3 >', () => {
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr1);
 				M.assert("Serialization of wr1 is correct").when(ee.serialize()).is(M.objectMatching({
 					cross: {
-						_ref: baseUrl + 'withRefs/cr2/'
+						_ref: '/withRefs/cr2/'
 					}
 				}));
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr2);
 				M.assert("Serialization of wr2 is correct").when(ee.serialize()).is(M.objectMatching({
 					cross: {
-						_ref: baseUrl + 'withRefs/cr1/'
+						_ref: '/withRefs/cr1/'
 					}
 				}));
 			});
@@ -1481,7 +1481,7 @@ describe('Db3 >', () => {
 					var ee = <Db3.Internal.GenericEvent><any>Db(wpr);
 					M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
 						ref: {
-							_ref: baseUrl + 'withProps/wp1/',
+							_ref: '/withProps/wp1/',
 							str: 'String 1',
 							num: 200
 						}
@@ -1497,7 +1497,7 @@ describe('Db3 >', () => {
 				var ee = <Db3.Internal.GenericEvent><any>Db(wr);
 				M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
 					ref: {
-						_ref: baseUrl + 'withProps/more*wp3/*more'
+						_ref: '/withProps/more*wp3/*more'
 					}
 				}));
 			});
@@ -1523,20 +1523,20 @@ describe('Db3 >', () => {
 			it('should assign right url to a new entity mapped on root', () => {
 				var wp = new WithProps();
 				Db(wp).assignUrl();
-				M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+				M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining("withProps/"));
 				M.assert("Url doesnt contain discriminator").when(Db(wp).getUrl()).is(M.not(M.stringContaining("*")));
 			});
 
 			it('should assign right url with specified id to a new entity mapped on root', () => {
 				var wp = new WithProps();
 				Db(wp).assignUrl("wp55");
-				M.assert("Assigned right url").when(Db(wp).getUrl()).is(wpFb.toString() + '/wp55/');
+				M.assert("Assigned right url").when(Db(wp).getUrl()).is('/withProps/wp55/');
 			});
 			
 			it('should assign right url to a new polimorphic entity mapped on root', () => {
 				var wp = new WithMoreProps();
 				Db(wp).assignUrl();
-				M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+				M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining("withProps/"));
 				M.assert("Url contains discriminator").when(Db(wp).getUrl()).is(M.stringContaining("more*"));
 			});
 			
@@ -1563,7 +1563,7 @@ describe('Db3 >', () => {
 				.then(() => {
 					return new Promise((ok)=> {
 						var url = Db(wp).getUrl();
-						new Firebase(url).once('value',ok);
+						new Firebase(baseUrl + url).once('value',ok);
 					});
 				})
 				.then((ds:FirebaseDataSnapshot) => {
@@ -1585,7 +1585,7 @@ describe('Db3 >', () => {
 					Db(wp90).assignUrl('wp90');
 					return Db(wp90).save();
 				}).then(()=>{
-					assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+					assert("Has right url").when(Db(wp90).getUrl()).is('/withProps/wp90/');
 				});
 			});
 			
@@ -1598,7 +1598,7 @@ describe('Db3 >', () => {
 					Db(wp90).assignUrl('wp90');
 					return Db(wp90).save();
 				}).then(()=>{
-					assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+					assert("Has right url").when(Db(wp90).getUrl()).is('/withProps/wp90/');
 				});
 			});
 			
@@ -1616,7 +1616,7 @@ describe('Db3 >', () => {
 				return Db(ws).save()
 				.then(() => {
 					return new Promise((ok)=>{
-						new Firebase(Db(ws).getUrl()).once('value', ok);
+						new Firebase(baseUrl + Db(ws).getUrl()).once('value', ok);
 					});
 				})
 				.then((ds:FirebaseDataSnapshot) => {
@@ -1637,7 +1637,7 @@ describe('Db3 >', () => {
 				return Db(wrn).save()
 				.then(() => {
 					return new Promise((ok)=>{
-						new Firebase(Db(wrn).getUrl()).once('value', ok);
+						new Firebase(baseUrl + Db(wrn).getUrl()).once('value', ok);
 					});
 				})
 				.then((ds :FirebaseDataSnapshot) => {
@@ -1658,7 +1658,7 @@ describe('Db3 >', () => {
 				return Db(wrn).save()
 				.then(() => {
 					return new Promise((ok)=>{
-						new Firebase(Db(wrn).getUrl()).once('value', ok);
+						new Firebase(baseUrl + Db(wrn).getUrl()).once('value', ok);
 					});
 				})
 				.then((ds :FirebaseDataSnapshot) => {
@@ -2185,7 +2185,7 @@ describe('Db3 >', () => {
 				var wm1 = Db(WithMap).get('wm2');
 				return Db(wm1.refMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
-						type: Db3.Api.EventType.UPDATE,
+						type: Db3.Api.EventType.LOAD,
 						populating: false,
 						// Note : the reference is dereferenced AND loaded, so the key is not the one in the map
 						originalKey: 'wp2',
@@ -2211,7 +2211,7 @@ describe('Db3 >', () => {
 				.then(() => {
 					var url = Db(nwm).getUrl();
 					return new Promise((ok) => {
-						new Firebase(url).once('value',ok);
+						new Firebase(baseUrl + url).once('value',ok);
 					});
 				})
 				.then((ds :FirebaseDataSnapshot) => {
@@ -2326,7 +2326,7 @@ describe('Db3 >', () => {
 				}).then((ds:FirebaseDataSnapshot)=> {
 					var val = ds.val();
 					assert('added one element').when(val['wp4']).is(M.objectMatchingStrictly({
-						_ref: baseUrl + 'withProps/wp4/'
+						_ref: '/withProps/wp4/'
 					}));
 				});
 			});
@@ -2384,11 +2384,11 @@ describe('Db3 >', () => {
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
-						wst3Fb.child('refSet/wp5').set({_ref: baseUrl + 'withProps/wp5/'},ok);
+						wst3Fb.child('refSet/wp5').set({_ref: '/withProps/wp5/'},ok);
 					});
 				}).then(()=>{
 					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-					assert('element is right').when(Db(ws3.refSet[2]).getUrl()).is(baseUrl + 'withProps/wp5/');
+					assert('element is right').when(Db(ws3.refSet[2]).getUrl()).is('/withProps/wp5/');
 					Db(ws3.refSet).off(this);
 				});
 			});
@@ -2398,11 +2398,11 @@ describe('Db3 >', () => {
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
-						wst3Fb.child('refSet/wp1').set({_ref: baseUrl + 'withProps/wp1/'},ok);
+						wst3Fb.child('refSet/wp1').set({_ref: '/withProps/wp1/'},ok);
 					});
 				}).then(()=>{
 					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-					assert('element is right').when(Db(ws3.refSet[0]).getUrl()).is(baseUrl + 'withProps/wp1/');
+					assert('element is right').when(Db(ws3.refSet[0]).getUrl()).is('/withProps/wp1/');
 					Db(ws3.refSet).off(this);
 				});
 			});
@@ -2412,11 +2412,11 @@ describe('Db3 >', () => {
 				return Db(ws3.refSet).load(this).then(()=>{
 					Db(ws3.refSet).live(this);
 					return new Promise((ok)=>{
-						wst3Fb.child('refSet/wp3').set({_ref: baseUrl + 'withProps/wp3/'},ok);
+						wst3Fb.child('refSet/wp3').set({_ref: '/withProps/wp3/'},ok);
 					});
 				}).then(()=>{
 					assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-					assert('element is right').when(Db(ws3.refSet[1]).getUrl()).is(baseUrl + 'withProps/wp3/');
+					assert('element is right').when(Db(ws3.refSet[1]).getUrl()).is('/withProps/wp3/');
 					Db(ws3.refSet).off(this);
 				});
 			});
@@ -2433,7 +2433,7 @@ describe('Db3 >', () => {
 				
 				return Db(ws).save().then(()=>{
 					return new Promise((ok)=>{
-						new Firebase(Db(ws).getUrl()).once('value',ok);
+						new Firebase(baseUrl + Db(ws).getUrl()).once('value',ok);
 					});
 				}).then((ds :FirebaseDataSnapshot) => {
 					var val = ds.val();

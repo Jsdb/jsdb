@@ -747,10 +747,10 @@ describe('Db3 >', function () {
             var ge = Db(ws1.sub);
             assert("returned a generic event").when(ge).is(M.aTruthy);
             var state = ge.state;
-            var ws1event = ge.state.cache[baseUrl + 'withSubs/ws1/'];
+            var ws1event = ge.state.cache['/withSubs/ws1/'];
             assert("found state for main entity").when(ws1event).is(M.aTruthy);
             assert("it's parent is the right one").when(ge.parent).is(M.exactly(ws1event));
-            assert("it has the right url").when(ge.getUrl()).is(baseUrl + 'withSubs/ws1/sub/');
+            assert("it has the right url").when(ge.getUrl()).is('/withSubs/ws1/sub/');
             assert("it's right type").when(ge).is(M.instanceOf(Db3.Internal.EntityEvent));
         });
         it("avoids getting confused with other calls to getters", function () {
@@ -762,7 +762,7 @@ describe('Db3 >', function () {
             assert("Didn't got confused by repetitive calls").when(ge).is(M.exactly(ge2));
             var wr1e = Db(wr1);
             assert("Didn't got confused by subsequent entity only call").when(wr1e).is(M.not(M.exactly(ge2)));
-            assert("Returned the right event").when(wr1e.getUrl()).is(baseUrl + 'withRefs/wr1/');
+            assert("Returned the right event").when(wr1e.getUrl()).is('/withRefs/wr1/');
             var wp2 = Db(WithProps).get('wp2');
             var ge = Db(wr1.ref);
             var a = wr1.ref;
@@ -849,7 +849,7 @@ describe('Db3 >', function () {
         it('should return an entity root', function () {
             var er = Db(WithProps);
             assert("returned an entity root").when(er).is(M.objectMatching({ get: M.aFunction }));
-            assert("root has right url").when(er.getUrl()).is(baseUrl + 'withProps/');
+            assert("root has right url").when(er.getUrl()).is('/withProps/');
         });
         it('should pre-init an entity', function () {
             var er = Db(WithProps);
@@ -857,7 +857,7 @@ describe('Db3 >', function () {
             M.assert("Inited entity").when(wp1).is(M.aTruthy);
             var wp2 = er.get('wp1');
             M.assert("Same instance").when(wp2).is(M.exactly(wp1));
-            M.assert("Has right url").when(Db(wp1).getUrl()).is(baseUrl + 'withProps/wp1/');
+            M.assert("Has right url").when(Db(wp1).getUrl()).is('/withProps/wp1/');
         });
         it('should load simple entities', function () {
             var wp1 = Db(WithProps).get('wp1');
@@ -1068,7 +1068,7 @@ describe('Db3 >', function () {
                     M.assert("Right event").when(refevent).is(M.objectMatching({
                         nameOnParent: 'ref',
                     }));
-                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
                 });
             });
             it('should dereference a reference with projections', function () {
@@ -1090,7 +1090,7 @@ describe('Db3 >', function () {
                     M.assert("Right event").when(refevent).is(M.objectMatching({
                         nameOnParent: 'ref',
                     }));
-                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/more*wp3/');
+                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/more*wp3/');
                 });
             });
             it('should notify of referencing', function (done) {
@@ -1104,13 +1104,13 @@ describe('Db3 >', function () {
                         M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
                         M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithProps));
                         wp1 = wr1.ref;
-                        M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
-                        wr1Fb.child('ref/_ref').set(baseUrl + 'withProps/wp2/');
+                        M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
+                        wr1Fb.child('ref/_ref').set('/withProps/wp2/');
                     }
                     else if (cnt == 2) {
                         M.assert("Loaded the ref").when(wr1.ref).is(M.aTruthy);
                         M.assert("Right type for ref").when(wr1.ref).is(M.instanceOf(WithProps));
-                        M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp2/');
+                        M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp2/');
                         M.assert("Changed the entity").when(wr1.ref).is(M.not(M.exactly(wp1)));
                         det.offMe();
                         done();
@@ -1125,7 +1125,7 @@ describe('Db3 >', function () {
                     // At this point, the reference is loaded but the internal entity is not, which is right
                     var refd = wr1.ref;
                     Db();
-                    M.assert("Right url for ref").when(Db(refd).getUrl()).is(baseUrl + 'withProps/wp1/');
+                    M.assert("Right url for ref").when(Db(refd).getUrl()).is('/withProps/wp1/');
                 });
             });
             it('should load sub entites reference withOUT the main one', function () {
@@ -1168,7 +1168,7 @@ describe('Db3 >', function () {
                     M.assert("Right event").when(refevent).is(M.objectMatching({
                         nameOnParent: 'anything',
                     }));
-                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is(baseUrl + 'withProps/wp1/');
+                    M.assert("Right url for ref").when(refevent.getReferencedUrl()).is('/withProps/wp1/');
                 });
             });
             it('should load totally polimorphic reference', function () {
@@ -1241,7 +1241,7 @@ describe('Db3 >', function () {
                     M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
                     M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
                 }).then(function () {
-                    var fbsub = new Firebase(Db(wpl1.sub).getUrl());
+                    var fbsub = new Firebase(baseUrl + Db(wpl1.sub).getUrl());
                     return new Promise(function (ok) {
                         fbsub.update({ str: 'cde' }, ok);
                     });
@@ -1257,7 +1257,7 @@ describe('Db3 >', function () {
                     M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
                     M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
                 }).then(function () {
-                    var fbsub = new Firebase(Db(wpl1.ref).getUrl());
+                    var fbsub = new Firebase(baseUrl + Db(wpl1.ref).getUrl());
                     return new Promise(function (ok) {
                         fbsub.update({ _ref: wp2Fb.toString() }, ok);
                     });
@@ -1271,7 +1271,7 @@ describe('Db3 >', function () {
                     M.assert("Loaded the ref").when(wpl1.ref).is(M.aTruthy);
                     M.assert("Inited the bound").when(wpl1.oth._ref).is(M.aTruthy);
                     M.assert("Bound the subentity").when(wpl1.oth._ref.str).is('String 1');
-                    var fbsub = new Firebase(Db(wpl1.ref).getReferencedUrl());
+                    var fbsub = new Firebase(baseUrl + Db(wpl1.ref).getReferencedUrl());
                     return new Promise(function (ok) {
                         fbsub.update({ str: 'cde' }, ok);
                     });
@@ -1298,7 +1298,7 @@ describe('Db3 >', function () {
                     M.assert("Bound the subentity").when(wpl1.oth._sub.str).is('abc');
                     M.assert("Bound parent").when(wpl1.oth._parent).is(M.exactly(wpl1));
                 }).then(function () {
-                    var fbsub = new Firebase(Db(wpl1.sub).getUrl());
+                    var fbsub = new Firebase(baseUrl + Db(wpl1.sub).getUrl());
                     return new Promise(function (ok) {
                         fbsub.update({ str: 'cde' }, ok);
                     });
@@ -1396,7 +1396,7 @@ describe('Db3 >', function () {
                 var ee = Db(wr);
                 M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
                     ref: {
-                        _ref: baseUrl + 'withProps/wp1/'
+                        _ref: '/withProps/wp1/'
                     }
                 }));
             });
@@ -1410,13 +1410,13 @@ describe('Db3 >', function () {
                 var ee = Db(wr1);
                 M.assert("Serialization of wr1 is correct").when(ee.serialize()).is(M.objectMatching({
                     cross: {
-                        _ref: baseUrl + 'withRefs/cr2/'
+                        _ref: '/withRefs/cr2/'
                     }
                 }));
                 var ee = Db(wr2);
                 M.assert("Serialization of wr2 is correct").when(ee.serialize()).is(M.objectMatching({
                     cross: {
-                        _ref: baseUrl + 'withRefs/cr1/'
+                        _ref: '/withRefs/cr1/'
                     }
                 }));
             });
@@ -1428,7 +1428,7 @@ describe('Db3 >', function () {
                     var ee = Db(wpr);
                     M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
                         ref: {
-                            _ref: baseUrl + 'withProps/wp1/',
+                            _ref: '/withProps/wp1/',
                             str: 'String 1',
                             num: 200
                         }
@@ -1442,7 +1442,7 @@ describe('Db3 >', function () {
                 var ee = Db(wr);
                 M.assert("Serialization is correct").when(ee.serialize()).is(M.objectMatching({
                     ref: {
-                        _ref: baseUrl + 'withProps/more*wp3/*more'
+                        _ref: '/withProps/more*wp3/*more'
                     }
                 }));
             });
@@ -1464,18 +1464,18 @@ describe('Db3 >', function () {
             it('should assign right url to a new entity mapped on root', function () {
                 var wp = new WithProps();
                 Db(wp).assignUrl();
-                M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+                M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining("withProps/"));
                 M.assert("Url doesnt contain discriminator").when(Db(wp).getUrl()).is(M.not(M.stringContaining("*")));
             });
             it('should assign right url with specified id to a new entity mapped on root', function () {
                 var wp = new WithProps();
                 Db(wp).assignUrl("wp55");
-                M.assert("Assigned right url").when(Db(wp).getUrl()).is(wpFb.toString() + '/wp55/');
+                M.assert("Assigned right url").when(Db(wp).getUrl()).is('/withProps/wp55/');
             });
             it('should assign right url to a new polimorphic entity mapped on root', function () {
                 var wp = new WithMoreProps();
                 Db(wp).assignUrl();
-                M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining(wpFb.toString()));
+                M.assert("Assigned right url").when(Db(wp).getUrl()).is(M.stringContaining("withProps/"));
                 M.assert("Url contains discriminator").when(Db(wp).getUrl()).is(M.stringContaining("more*"));
             });
             it('should throw error an a new entity not mapped on root', function () {
@@ -1501,7 +1501,7 @@ describe('Db3 >', function () {
                     .then(function () {
                     return new Promise(function (ok) {
                         var url = Db(wp).getUrl();
-                        new Firebase(url).once('value', ok);
+                        new Firebase(baseUrl + url).once('value', ok);
                     });
                 })
                     .then(function (ds) {
@@ -1522,7 +1522,7 @@ describe('Db3 >', function () {
                     Db(wp90).assignUrl('wp90');
                     return Db(wp90).save();
                 }).then(function () {
-                    assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+                    assert("Has right url").when(Db(wp90).getUrl()).is('/withProps/wp90/');
                 });
             });
             it('should save a new entity instance after checking exist', function () {
@@ -1534,7 +1534,7 @@ describe('Db3 >', function () {
                     Db(wp90).assignUrl('wp90');
                     return Db(wp90).save();
                 }).then(function () {
-                    assert("Has right url").when(Db(wp90).getUrl()).is(wpFb.toString() + '/wp90/');
+                    assert("Has right url").when(Db(wp90).getUrl()).is('/withProps/wp90/');
                 });
             });
             // write entity in entity, as full object
@@ -1547,7 +1547,7 @@ describe('Db3 >', function () {
                 return Db(ws).save()
                     .then(function () {
                     return new Promise(function (ok) {
-                        new Firebase(Db(ws).getUrl()).once('value', ok);
+                        new Firebase(baseUrl + Db(ws).getUrl()).once('value', ok);
                     });
                 })
                     .then(function (ds) {
@@ -1567,7 +1567,7 @@ describe('Db3 >', function () {
                 return Db(wrn).save()
                     .then(function () {
                     return new Promise(function (ok) {
-                        new Firebase(Db(wrn).getUrl()).once('value', ok);
+                        new Firebase(baseUrl + Db(wrn).getUrl()).once('value', ok);
                     });
                 })
                     .then(function (ds) {
@@ -1587,7 +1587,7 @@ describe('Db3 >', function () {
                 return Db(wrn).save()
                     .then(function () {
                     return new Promise(function (ok) {
-                        new Firebase(Db(wrn).getUrl()).once('value', ok);
+                        new Firebase(baseUrl + Db(wrn).getUrl()).once('value', ok);
                     });
                 })
                     .then(function (ds) {
@@ -2072,7 +2072,7 @@ describe('Db3 >', function () {
                 var wm1 = Db(WithMap).get('wm2');
                 return Db(wm1.refMap).fetch(_this, 'b').then(function (det) {
                     assert("event is right").when(det).is(M.objectMatching({
-                        type: Db3.Api.EventType.UPDATE,
+                        type: Db3.Api.EventType.LOAD,
                         populating: false,
                         // Note : the reference is dereferenced AND loaded, so the key is not the one in the map
                         originalKey: 'wp2',
@@ -2096,7 +2096,7 @@ describe('Db3 >', function () {
                     .then(function () {
                     var url = Db(nwm).getUrl();
                     return new Promise(function (ok) {
-                        new Firebase(url).once('value', ok);
+                        new Firebase(baseUrl + url).once('value', ok);
                     });
                 })
                     .then(function (ds) {
@@ -2202,7 +2202,7 @@ describe('Db3 >', function () {
                 }).then(function (ds) {
                     var val = ds.val();
                     assert('added one element').when(val['wp4']).is(M.objectMatchingStrictly({
-                        _ref: baseUrl + 'withProps/wp4/'
+                        _ref: '/withProps/wp4/'
                     }));
                 });
             });
@@ -2256,11 +2256,11 @@ describe('Db3 >', function () {
                 return Db(ws3.refSet).load(_this).then(function () {
                     Db(ws3.refSet).live(_this);
                     return new Promise(function (ok) {
-                        wst3Fb.child('refSet/wp5').set({ _ref: baseUrl + 'withProps/wp5/' }, ok);
+                        wst3Fb.child('refSet/wp5').set({ _ref: '/withProps/wp5/' }, ok);
                     });
                 }).then(function () {
                     assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-                    assert('element is right').when(Db(ws3.refSet[2]).getUrl()).is(baseUrl + 'withProps/wp5/');
+                    assert('element is right').when(Db(ws3.refSet[2]).getUrl()).is('/withProps/wp5/');
                     Db(ws3.refSet).off(_this);
                 });
             });
@@ -2269,11 +2269,11 @@ describe('Db3 >', function () {
                 return Db(ws3.refSet).load(_this).then(function () {
                     Db(ws3.refSet).live(_this);
                     return new Promise(function (ok) {
-                        wst3Fb.child('refSet/wp1').set({ _ref: baseUrl + 'withProps/wp1/' }, ok);
+                        wst3Fb.child('refSet/wp1').set({ _ref: '/withProps/wp1/' }, ok);
                     });
                 }).then(function () {
                     assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-                    assert('element is right').when(Db(ws3.refSet[0]).getUrl()).is(baseUrl + 'withProps/wp1/');
+                    assert('element is right').when(Db(ws3.refSet[0]).getUrl()).is('/withProps/wp1/');
                     Db(ws3.refSet).off(_this);
                 });
             });
@@ -2282,11 +2282,11 @@ describe('Db3 >', function () {
                 return Db(ws3.refSet).load(_this).then(function () {
                     Db(ws3.refSet).live(_this);
                     return new Promise(function (ok) {
-                        wst3Fb.child('refSet/wp3').set({ _ref: baseUrl + 'withProps/wp3/' }, ok);
+                        wst3Fb.child('refSet/wp3').set({ _ref: '/withProps/wp3/' }, ok);
                     });
                 }).then(function () {
                     assert('length is changed').when(ws3.refSet).is(M.withLength(3));
-                    assert('element is right').when(Db(ws3.refSet[1]).getUrl()).is(baseUrl + 'withProps/wp3/');
+                    assert('element is right').when(Db(ws3.refSet[1]).getUrl()).is('/withProps/wp3/');
                     Db(ws3.refSet).off(_this);
                 });
             });
@@ -2300,7 +2300,7 @@ describe('Db3 >', function () {
                 ws.embedSet.push(sub2);
                 return Db(ws).save().then(function () {
                     return new Promise(function (ok) {
-                        new Firebase(Db(ws).getUrl()).once('value', ok);
+                        new Firebase(baseUrl + Db(ws).getUrl()).once('value', ok);
                     });
                 }).then(function (ds) {
                     var val = ds.val();
