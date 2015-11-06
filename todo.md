@@ -1,3 +1,48 @@
+Number of possible weaknesses
+-----------------------------
+
+If I dereference a reference, I have the entity initialized with the default values 
+from the constructor, then I save it, it will serialize default values to the db,
+overwriting actual values. It should not save locals at all if they were not loaded
+previously. (we need an isFromDb:boolean, checking only the url is not enought,
+cause the url could be there because of a reference or an assignUrl)
+
+If I load an entity with a collection, then modify the collection using appropriate 
+methods, the save the collection, it will serialize the collection again overwriting
+my changes. Moreover, changes made by methods to the collection are not reflected
+on the instance (but they would if it was with a .live), but they could an quite easily.
+
+If I load an entity, then later on I modify it and save it back, I could overwrite 
+data written by others. Keeping it live (partially) prevents this. (but, to be honest,
+this is what scalabe dbs do anyway, so may not be a concern).
+
+
+Rename "dereference" to "get"
+-----------------------------
+
+Uniform with EntityRoot.
+
+
+Test loading an embedded referenced directly by a url
+-----------------------------------------------------
+
+It should instantiate all preceding entities, and load/resolve what needed for binding.
+Not sure it does. 
+
+
+Piggyback loading
+-----------------
+
+In a number of places the DB loads an entity, for example in remote method execution
+and in binding. While this is ok, a load is a real "load", meaning "hit the db". If 
+it happens that someone else places a listener on such object, then Firebase cached
+the json, but if it was not then it goes and load the entity.
+
+However, most often than not, the entity is already in the db cache. So, we need
+a piggyback loading, that is not a simple get, but is not a complete loading, and
+sounds like "if you have it in cache, get it, if you don't go and load from the db".
+
+
 Serialize references in a way that's possible to query
 ------------------------------------------------------
 
