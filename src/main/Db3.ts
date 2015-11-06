@@ -2411,6 +2411,7 @@ module Db {
 					if (fields && fields.indexOf(k) < 0) continue;
 					var val = this.entity[k];
 					if (typeof val === 'function') continue;
+					if (typeof val === 'undefined') continue;
 
 					// Look if the property is annotated
 					var evt = this.findCreateChildFor(k);
@@ -2507,9 +2508,10 @@ module Db {
 					for (var k in this.entity) {
 						if (k == 'constructor') continue;
 						var se = this.findCreateChildFor(k);
-						if (se && se['internalSave']) {
+						if (!se) continue;
+						if (se['internalSave']) {
 							proms.push((<GenericEvent>se).internalSave());
-						} else if (se && se['save']) {
+						} else if (se['save']) {
 							proms.push((<Api.IEntityOrReferenceEvent<any>><any>se).save());
 						}
 					}
@@ -3733,7 +3735,6 @@ module Db {
 			}
 			
 			getUrl() :string {
-				//return this.conf['baseUrl'];
 				return '/';
 			}
 			
@@ -3743,7 +3744,6 @@ module Db {
 			}
 			
 			createEvent(e :Api.Entity, stack :MetaDescriptor[]|string[] = []) :GenericEvent {
-				//var roote = (<IDb3Annotated>e).__dbevent;
 				var roote :GenericEvent = entEvent.get(e);
 				if (!roote) {
 					var clmeta = this.myMeta.findMeta(e);
@@ -3752,7 +3752,6 @@ module Db {
 					nre.setEntity(e);
 					nre.classMeta = clmeta;
 					roote = nre;
-					//(<IDb3Annotated>e).__dbevent = roote;
 					entEvent.set(e, <EntityEvent<any>>roote);
 				} else {
 					if (roote.state != this) throw new Error("The entity " + roote.getUrl(true) + " is already attached to another database, not to " + this.getUrl());
@@ -3882,11 +3881,16 @@ module Db {
 						if (!entevt) throw new Error("Can't find entity");
 						fn = <Function>entevt.entity[payload.method];
 						if (!fn) throw new Error("Can't find method");
+						// Disabled automatic loading of target entity, the method will do what needed if needed
+						/*
 						if (entevt['load']) {
 							promises.push(<Promise<any>>entevt['load'](ctx));
 						} else {
 							promises.push(Promise.resolve(entevt.entity));
 						}
+						*/
+						promises.push(Promise.resolve(entevt.entity));
+
 					}
 					
 					var parnames = Utils.findParameterNames(fn);

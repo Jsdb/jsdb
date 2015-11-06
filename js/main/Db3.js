@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151106_023317_master_1.0.0_397f7d4
+ * TSDB version : 20151106_030536_master_1.0.0_b72ab5c
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151106_023317_master_1.0.0_397f7d4';
+var Version = '20151106_030536_master_1.0.0_b72ab5c';
 var Db = (function () {
     function Db() {
     }
@@ -1396,6 +1396,8 @@ var Db;
                     var val = this.entity[k];
                     if (typeof val === 'function')
                         continue;
+                    if (typeof val === 'undefined')
+                        continue;
                     // Look if the property is annotated
                     var evt = this.findCreateChildFor(k);
                     if (evt) {
@@ -1498,10 +1500,12 @@ var Db;
                         if (k == 'constructor')
                             continue;
                         var se = this.findCreateChildFor(k);
-                        if (se && se['internalSave']) {
+                        if (!se)
+                            continue;
+                        if (se['internalSave']) {
                             proms.push(se.internalSave());
                         }
-                        else if (se && se['save']) {
+                        else if (se['save']) {
                             proms.push(se.save());
                         }
                     }
@@ -2715,7 +2719,6 @@ var Db;
                 return this.entityRoot(meta);
             };
             DbState.prototype.getUrl = function () {
-                //return this.conf['baseUrl'];
                 return '/';
             };
             DbState.prototype.bindEntity = function (e, ev) {
@@ -2724,7 +2727,6 @@ var Db;
             };
             DbState.prototype.createEvent = function (e, stack) {
                 if (stack === void 0) { stack = []; }
-                //var roote = (<IDb3Annotated>e).__dbevent;
                 var roote = entEvent.get(e);
                 if (!roote) {
                     var clmeta = this.myMeta.findMeta(e);
@@ -2733,7 +2735,6 @@ var Db;
                     nre.setEntity(e);
                     nre.classMeta = clmeta;
                     roote = nre;
-                    //(<IDb3Annotated>e).__dbevent = roote;
                     entEvent.set(e, roote);
                 }
                 else {
@@ -2870,12 +2871,15 @@ var Db;
                         fn = entevt.entity[payload.method];
                         if (!fn)
                             throw new Error("Can't find method");
+                        // Disabled automatic loading of target entity, the method will do what needed if needed
+                        /*
                         if (entevt['load']) {
-                            promises.push(entevt['load'](ctx));
-                        }
-                        else {
+                            promises.push(<Promise<any>>entevt['load'](ctx));
+                        } else {
                             promises.push(Promise.resolve(entevt.entity));
                         }
+                        */
+                        promises.push(Promise.resolve(entevt.entity));
                     }
                     var parnames = Utils.findParameterNames(fn);
                     var appendCtx = (parnames.length > 0 && parnames[parnames.length - 1] == '_ctx') ? parnames.length - 1 : -1;
