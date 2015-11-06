@@ -96,6 +96,29 @@ declare module 'jsdb' {
                             <T extends Entity>(entity: T): IEntityOrReferenceEvent<T>;
                     }
                     /**
+                        * Main interface of the Db.
+                        */
+                    interface ChainedIDb3Static<PE> {
+                            /**
+                                * Access to an {@link observable} value in an entity.
+                                */
+                            <V extends nativeArrObj>(value: V): IObservableEvent<any> | PE;
+                            /**
+                                * Access to a {@link map} value in an entity.
+                                */
+                            <T extends Entity>(map: {
+                                    [index: string]: T;
+                            }): IMapEvent<any> | PE;
+                            /**
+                                * Access to a {@link list} value in an entity.
+                                */
+                            <T extends Entity>(list: T[]): IListSetEvent<any> | PE;
+                            /**
+                                * Access to an entity, an {@link embedded} value or a {@link reference} value.
+                                */
+                            <T extends Entity>(entity: T): IEntityOrReferenceEvent<any> | PE;
+                    }
+                    /**
                         * Optional interface that entities can implement to have awareness of the Db.
                         */
                     interface IDb3Initable {
@@ -249,10 +272,12 @@ declare module 'jsdb' {
                                 */
                             wasOffed(): boolean;
                     }
+                    interface IEvent {
+                    }
                     /**
                         * Database events for {@link embedded} or {@link reference}d entities.
                         */
-                    interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
+                    interface IEntityOrReferenceEvent<E extends Entity> extends IUrled, IEvent {
                             /**
                                 * Load the entity completely.
                                 *
@@ -409,11 +434,17 @@ declare module 'jsdb' {
                                 * all the event system.
                                 */
                             triggerLocalSave(): any;
+                            /**
+                                * Allow for events chaining to reduce the verbosity of calling
+                                * the same method (for example, load to obtain a promise) on a series
+                                * of objects.
+                                */
+                            and: ChainedIDb3Static<IEntityOrReferenceEvent<any>>;
                     }
                     /**
                         * Entity root gives access to rooted entities.
                         */
-                    interface IEntityRoot<E extends Entity> extends IUrled {
+                    interface IEntityRoot<E extends Entity> extends IUrled, IEvent {
                             /**
                                 * Get the instance with the given id. Note that this method is
                                 * synchronous, and does not load the data from the database.
@@ -428,18 +459,24 @@ declare module 'jsdb' {
                                 */
                             query(): IQuery<E>;
                     }
-                    interface IObservableEvent<E extends Entity> extends IUrled {
+                    interface IObservableEvent<E extends Entity> extends IUrled, IEvent {
                             updated(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
                             live(ctx: Object): void;
                             off(ctx: Object): void;
                             isLoaded(): boolean;
                             assertLoaded(): void;
+                            /**
+                                * Allow for events chaining to reduce the verbosity of calling
+                                * the same method (for example, load to obtain a promise) on a series
+                                * of objects.
+                                */
+                            and: ChainedIDb3Static<IObservableEvent<any>>;
                     }
                     /**
                         * Interface implemented by collections that can be read. These are all the collections
                         * but also {@link IQuery}.
                         */
-                    interface IReadableCollection<E extends Entity> {
+                    interface IReadableCollection<E extends Entity> extends IEvent {
                             /**
                                 * Registers a callback to get notified about updates to the collection.
                                 *
@@ -619,6 +656,12 @@ declare module 'jsdb' {
                             dereference(ctx: Object): Promise<{
                                     [index: string]: E;
                             }>;
+                            /**
+                                * Allow for events chaining to reduce the verbosity of calling
+                                * the same method (for example, load to obtain a promise) on a series
+                                * of objects.
+                                */
+                            and: ChainedIDb3Static<IMapEvent<any>>;
                     }
                     /**
                         * Collection of type list or set.
@@ -654,6 +697,12 @@ declare module 'jsdb' {
                             peekHead(ctx: Object): Promise<IEventDetails<E>>;
                             load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
+                            /**
+                                * Allow for events chaining to reduce the verbosity of calling
+                                * the same method (for example, load to obtain a promise) on a series
+                                * of objects.
+                                */
+                            and: ChainedIDb3Static<IListSetEvent<any>>;
                     }
                     /**
                         * A query, performed on a collection or on an entity root.
@@ -665,6 +714,12 @@ declare module 'jsdb' {
                             limit(limit: number): IQuery<E>;
                             range(from: any, to: any): IQuery<E>;
                             equals(val: any): IQuery<E>;
+                            /**
+                                * Allow for events chaining to reduce the verbosity of calling
+                                * the same method (for example, load to obtain a promise) on a series
+                                * of objects.
+                                */
+                            and: ChainedIDb3Static<IQuery<any>>;
                     }
                     interface Socket {
                             emit(event: string, ...args: any[]): Socket;
@@ -1325,6 +1380,7 @@ declare module 'jsdb' {
                             isLocal(): boolean;
                             save(): Promise<any>;
                             abstract internalSave(): Promise<any>;
+                            and: Api.ChainedIDb3Static<any>;
                     }
                     /**
                         * An utility base class for events that deal with a single databse reference.
@@ -1641,6 +1697,11 @@ declare module 'jsdb' {
                             save(): Promise<any>;
                             urlInited(): void;
                     }
+                    class ChainedEvent {
+                            constructor(state: DbState, firstEvent?: Api.IEvent, secondCall?: any);
+                            and(param: any): ChainedEvent;
+                            add(evt: Api.IEvent): void;
+                    }
                     class DbState implements Api.IDbOperations {
                             cache: {
                                     [index: string]: GenericEvent;
@@ -1784,6 +1845,9 @@ declare module 'jsdb' {
             module Utils {
                     function findName(o: any): string;
                     function findHierarchy(o: Api.Entity | Api.EntityType<any>): Api.EntityType<any>[];
+                    function findAllMethods(o: Api.Entity | Api.EntityType<any>): {
+                            [index: string]: Function;
+                    };
                     function findParameterNames(func: Function): string[];
                     function isInlineObject(o: any): boolean;
                     function isEmpty(obj: any): boolean;

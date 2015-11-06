@@ -186,6 +186,55 @@ module Db {
 		}
 		
 		/**
+		 * Main interface of the Db.
+		 */
+		export interface ChainedIDb3Static<PE> {
+			/**
+			 * Pass-thru for when db(something) is used also when not needed. 
+			 */
+			/*
+			<E extends Internal.GenericEvent>(evt :E):E|PE;
+			*/
+		
+			
+			/**
+			 * Access to an entity root given the entity class.
+			 */
+			/*
+			<T extends Entity>(c :EntityType<T>) :IEntityRoot<any>|PE;
+			*/
+			
+			/**
+			 * TBD
+			 */
+			/*
+			(meta :MetaDescriptor,entity :Entity):any;
+			*/
+
+			/**
+			 * Access to an {@link observable} value in an entity.
+			 */
+			<V extends nativeArrObj>(value :V) :IObservableEvent<any>|PE;
+			
+			/**
+			 * Access to a {@link map} value in an entity.
+			 */
+			<T extends Entity>(map :{[index:string]:T}) :IMapEvent<any>|PE;
+
+			/**
+			 * Access to a {@link list} value in an entity.
+			 */
+			<T extends Entity>(list :T[]) :IListSetEvent<any>|PE;
+			
+			/**
+			 * Access to an entity, an {@link embedded} value or a {@link reference} value.
+			 */
+			<T extends Entity>(entity :T) :IEntityOrReferenceEvent<any>|PE;
+			
+			
+		}
+		
+		/**
 		 * Optional interface that entities can implement to have awareness of the Db.
 		 */
 		export interface IDb3Initable {
@@ -368,10 +417,14 @@ module Db {
 			
 		}
 		
+		export interface IEvent {
+			
+		}
+		
 		/**
 		 * Database events for {@link embedded} or {@link reference}d entities.
 		 */
-		export interface IEntityOrReferenceEvent<E extends Entity> extends IUrled {
+		export interface IEntityOrReferenceEvent<E extends Entity> extends IUrled, IEvent {
 			// Entity methods
 			
 			/**
@@ -549,12 +602,19 @@ module Db {
 			 * all the event system. 
 			 */
 			triggerLocalSave();
+			
+			/**
+			 * Allow for events chaining to reduce the verbosity of calling 
+			 * the same method (for example, load to obtain a promise) on a series
+			 * of objects.
+			 */
+			and :ChainedIDb3Static<IEntityOrReferenceEvent<any>>;
 		}
 		
 		/**
 		 * Entity root gives access to rooted entities.
 		 */
-		export interface IEntityRoot<E extends Entity> extends IUrled {
+		export interface IEntityRoot<E extends Entity> extends IUrled, IEvent {
 			/**
 			 * Get the instance with the given id. Note that this method is
 			 * synchronous, and does not load the data from the database.
@@ -572,7 +632,7 @@ module Db {
 			query() :IQuery<E>;
 		}
 		
-		export interface IObservableEvent<E extends Entity> extends IUrled {
+		export interface IObservableEvent<E extends Entity> extends IUrled, IEvent {
 			updated(ctx:Object,callback :(ed:IEventDetails<E>)=>void) :void;
 			live(ctx:Object) :void;
 			
@@ -580,6 +640,13 @@ module Db {
 			off(ctx:Object) :void;
 			isLoaded():boolean;
 			assertLoaded():void;
+			
+			/**
+			 * Allow for events chaining to reduce the verbosity of calling 
+			 * the same method (for example, load to obtain a promise) on a series
+			 * of objects.
+			 */
+			and :ChainedIDb3Static<IObservableEvent<any>>;
 		}
 		
 
@@ -587,7 +654,7 @@ module Db {
 		 * Interface implemented by collections that can be read. These are all the collections
 		 * but also {@link IQuery}.
 		 */
-		export interface IReadableCollection<E extends Entity> {
+		export interface IReadableCollection<E extends Entity> extends IEvent {
 			/**
 			 * Registers a callback to get notified about updates to the collection.
 			 * 
@@ -652,6 +719,7 @@ module Db {
 			 * Access to the db instance of this event.
 			 */
 			db :IDb3Static;
+			
 		}
 		
 		/**
@@ -785,6 +853,14 @@ module Db {
 
 			// Inherits docs
 			dereference(ctx:Object) :Promise<{[index:string]:E}>;
+			
+			/**
+			 * Allow for events chaining to reduce the verbosity of calling 
+			 * the same method (for example, load to obtain a promise) on a series
+			 * of objects.
+			 */
+			and :ChainedIDb3Static<IMapEvent<any>>;
+
 		}
 
 		/**
@@ -829,6 +905,14 @@ module Db {
 
 			// Inherits docs
 			dereference(ctx:Object) :Promise<E[]>;
+			
+			/**
+			 * Allow for events chaining to reduce the verbosity of calling 
+			 * the same method (for example, load to obtain a promise) on a series
+			 * of objects.
+			 */
+			and :ChainedIDb3Static<IListSetEvent<any>>;
+
 		}
 		
 		/**
@@ -844,6 +928,14 @@ module Db {
 			limit(limit :number):IQuery<E>;
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
+			
+			/**
+			 * Allow for events chaining to reduce the verbosity of calling 
+			 * the same method (for example, load to obtain a promise) on a series
+			 * of objects.
+			 */
+			and :ChainedIDb3Static<IQuery<any>>;
+
 		}
 		
 		export interface Socket {
@@ -2045,6 +2137,10 @@ module Db {
 			}
 			
 			abstract internalSave() :Promise<any>;
+			
+			and :Api.ChainedIDb3Static<any> = (param:any) => {
+				return new ChainedEvent(this.state, this, param);
+			}
 		}
 		
 		/**
@@ -2563,6 +2659,7 @@ module Db {
 				evt.parseValue(this.lastDs);
 				return <E>evt.entity;
 			}
+			
 		}
 		
 		/**
@@ -3612,6 +3709,65 @@ module Db {
 			}
 		}
 		
+		export class ChainedEvent {
+			private events :Api.IEvent[] = [];
+			
+			constructor(private state :DbState, firstEvent? :Api.IEvent, secondCall? :any) {
+				if (firstEvent) this.add(firstEvent);
+				if (secondCall) this.and(secondCall);
+			}
+			
+			and(param:any):ChainedEvent {
+				var evt = <Api.IEvent>this.state.internalDb(param);
+				this.add(evt);
+				return this;
+			}
+			
+			add(evt :Api.IEvent) {
+				this.events.push(evt);
+				var methods = Utils.findAllMethods(evt);
+				for (var name in methods) {
+					if (name === 'constructor') continue;
+					this.makeProxyMethod(name);
+				}
+			}
+			
+			private makeProxyMethod(name :string) {
+				var me = this;
+				this[name] = function() {
+					var args = Array.prototype.slice.apply(arguments);
+					return me.proxyCalled(name, args);
+				};
+			}
+			
+			private proxyCalled(name :string, args :any[]):any {
+				var proms :Thenable<any>[] = [];
+				var anded = true;
+				var other :any;
+				for (var i = 0; i < this.events.length; i++) {
+					var evt = this.events[i];
+					var fn = <Function>evt[name];
+					var ret = fn.apply(evt, args);
+					if (typeof ret === 'boolean') {
+						anded = anded && ret;
+					} else if (typeof ret === 'object') {
+						if (typeof ret['then'] === 'function') {
+							proms.push(<Thenable<any>>ret);
+						}
+					} else {
+						other = ret;
+					}
+				}
+				if (proms.length > 0) {
+					return Promise.all(proms);
+				} else if (typeof other !== 'undefined') {
+					return other;
+				} else {
+					return anded;
+				}
+			}
+		}
+		
 		
 		export class DbState implements Api.IDbOperations {
 			cache :{[index:string]:GenericEvent} = {};
@@ -4359,6 +4515,28 @@ module Db {
 				acproto = Object.getPrototypeOf(acproto);
 				if (acctor === firstCtor) continue;
 				ret.push(acctor);
+			}
+			return ret;
+		}
+		
+		export function findAllMethods(o :Api.Entity|Api.EntityType<any>) :{[index:string]:Function} {
+			var hier = findHierarchy(o);
+			var firstCtor = <Api.EntityType<any>>o;
+			var acproto = (<Api.EntityType<any>>o).prototype;
+			if (!acproto) {
+				acproto = Object.getPrototypeOf(o);
+				firstCtor = <Api.EntityType<any>>o.constructor;
+			}
+			hier.unshift(firstCtor);
+			var ret :{[index:string]:Function} = {};
+			for (var i = 0; i < hier.length; i++) {
+				var acproto = hier[i].prototype;
+				for (var name in acproto) {
+					if (ret[name]) continue;
+					var val = o[name];
+					if (typeof val !== 'function') continue;
+					ret[name] = val;
+				}
 			}
 			return ret;
 		}

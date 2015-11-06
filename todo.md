@@ -23,11 +23,24 @@ Rename "dereference" to "get"
 Uniform with EntityRoot.
 
 
+Context should be optioanl for methods that return promises
+-----------------------------------------------------------
+
+While technically is still important to have a context to cancel pending operations,
+methods that return promises are registering their listeners only for the time
+strictly needed to receive the answer, and then resolve, so having always to specify
+a context is probably useless.
+
+
 Test loading an embedded referenced directly by a url
 -----------------------------------------------------
 
 It should instantiate all preceding entities, and load/resolve what needed for binding.
 Not sure it does. 
+
+Moreover, if i load an embedded, the load the parent entity, it should bind the
+two, meaning it should set on the parent entity the previously loaded embedded
+entity.
 
 
 Piggyback loading
@@ -99,48 +112,6 @@ This latter incoherency may happen also on non-rooted entities.
 > I still think that having the event set it's instance to null is dangerous,
 > apart from this case, also in an embedded there could still be the instance floating
 > around, which could by mistake end up being a new row on the db if saved.
-
-
-
-Find an easier solution for Promise.all
----------------------------------------
-
-Often, in user application, we want to perform some operation
-after making sure a number of entities are fully loaded.
-
-Currently this can be obtained with this, rather cumbersome, code :
-
-```typescript
-Promise.all<any>([
-	Tsdb.of(entityA).load(this),
-	Tsdb.of(entityB.ref).load(this),
-	Tsdb.of(entityC).load(this),
-]).then(()=>{
-	// freely use the entities here
-});
-```
-
-A better support/syntax could be nice, something like :
-
-```typescript
-Tsdb.on(entityA).and(entityB.ref).and(entityC).load(this).then(()=>{
-	
-});
-```
-
-We would need a way to build a "proxy" with all the possible functions
-on the events of the given entities, that then desugars into :
-
-```typescript
-var proms :Promise<any>[] = [];
-for (var i = 0; i < this.events.length; i++) {
-	proms.push(this.events[i][methodName](ctx));
-}
-return Promise.all(proms);
-```
-
-> It could be a composing of events, adding an "and" method on any event that
-> returns an IDb3Static that adds the events to a list.
 
 
 Global error handling / retying / notification on anomalous situations
@@ -653,4 +624,45 @@ Tsdb.of(ship.anagraphic).updated...
 The only difference from a normal "db" is taking the db from the main entity
 of the metadata getter chain, and then passing the rest.
 
+
+
+Find an easier solution for Promise.all
+---------------------------------------
+
+Often, in user application, we want to perform some operation
+after making sure a number of entities are fully loaded.
+
+Currently this can be obtained with this, rather cumbersome, code :
+
+```typescript
+Promise.all<any>([
+	Tsdb.of(entityA).load(this),
+	Tsdb.of(entityB.ref).load(this),
+	Tsdb.of(entityC).load(this),
+]).then(()=>{
+	// freely use the entities here
+});
+```
+
+A better support/syntax could be nice, something like :
+
+```typescript
+Tsdb.on(entityA).and(entityB.ref).and(entityC).load(this).then(()=>{
+	
+});
+```
+
+We would need a way to build a "proxy" with all the possible functions
+on the events of the given entities, that then desugars into :
+
+```typescript
+var proms :Promise<any>[] = [];
+for (var i = 0; i < this.events.length; i++) {
+	proms.push(this.events[i][methodName](ctx));
+}
+return Promise.all(proms);
+```
+
+> It could be a composing of events, adding an "and" method on any event that
+> returns an IDb3Static that adds the events to a list.
 

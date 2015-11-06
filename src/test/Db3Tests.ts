@@ -2924,7 +2924,35 @@ describe('Db3 >', () => {
 				assert("local stub had right params").when(lastLocalStubArgs[1]).is(1);
 				done();
 			},50);
-			
+		});
+	});
+	
+	describe('Chained events >', ()=>{
+		it('should chain load promises',()=>{
+			var wp1 = Db(WithProps).get('wp1');
+			var wp2 = Db(WithProps).get('wp2');
+			var wp3 = Db(WithProps).get('more*wp3');
+			var wp1evt = Db(wp1);
+			var wp2chn = wp1evt.and(wp2);
+			assert("Returned chained event").when(wp2chn).is(M.instanceOf(Db3.Internal.ChainedEvent));
+			assert("Returned chained has load function").when(wp2chn['load']).is(M.aFunction);
+			var wp3chn = wp2chn.and(wp3);
+			return wp3chn.load(this).then(()=>{
+				assert("wp1 loaded").when(wp1.str).is('String 1');
+				assert("wp2 loaded").when(wp2.str).is('String 2');
+				assert("wp3 loaded").when(wp3.str).is('String 3');
+			});
+		});
+		
+		it('should chain boolean methods',()=>{
+			var wp1 = Db(WithProps).get('wp1');
+			var wp2 = Db(WithProps).get('wp2');
+			return Db(wp1).load(this).then(()=>{
+				assert("Chains with false").when(Db(wp1).and(wp2).isLoaded()).is(false);
+				return Db(wp2).load(this);
+			}).then(()=>{
+				assert("Chains with true").when(Db(wp1).and(wp2).isLoaded()).is(true);
+			});
 		});
 	});
 

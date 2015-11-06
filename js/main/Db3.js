@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151106_030536_master_1.0.0_b72ab5c
+ * TSDB version : 20151106_044818_master_1.0.0_57618d4
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151106_030536_master_1.0.0_b72ab5c';
+var Version = '20151106_044818_master_1.0.0_57618d4';
 var Db = (function () {
     function Db() {
     }
@@ -706,6 +706,7 @@ var Db;
          */
         var GenericEvent = (function () {
             function GenericEvent() {
+                var _this = this;
                 /**
                  * Local (ram, javascript) name of the entity represented by this event on the parent entity.
                  */
@@ -720,6 +721,9 @@ var Db;
                 this._originalClassMeta = null;
                 /** Array of current registered handlers. */
                 this.handlers = [];
+                this.and = function (param) {
+                    return new ChainedEvent(_this.state, _this, param);
+                };
             }
             /**
              * Set the entity this event works on.
@@ -2607,6 +2611,69 @@ var Db;
             return QueryImpl;
         })(ArrayCollectionEvent);
         Internal.QueryImpl = QueryImpl;
+        var ChainedEvent = (function () {
+            function ChainedEvent(state, firstEvent, secondCall) {
+                this.state = state;
+                this.events = [];
+                if (firstEvent)
+                    this.add(firstEvent);
+                if (secondCall)
+                    this.and(secondCall);
+            }
+            ChainedEvent.prototype.and = function (param) {
+                var evt = this.state.internalDb(param);
+                this.add(evt);
+                return this;
+            };
+            ChainedEvent.prototype.add = function (evt) {
+                this.events.push(evt);
+                var methods = Utils.findAllMethods(evt);
+                for (var name in methods) {
+                    if (name === 'constructor')
+                        continue;
+                    this.makeProxyMethod(name);
+                }
+            };
+            ChainedEvent.prototype.makeProxyMethod = function (name) {
+                var me = this;
+                this[name] = function () {
+                    var args = Array.prototype.slice.apply(arguments);
+                    return me.proxyCalled(name, args);
+                };
+            };
+            ChainedEvent.prototype.proxyCalled = function (name, args) {
+                var proms = [];
+                var anded = true;
+                var other;
+                for (var i = 0; i < this.events.length; i++) {
+                    var evt = this.events[i];
+                    var fn = evt[name];
+                    var ret = fn.apply(evt, args);
+                    if (typeof ret === 'boolean') {
+                        anded = anded && ret;
+                    }
+                    else if (typeof ret === 'object') {
+                        if (typeof ret['then'] === 'function') {
+                            proms.push(ret);
+                        }
+                    }
+                    else {
+                        other = ret;
+                    }
+                }
+                if (proms.length > 0) {
+                    return Promise.all(proms);
+                }
+                else if (typeof other !== 'undefined') {
+                    return other;
+                }
+                else {
+                    return anded;
+                }
+            };
+            return ChainedEvent;
+        })();
+        Internal.ChainedEvent = ChainedEvent;
         var DbState = (function () {
             function DbState() {
                 this.cache = {};
@@ -3390,6 +3457,30 @@ var Db;
             return ret;
         }
         Utils.findHierarchy = findHierarchy;
+        function findAllMethods(o) {
+            var hier = findHierarchy(o);
+            var firstCtor = o;
+            var acproto = o.prototype;
+            if (!acproto) {
+                acproto = Object.getPrototypeOf(o);
+                firstCtor = o.constructor;
+            }
+            hier.unshift(firstCtor);
+            var ret = {};
+            for (var i = 0; i < hier.length; i++) {
+                var acproto = hier[i].prototype;
+                for (var name in acproto) {
+                    if (ret[name])
+                        continue;
+                    var val = o[name];
+                    if (typeof val !== 'function')
+                        continue;
+                    ret[name] = val;
+                }
+            }
+            return ret;
+        }
+        Utils.findAllMethods = findAllMethods;
         var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
         var ARGUMENT_NAMES = /([^\s,]+)/g;
         function findParameterNames(func) {
