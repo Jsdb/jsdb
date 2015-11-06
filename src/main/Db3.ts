@@ -1175,9 +1175,9 @@ module Db {
 			
 		}
 		
-		export class MonitoringDbTree implements DbTree {
+		export class MonitoringDbTreeQuery implements DbTreeQuery {
 			private myurl :string;
-			constructor(private root :MonitoringDbTreeRoot, private delegate :DbTree) {
+			constructor(private root :MonitoringDbTreeRoot, private delegate :DbTreeQuery) {
 				this.myurl = delegate.toString();
 			}
 			
@@ -1214,21 +1214,6 @@ module Db {
 				return this.delegate.toString();
 			}
 			
-			set(value: any, onComplete?: (error: any) => void): void {
-				this.emit('WRT','set',value);
-				this.delegate.set(value, this.emitAckWrap(onComplete,'set'));
-			}
-			
-			update(value: Object, onComplete?: (error: any) => void): void {
-				this.emit('WRT','update',value);
-				this.delegate.update(value, this.emitAckWrap(onComplete,'update'));
-			}
-			
-			remove(onComplete?: (error: any) => void): void {
-				this.emit('WRT','remove');
-				this.delegate.remove(this.emitAckWrap(onComplete,'remove'));
-			}
-			
 			on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void {
 				var name = 'on ' + eventType;
 				this.emit('TRC',name);
@@ -1248,61 +1233,72 @@ module Db {
 			}
 			
 			orderByChild(key: string): DbTreeQuery {
-				this.emit('TRC','orderByChild',key);
-				this.delegate.orderByChild(key);
-				return this;
+				this.emit('TRC','orderByChild',null,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.orderByChild(key));
 			}
 
 			orderByKey(): DbTreeQuery {
 				this.emit('TRC','orderByKey');
-				this.delegate.orderByKey();
-				return this;
+				return new MonitoringDbTreeQuery(this.root,this.delegate.orderByKey());
 			}
 			
 			limit(limit: number): DbTreeQuery {
-				this.emit('TRC','limit',limit);
-				this.delegate.limit(limit);
-				return this;
+				this.emit('TRC','limit',null,limit);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.limit(limit));
 			}
 
 			startAt(value: string|number, key?: string): DbTreeQuery {
-				this.emit('TRC','startAt',value,key);
-				this.delegate.startAt(value, key);
-				return this;
+				this.emit('TRC','startAt',null,value,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.startAt(value, key));
 			}
 
 			endAt(value: string|number, key?: string): DbTreeQuery {
-				this.emit('TRC','endAt',value,key);
-				this.delegate.endAt(value, key);
-				return this;
+				this.emit('TRC','endAt',null,value,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.endAt(value, key));
 			}
 
 			equalTo(value: string|number, key?: string): DbTreeQuery {
-				this.emit('TRC','equalTo',value,key);
-				this.delegate.equalTo(value,key);
-				return this;
+				this.emit('TRC','equalTo',null,value,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.equalTo(value,key));
 			}
 
 			limitToFirst(limit: number): DbTreeQuery {
-				this.emit('TRC','limitToFirst',limit);
-				this.delegate.limitToFirst(limit);
-				return this;
+				this.emit('TRC','limitToFirst',null,limit);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.limitToFirst(limit));
 			}
 
 			limitToLast(limit: number): DbTreeQuery {
-				this.emit('TRC','limitToLast',limit);
-				this.delegate.limitToLast(limit);
-				return this;
+				this.emit('TRC','limitToLast',null,limit);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.limitToLast(limit));
 			}
 			
 		}
+
+		export class MonitoringDbTree extends MonitoringDbTreeQuery implements DbTree {
+			private tdelegate :DbTree;
+			constructor(root :MonitoringDbTreeRoot, delegate :DbTree) {
+				super(root, delegate);
+				this.tdelegate = delegate;
+			}
+			set(value: any, onComplete?: (error: any) => void): void {
+				this.emit('WRT','set',value);
+				this.tdelegate.set(value, this.emitAckWrap(onComplete,'set'));
+			}
+			
+			update(value: Object, onComplete?: (error: any) => void): void {
+				this.emit('WRT','update',value);
+				this.tdelegate.update(value, this.emitAckWrap(onComplete,'update'));
+			}
+			
+			remove(onComplete?: (error: any) => void): void {
+				this.emit('WRT','remove');
+				this.tdelegate.remove(this.emitAckWrap(onComplete,'remove'));
+			}
+		}
 		
 		registry['monitor'] = MonitoringDbTreeRoot.create;
-
-		
-		
-		
 	}
+	
 	
 	/**
 	 * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,

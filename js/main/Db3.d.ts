@@ -896,19 +896,16 @@ declare module Db {
             private dtlog(...args);
             emit(url: string, type: string, name: string, val: any, others: any[]): void;
         }
-        class MonitoringDbTree implements DbTree {
+        class MonitoringDbTreeQuery implements DbTreeQuery {
             private root;
             private delegate;
             private myurl;
-            constructor(root: MonitoringDbTreeRoot, delegate: DbTree);
+            constructor(root: MonitoringDbTreeRoot, delegate: DbTreeQuery);
             emit(type: string, name: string, val?: any, ...others: any[]): void;
             emitAckWrap(fn: (error: any) => void, name: string): (error: any) => void;
             emitDataWrap(fn: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, name: string): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
             unwrapEmitData<T>(fn: T): T;
             toString(): string;
-            set(value: any, onComplete?: (error: any) => void): void;
-            update(value: Object, onComplete?: (error: any) => void): void;
-            remove(onComplete?: (error: any) => void): void;
             on(eventType: string, callback: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, cancelCallback?: (error: any) => void, context?: Object): (dataSnapshot: DbTreeSnap, prevChildName?: string) => void;
             off(eventType?: string, callback?: (dataSnapshot: DbTreeSnap, prevChildName?: string) => void, context?: Object): void;
             once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
@@ -920,6 +917,13 @@ declare module Db {
             equalTo(value: string | number, key?: string): DbTreeQuery;
             limitToFirst(limit: number): DbTreeQuery;
             limitToLast(limit: number): DbTreeQuery;
+        }
+        class MonitoringDbTree extends MonitoringDbTreeQuery implements DbTree {
+            private tdelegate;
+            constructor(root: MonitoringDbTreeRoot, delegate: DbTree);
+            set(value: any, onComplete?: (error: any) => void): void;
+            update(value: Object, onComplete?: (error: any) => void): void;
+            remove(onComplete?: (error: any) => void): void;
         }
     }
     /**

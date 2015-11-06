@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151105_215202_master_1.0.0_ea4846d
+ * TSDB version : 20151106_023317_master_1.0.0_397f7d4
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151105_215202_master_1.0.0_ea4846d';
+var Version = '20151106_023317_master_1.0.0_397f7d4';
 var Db = (function () {
     function Db() {
     }
@@ -238,20 +238,20 @@ var Db;
             return MonitoringDbTreeRoot;
         })();
         Spi.MonitoringDbTreeRoot = MonitoringDbTreeRoot;
-        var MonitoringDbTree = (function () {
-            function MonitoringDbTree(root, delegate) {
+        var MonitoringDbTreeQuery = (function () {
+            function MonitoringDbTreeQuery(root, delegate) {
                 this.root = root;
                 this.delegate = delegate;
                 this.myurl = delegate.toString();
             }
-            MonitoringDbTree.prototype.emit = function (type, name, val) {
+            MonitoringDbTreeQuery.prototype.emit = function (type, name, val) {
                 var others = [];
                 for (var _i = 3; _i < arguments.length; _i++) {
                     others[_i - 3] = arguments[_i];
                 }
                 this.root.emit(this.myurl, type, name, val, others);
             };
-            MonitoringDbTree.prototype.emitAckWrap = function (fn, name) {
+            MonitoringDbTreeQuery.prototype.emitAckWrap = function (fn, name) {
                 var _this = this;
                 return function (error) {
                     if (error) {
@@ -263,7 +263,7 @@ var Db;
                     fn(error);
                 };
             };
-            MonitoringDbTree.prototype.emitDataWrap = function (fn, name) {
+            MonitoringDbTreeQuery.prototype.emitDataWrap = function (fn, name) {
                 var _this = this;
                 var ret = function (dataSnapshot, prevChildName) {
                     _this.emit('RCV', name, dataSnapshot.val(), prevChildName ? "prev name " + prevChildName : '');
@@ -272,82 +272,83 @@ var Db;
                 fn['__monitorcb'] = ret;
                 return ret;
             };
-            MonitoringDbTree.prototype.unwrapEmitData = function (fn) {
+            MonitoringDbTreeQuery.prototype.unwrapEmitData = function (fn) {
                 if (!fn)
                     return undefined;
                 return fn['__monitorcb'] || fn;
             };
-            MonitoringDbTree.prototype.toString = function () {
+            MonitoringDbTreeQuery.prototype.toString = function () {
                 return this.delegate.toString();
             };
-            MonitoringDbTree.prototype.set = function (value, onComplete) {
-                this.emit('WRT', 'set', value);
-                this.delegate.set(value, this.emitAckWrap(onComplete, 'set'));
-            };
-            MonitoringDbTree.prototype.update = function (value, onComplete) {
-                this.emit('WRT', 'update', value);
-                this.delegate.update(value, this.emitAckWrap(onComplete, 'update'));
-            };
-            MonitoringDbTree.prototype.remove = function (onComplete) {
-                this.emit('WRT', 'remove');
-                this.delegate.remove(this.emitAckWrap(onComplete, 'remove'));
-            };
-            MonitoringDbTree.prototype.on = function (eventType, callback, cancelCallback, context) {
+            MonitoringDbTreeQuery.prototype.on = function (eventType, callback, cancelCallback, context) {
                 var name = 'on ' + eventType;
                 this.emit('TRC', name);
                 return this.delegate.on(eventType, this.emitDataWrap(callback, name), this.emitAckWrap(cancelCallback, name + " cancel"), context);
             };
-            MonitoringDbTree.prototype.off = function (eventType, callback, context) {
+            MonitoringDbTreeQuery.prototype.off = function (eventType, callback, context) {
                 this.emit('TRC', 'off ' + eventType);
                 this.delegate.off(eventType, this.unwrapEmitData(callback), context);
             };
-            MonitoringDbTree.prototype.once = function (eventType, successCallback, failureCallback, context) {
+            MonitoringDbTreeQuery.prototype.once = function (eventType, successCallback, failureCallback, context) {
                 var name = 'once ' + eventType;
                 this.emit('TRC', name);
                 this.delegate.once(eventType, this.emitDataWrap(successCallback, name), this.emitAckWrap(failureCallback, name + " failure"), context);
             };
-            MonitoringDbTree.prototype.orderByChild = function (key) {
-                this.emit('TRC', 'orderByChild', key);
-                this.delegate.orderByChild(key);
-                return this;
+            MonitoringDbTreeQuery.prototype.orderByChild = function (key) {
+                this.emit('TRC', 'orderByChild', null, key);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.orderByChild(key));
             };
-            MonitoringDbTree.prototype.orderByKey = function () {
+            MonitoringDbTreeQuery.prototype.orderByKey = function () {
                 this.emit('TRC', 'orderByKey');
-                this.delegate.orderByKey();
-                return this;
+                return new MonitoringDbTreeQuery(this.root, this.delegate.orderByKey());
             };
-            MonitoringDbTree.prototype.limit = function (limit) {
-                this.emit('TRC', 'limit', limit);
-                this.delegate.limit(limit);
-                return this;
+            MonitoringDbTreeQuery.prototype.limit = function (limit) {
+                this.emit('TRC', 'limit', null, limit);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.limit(limit));
             };
-            MonitoringDbTree.prototype.startAt = function (value, key) {
-                this.emit('TRC', 'startAt', value, key);
-                this.delegate.startAt(value, key);
-                return this;
+            MonitoringDbTreeQuery.prototype.startAt = function (value, key) {
+                this.emit('TRC', 'startAt', null, value, key);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.startAt(value, key));
             };
-            MonitoringDbTree.prototype.endAt = function (value, key) {
-                this.emit('TRC', 'endAt', value, key);
-                this.delegate.endAt(value, key);
-                return this;
+            MonitoringDbTreeQuery.prototype.endAt = function (value, key) {
+                this.emit('TRC', 'endAt', null, value, key);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.endAt(value, key));
             };
-            MonitoringDbTree.prototype.equalTo = function (value, key) {
-                this.emit('TRC', 'equalTo', value, key);
-                this.delegate.equalTo(value, key);
-                return this;
+            MonitoringDbTreeQuery.prototype.equalTo = function (value, key) {
+                this.emit('TRC', 'equalTo', null, value, key);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.equalTo(value, key));
             };
-            MonitoringDbTree.prototype.limitToFirst = function (limit) {
-                this.emit('TRC', 'limitToFirst', limit);
-                this.delegate.limitToFirst(limit);
-                return this;
+            MonitoringDbTreeQuery.prototype.limitToFirst = function (limit) {
+                this.emit('TRC', 'limitToFirst', null, limit);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.limitToFirst(limit));
             };
-            MonitoringDbTree.prototype.limitToLast = function (limit) {
-                this.emit('TRC', 'limitToLast', limit);
-                this.delegate.limitToLast(limit);
-                return this;
+            MonitoringDbTreeQuery.prototype.limitToLast = function (limit) {
+                this.emit('TRC', 'limitToLast', null, limit);
+                return new MonitoringDbTreeQuery(this.root, this.delegate.limitToLast(limit));
+            };
+            return MonitoringDbTreeQuery;
+        })();
+        Spi.MonitoringDbTreeQuery = MonitoringDbTreeQuery;
+        var MonitoringDbTree = (function (_super) {
+            __extends(MonitoringDbTree, _super);
+            function MonitoringDbTree(root, delegate) {
+                _super.call(this, root, delegate);
+                this.tdelegate = delegate;
+            }
+            MonitoringDbTree.prototype.set = function (value, onComplete) {
+                this.emit('WRT', 'set', value);
+                this.tdelegate.set(value, this.emitAckWrap(onComplete, 'set'));
+            };
+            MonitoringDbTree.prototype.update = function (value, onComplete) {
+                this.emit('WRT', 'update', value);
+                this.tdelegate.update(value, this.emitAckWrap(onComplete, 'update'));
+            };
+            MonitoringDbTree.prototype.remove = function (onComplete) {
+                this.emit('WRT', 'remove');
+                this.tdelegate.remove(this.emitAckWrap(onComplete, 'remove'));
             };
             return MonitoringDbTree;
-        })();
+        })(MonitoringDbTreeQuery);
         Spi.MonitoringDbTree = MonitoringDbTree;
         Spi.registry['monitor'] = MonitoringDbTreeRoot.create;
     })(Spi = Db.Spi || (Db.Spi = {}));
