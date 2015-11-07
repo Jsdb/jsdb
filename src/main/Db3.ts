@@ -576,6 +576,11 @@ module Db {
 			 */
 			remove():Promise<any>;
 			
+			/**
+			 * Return the id of this entity, only if this entity is rooted one.
+			 */
+			getId():string;
+			
 			
 			/**
 			 * Creates a clone of this entity, using the most recent data from the database.
@@ -1254,7 +1259,7 @@ module Db {
 					if (!re.test(url)) continue;
 					var rec = this.filter[flt];
 					var typs = rec.types;
-					if (typs && typs.indexOf(type) == -1) continue;
+					if (typs && typs.indexOf(type) == -1) break;
 					this.dtlog.apply(this,[type, name, url].concat(others));
 					if (rec.dump && val) this.log(val);
 					if (rec.trace) {
@@ -1915,6 +1920,15 @@ module Db {
 				for (var k in this.children) {
 					if (k == 'constructor') continue;
 					this.children[k].urlInited();
+				}
+				// Since this is probably a new entity, check if some sub-entities are already there
+				if (this.entity) {
+					for (var k in this.classMeta.descriptors) {
+						var subdes = this.classMeta.descriptors[k];
+						if (subdes.localName && typeof this.entity[subdes.localName] !== 'undefined') {
+							this.findCreateChildFor(k,true);
+						}
+					}
 				}
 				// Propagate also to dependants
 				for (var i = 0; i < this.dependants.length; i++) {
@@ -2660,6 +2674,12 @@ module Db {
 				return <E>evt.entity;
 			}
 			
+			getId() :string {
+				if (this.parent instanceof EntityRoot) {
+					return (<EntityRoot<E>>this.parent).idOf(<E>this.entity);
+				}
+				return null;
+			}
 		}
 		
 		/**
@@ -2873,6 +2893,11 @@ module Db {
 			getTraversed() :GenericEvent {
 				if (!this.pointedEvent) throw new Error("Cannot traverse reference '" + this.nameOnParent + "' cause it's null or has not yet been loaded");
 				return this.pointedEvent;
+			}
+			
+			getId() :string {
+				if (!this.pointedEvent) return null;
+				return this.pointedEvent.getUrl();
 			}
 			
 		}
@@ -3593,10 +3618,9 @@ module Db {
 			
 			idOf(entity :E) :string {
 				var ev = this.state.createEvent(entity);
+				if (!ev) return null;
 				var eu = ev.getUrl();
-				if (!eu) {
-					return null;
-				}
+				if (!eu) return null;
 				return eu.substr(this.getUrl().length).replace('/','');
 			}
 			
@@ -4038,15 +4062,14 @@ module Db {
 						fn = <Function>entevt.entity[payload.method];
 						if (!fn) throw new Error("Can't find method");
 						// Disabled automatic loading of target entity, the method will do what needed if needed
-						/*
 						if (entevt['load']) {
 							promises.push(<Promise<any>>entevt['load'](ctx));
 						} else {
 							promises.push(Promise.resolve(entevt.entity));
 						}
-						*/
+						/*
 						promises.push(Promise.resolve(entevt.entity));
-
+						*/
 					}
 					
 					var parnames = Utils.findParameterNames(fn);

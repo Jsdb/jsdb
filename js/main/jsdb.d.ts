@@ -412,6 +412,10 @@ declare module 'jsdb' {
                                 */
                             remove(): Promise<any>;
                             /**
+                                * Return the id of this entity, only if this entity is rooted one.
+                                */
+                            getId(): string;
+                            /**
                                 * Creates a clone of this entity, using the most recent data from the database.
                                 *
                                 * The entity must have been loaded (or saved if it's a new entity) before calling clone (that is,
@@ -1516,6 +1520,7 @@ declare module 'jsdb' {
                             internalSave(): Promise<any>;
                             remove(): Promise<any>;
                             clone(): E;
+                            getId(): string;
                     }
                     /**
                         * Implementation of IEntityOrReferenceEvent for {@link reference}s.
@@ -1570,6 +1575,7 @@ declare module 'jsdb' {
                             remove(): Promise<any>;
                             clone(): E;
                             getTraversed(): GenericEvent;
+                            getId(): string;
                     }
                     /**
                         * An event handler for collections.

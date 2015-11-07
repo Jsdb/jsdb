@@ -1597,6 +1597,13 @@ describe('Db3 >', function () {
                     }));
                 });
             });
+            it('should bind correctly existing subentity on assigned url', function () {
+                var ws = new WithSubentity();
+                var se = new SubEntity();
+                ws.sub = se;
+                Db(ws).assignUrl();
+                assert('subentity is bound').when(Db3.of(se)).is(M.aTruthy);
+            });
         });
         describe('Updating >', function () {
             it('should update an entity', function () {

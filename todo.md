@@ -666,3 +666,41 @@ return Promise.all(proms);
 > It could be a composing of events, adding an "and" method on any event that
 > returns an IDb3Static that adds the events to a list.
 
+
+
+Problem with db binding of new instances
+----------------------------------------
+
+The following code does not work :
+
+```typescript
+var ship = new Ship();
+var status = new Ship.Status();
+ship.status = status;
+cdb(ship).assignUrl();
+
+// Later, inside some other method
+Tsdb.of(status).triggerLocalSave();
+```
+
+While the following does :
+
+```typescript
+var ship = new Ship();
+cdb(ship).assignUrl();
+var status = new Ship.Status();
+ship.status = status;
+
+// Later, inside some other method
+Tsdb.of(status).triggerLocalSave();
+```
+
+What happens, in the working case, is that there is an event when status is set
+on the ship, so the setter triggers the findCreateEvent, while there is no event
+in the first case so nothing is triggered.
+
+It is right for the server not to trigger, but then when a new netity is bound to
+the database it's "possible" children should be explored, and if a value is present
+they should be created.
+
+

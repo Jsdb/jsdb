@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151106_044818_master_1.0.0_57618d4
+ * TSDB version : 20151108_001122_master_1.0.0_d549519
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151106_044818_master_1.0.0_57618d4';
+var Version = '20151108_001122_master_1.0.0_d549519';
 var Db = (function () {
     function Db() {
     }
@@ -224,7 +224,7 @@ var Db;
                     var rec = this.filter[flt];
                     var typs = rec.types;
                     if (typs && typs.indexOf(type) == -1)
-                        continue;
+                        break;
                     this.dtlog.apply(this, [type, name, url].concat(others));
                     if (rec.dump && val)
                         this.log(val);
@@ -821,6 +821,15 @@ var Db;
                     if (k == 'constructor')
                         continue;
                     this.children[k].urlInited();
+                }
+                // Since this is probably a new entity, check if some sub-entities are already there
+                if (this.entity) {
+                    for (var k in this.classMeta.descriptors) {
+                        var subdes = this.classMeta.descriptors[k];
+                        if (subdes.localName && typeof this.entity[subdes.localName] !== 'undefined') {
+                            this.findCreateChildFor(k, true);
+                        }
+                    }
                 }
                 // Propagate also to dependants
                 for (var i = 0; i < this.dependants.length; i++) {
@@ -1564,6 +1573,12 @@ var Db;
                 evt.parseValue(this.lastDs);
                 return evt.entity;
             };
+            EntityEvent.prototype.getId = function () {
+                if (this.parent instanceof EntityRoot) {
+                    return this.parent.idOf(this.entity);
+                }
+                return null;
+            };
             return EntityEvent;
         })(SingleDbHandlerEvent);
         Internal.EntityEvent = EntityEvent;
@@ -1783,6 +1798,11 @@ var Db;
                 if (!this.pointedEvent)
                     throw new Error("Cannot traverse reference '" + this.nameOnParent + "' cause it's null or has not yet been loaded");
                 return this.pointedEvent;
+            };
+            ReferenceEvent.prototype.getId = function () {
+                if (!this.pointedEvent)
+                    return null;
+                return this.pointedEvent.getUrl();
             };
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
@@ -2501,10 +2521,11 @@ var Db;
             };
             EntityRoot.prototype.idOf = function (entity) {
                 var ev = this.state.createEvent(entity);
-                var eu = ev.getUrl();
-                if (!eu) {
+                if (!ev)
                     return null;
-                }
+                var eu = ev.getUrl();
+                if (!eu)
+                    return null;
                 return eu.substr(this.getUrl().length).replace('/', '');
             };
             EntityRoot.prototype.query = function () {
@@ -2939,14 +2960,12 @@ var Db;
                         if (!fn)
                             throw new Error("Can't find method");
                         // Disabled automatic loading of target entity, the method will do what needed if needed
-                        /*
                         if (entevt['load']) {
-                            promises.push(<Promise<any>>entevt['load'](ctx));
-                        } else {
+                            promises.push(entevt['load'](ctx));
+                        }
+                        else {
                             promises.push(Promise.resolve(entevt.entity));
                         }
-                        */
-                        promises.push(Promise.resolve(entevt.entity));
                     }
                     var parnames = Utils.findParameterNames(fn);
                     var appendCtx = (parnames.length > 0 && parnames[parnames.length - 1] == '_ctx') ? parnames.length - 1 : -1;
