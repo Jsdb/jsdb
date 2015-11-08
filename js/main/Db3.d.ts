@@ -162,6 +162,10 @@ declare module Db {
              * Deletes all the data from the db, without sending any event, and resets the internal state.
              */
             erase(): any;
+            /**
+             * Gives access to the underlying DbTree implementation.
+             */
+            tree(): Spi.DbTreeRoot;
             executeServerMethod(ctx: IRemoteCallContext, payload: any): Promise<any>;
         }
         /**
@@ -1644,7 +1648,7 @@ declare module Db {
             add(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
             createKeyFor(value: Api.Entity): string;
             normalizeKey(key: string | number | Api.Entity): string;
-            addToInternal(event: string, ds: Spi.DbTreeSnap, val: Api.Entity, det: EventDetails<E>): void;
+            addToInternal(event: string, key: string, val: Api.Entity, det: EventDetails<E>): void;
             remove(keyOrValue: string | number | Api.Entity): Promise<any>;
             fetch(ctx: Object, key: string | number | Api.Entity): Promise<EventDetails<E>>;
             with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
@@ -1663,7 +1667,7 @@ declare module Db {
             constructor(collection: MapEvent<E>);
             private findPositionFor(key);
             private findPositionAfter(prev);
-            addToInternal(event: string, ds: Spi.DbTreeSnap, val: E, det: EventDetails<E>): void;
+            addToInternal(event: string, key: any, val: E, det: EventDetails<E>): void;
             prepareSerializeSet(): void;
             prepareSerializeList(): void;
         }
@@ -1672,7 +1676,7 @@ declare module Db {
             setEntity(entity: Api.Entity): void;
             add(value?: Api.Entity): Promise<any>;
             intSuperAdd(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
-            addToInternal(event: string, ds: Spi.DbTreeSnap, val: E, det: EventDetails<E>): void;
+            addToInternal(event: string, key: string, val: E, det: EventDetails<E>): void;
             load(ctx: Object): Promise<E[]>;
             dereference(ctx: Object): Promise<E[]>;
         }
@@ -1773,6 +1777,7 @@ declare module Db {
             fetchFromCache(url: string): GenericEvent;
             loadEventWithInstance(url: string): GenericEvent;
             load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
+            tree(): Spi.DbTreeRoot;
             /**
             * Executes a method on server-side. Payload is the only parameter passed to the "method" event
             * from the callServerMethod method.

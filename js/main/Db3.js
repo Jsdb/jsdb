@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151108_001122_master_1.0.0_d549519
+ * TSDB version : 20151108_173828_master_1.0.0_db228c1
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151108_001122_master_1.0.0_d549519';
+var Version = '20151108_173828_master_1.0.0_db228c1';
 var Db = (function () {
     function Db() {
     }
@@ -1983,7 +1983,7 @@ var Db;
                 det.payload = val;
                 subev.applyHooks(det);
                 if (handler.istracking) {
-                    this.addToInternal(event, ds, val, det);
+                    this.addToInternal(event, ds.key(), val, det);
                 }
                 handler.handle(det);
             };
@@ -2000,17 +2000,20 @@ var Db;
                 }
                 var evt = this.findCreateChildFor(k);
                 evt.setEntity(v);
-                return new Promise(function (ok, err) {
-                    var fb = _this.state.getTree(evt.getUrl());
-                    fb.set(evt.serialize(false), function (fberr) {
-                        if (fberr) {
-                            err(fberr);
-                        }
-                        else {
-                            ok(null);
-                        }
+                this.addToInternal('child_added', k, v, null);
+                if (this.getUrl()) {
+                    return new Promise(function (ok, err) {
+                        var fb = _this.state.getTree(evt.getUrl());
+                        fb.set(evt.serialize(false), function (fberr) {
+                            if (fberr) {
+                                err(fberr);
+                            }
+                            else {
+                                ok(null);
+                            }
+                        });
                     });
-                });
+                }
                 // Can't use save because reference event save does not save the reference
                 //return (<IEntityOrReferenceEvent<E>><any>evt).save();
             };
@@ -2034,21 +2037,22 @@ var Db;
                 }
                 return key;
             };
-            MapEvent.prototype.addToInternal = function (event, ds, val, det) {
+            MapEvent.prototype.addToInternal = function (event, key, val, det) {
                 if (event == 'child_removed') {
                     if (this.realField) {
-                        delete this.realField[ds.key()];
+                        delete this.realField[key];
                     }
                 }
                 else {
                     this.realField = this.realField || {};
-                    this.realField[ds.key()] = val;
+                    this.realField[key] = val;
                 }
                 this.setEntityOnParent(this.realField);
             };
             MapEvent.prototype.remove = function (keyOrValue) {
                 var _this = this;
                 var key = this.normalizeKey(keyOrValue);
+                this.addToInternal('child_removed', key, null, null);
                 return new Promise(function (ok, err) {
                     var fb = _this.state.getTree(_this.getUrl() + key + '/');
                     fb.remove(function (fberr) {
@@ -2099,6 +2103,10 @@ var Db;
             };
             MapEvent.prototype.clear = function () {
                 var _this = this;
+                if (this.realField) {
+                    this.realField = {};
+                    this.setEntityOnParent(this.realField);
+                }
                 return new Promise(function (ok, err) {
                     var fb = _this.state.getTree(_this.getUrl());
                     var obj = {};
@@ -2147,7 +2155,7 @@ var Db;
                     det.payload = val;
                     prevKey = ds.key();
                     subev.applyHooks(det);
-                    _this.addToInternal('child_added', ds, val, det);
+                    _this.addToInternal('child_added', ds.key(), val, det);
                 });
             };
             MapEvent.prototype.query = function () {
@@ -2178,8 +2186,8 @@ var Db;
                     return this.arrayValue.length;
                 return pos + 1;
             };
-            EventedArray.prototype.addToInternal = function (event, ds, val, det) {
-                var key = ds.key();
+            EventedArray.prototype.addToInternal = function (event, key, val, det) {
+                var key = key;
                 if (!this.keys || !this.arrayValue || !this.collection.realField) {
                     this.keys = [];
                     this.arrayValue = [];
@@ -2187,15 +2195,16 @@ var Db;
                 }
                 var curpos = this.findPositionFor(key);
                 if (event == 'child_removed') {
-                    delete this.collection.realField[ds.key()];
+                    delete this.collection.realField[key];
                     if (curpos > -1) {
                         this.arrayValue.splice(curpos, 1);
                         this.keys.splice(curpos, 1);
                     }
                     return;
                 }
-                this.collection.realField[ds.key()] = val;
-                var newpos = this.findPositionAfter(det.precedingKey);
+                this.collection.realField[key] = val;
+                // TODO this does not keep sorting
+                var newpos = det ? this.findPositionAfter(det.precedingKey) : 0;
                 if (curpos == newpos) {
                     this.arrayValue[curpos] = val;
                     return;
@@ -2280,8 +2289,8 @@ var Db;
             ArrayCollectionEvent.prototype.intSuperAdd = function (key, value) {
                 return _super.prototype.add.call(this, key, value);
             };
-            ArrayCollectionEvent.prototype.addToInternal = function (event, ds, val, det) {
-                this.evarray.addToInternal(event, ds, val, det);
+            ArrayCollectionEvent.prototype.addToInternal = function (event, key, val, det) {
+                this.evarray.addToInternal(event, key, val, det);
                 this.setEntityOnParent(this.evarray.arrayValue);
             };
             ArrayCollectionEvent.prototype.load = function (ctx) {
@@ -2759,7 +2768,7 @@ var Db;
             };
             DbState.prototype.erase = function () {
                 this.reset();
-                new Firebase(this.getUrl()).remove();
+                this.treeRoot.getUrl(this.getUrl()).remove();
             };
             DbState.prototype.reset = function () {
                 // Automatic off for all handlers
@@ -2924,6 +2933,9 @@ var Db;
                     return evt['load'](ctx);
                 }
                 throw new Error("The url " + url + " cannot be loaded");
+            };
+            DbState.prototype.tree = function () {
+                return this.treeRoot;
             };
             /**
             * Executes a method on server-side. Payload is the only parameter passed to the "method" event

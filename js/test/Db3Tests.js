@@ -2012,6 +2012,7 @@ describe('Db3 >', function () {
                 var sub = new SubEntityOth();
                 sub.str = 'added';
                 return Db(wm1.embedMap).add('d', sub).then(function () {
+                    assert("Added to the local map").when(wm1.embedMap['d']).is(sub);
                     return new Promise(function (ok) {
                         wm1Fb.child('embedMap').once('value', ok);
                     });
@@ -2028,6 +2029,7 @@ describe('Db3 >', function () {
                 var wm1 = Db(WithMap).get('wm2');
                 var wp1 = Db(WithProps).get('wp1');
                 return Db(wm1.refMap).add('d', wp1).then(function () {
+                    assert("Added to the local map").when(wm1.refMap['d']).is(wp1);
                     return new Promise(function (ok) {
                         wm2Fb.child('refMap').once('value', ok);
                     });
@@ -2041,7 +2043,10 @@ describe('Db3 >', function () {
             });
             it('should remove a key from the map', function () {
                 var wm1 = Db(WithMap).get('wm1');
-                return Db(wm1.embedMap).remove('b').then(function () {
+                return Db(wm1.embedMap).load(_this).then(function () {
+                    return Db(wm1.embedMap).remove('b');
+                }).then(function () {
+                    assert("Removed from the local map").when(wm1.embedMap['b']).is(M.aFalsey);
                     return new Promise(function (ok) {
                         wm1Fb.child('embedMap').once('value', ok);
                     });
@@ -2054,7 +2059,10 @@ describe('Db3 >', function () {
             });
             it('should clear the map', function () {
                 var wm1 = Db(WithMap).get('wm1');
-                return Db(wm1.embedMap).clear().then(function () {
+                return Db(wm1.embedMap).load(_this).then(function () {
+                    return Db(wm1.embedMap).clear();
+                }).then(function () {
+                    assert("Removed from the local map").when(wm1.embedMap['b']).is(M.aFalsey);
                     return new Promise(function (ok) {
                         wm1Fb.child('embedMap').once('value', ok);
                     });
@@ -2178,6 +2186,7 @@ describe('Db3 >', function () {
                 var ns = new SubEntity();
                 ns.str = 'added';
                 return Db(ws1.embedSet).add(ns).then(function () {
+                    assert("New element is in the set").when(ws1.embedSet).is(M.arrayContaining(ns));
                     return new Promise(function (ok) {
                         wst1Fb.child('embedSet').on('value', ok);
                     });
@@ -2203,6 +2212,7 @@ describe('Db3 >', function () {
                 var ws1 = Db(WithSet).get('ws2');
                 var wp4 = Db(WithProps).get('wp4');
                 return Db(ws1.refSet).add(wp4).then(function () {
+                    assert("New element is in the set").when(ws1.refSet).is(M.arrayContaining(wp4));
                     return new Promise(function (ok) {
                         wst2Fb.child('refSet').on('value', ok);
                     });
@@ -2326,6 +2336,15 @@ describe('Db3 >', function () {
                     assert('right sub 2').when(vals[1]).is(M.objectMatching({
                         str: 'sub2'
                     }));
+                });
+            });
+            it('should remove element from the ref set', function () {
+                var ws1 = Db(WithSet).get('ws2');
+                var wp1 = Db(WithProps).get('wp1');
+                return Db(ws1.refSet).load(_this).then(function () {
+                    return Db(ws1.refSet).remove(wp1);
+                }).then(function () {
+                    assert("Removed from the set").when(ws1.refSet).is(M.not(M.arrayContaining(wp1)));
                 });
             });
         });

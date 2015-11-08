@@ -275,6 +275,10 @@ module Db {
 			 */
 			erase();
 			
+			/**
+			 * Gives access to the underlying DbTree implementation.
+			 */
+			tree() :Spi.DbTreeRoot;
 			
 			executeServerMethod(ctx :IRemoteCallContext, payload :any) :Promise<any>;
 		}
@@ -3079,7 +3083,7 @@ module Db {
 				subev.applyHooks(det);
 				
 				if (handler.istracking) {
-					this.addToInternal(event,ds,val,det);
+					this.addToInternal(event,ds.key(),val,det);
 				}
 				
 				handler.handle(det);
@@ -3096,16 +3100,21 @@ module Db {
 				}
 				var evt = this.findCreateChildFor(k);
 				evt.setEntity(v);
-				return new Promise<any>((ok,err) => {
-					var fb = this.state.getTree(evt.getUrl());
-					fb.set(evt.serialize(false), (fberr) => {
-						if (fberr) {
-							err(fberr);
-						} else {
-							ok(null);
-						}
+
+				this.addToInternal('child_added', k, v, null);				
+				
+				if (this.getUrl()) {
+					return new Promise<any>((ok,err) => {
+						var fb = this.state.getTree(evt.getUrl());
+						fb.set(evt.serialize(false), (fberr) => {
+							if (fberr) {
+								err(fberr);
+							} else {
+								ok(null);
+							}
+						});
 					});
-				});
+				}
 				// Can't use save because reference event save does not save the reference
 				//return (<IEntityOrReferenceEvent<E>><any>evt).save();
 			}
@@ -3129,20 +3138,23 @@ module Db {
 				return <string>key;
 			}
 			
-			addToInternal(event :string, ds :Spi.DbTreeSnap, val :Api.Entity, det :EventDetails<E>) {
+			addToInternal(event :string, key :string, val :Api.Entity, det :EventDetails<E>) {
 				if (event == 'child_removed') {
 					if (this.realField) {
-						delete this.realField[ds.key()];
+						delete this.realField[key];
 					}
 				} else {
 					this.realField = this.realField || {};
-					this.realField[ds.key()] = val;
+					this.realField[key] = val;
 				}
 				this.setEntityOnParent(this.realField);
 			}
 
 			remove(keyOrValue :string|number|Api.Entity) :Promise<any> {
 				var key = this.normalizeKey(keyOrValue);
+				
+				this.addToInternal('child_removed', key, null, null);
+								
 				return new Promise<any>((ok,err) => {
 					var fb = this.state.getTree(this.getUrl() + key +'/');
 					fb.remove((fberr) => {
@@ -3194,6 +3206,10 @@ module Db {
 			}
 			
 			clear() :Promise<any> {
+				if (this.realField) {
+					this.realField = {};
+					this.setEntityOnParent(this.realField);
+				}
 				return new Promise<any>((ok,err) => {
 					var fb = this.state.getTree(this.getUrl());
 					var obj = {};
@@ -3241,7 +3257,7 @@ module Db {
 					prevKey = ds.key();
 					subev.applyHooks(det);
 					
-					this.addToInternal('child_added',ds,val,det);
+					this.addToInternal('child_added',ds.key(),val,det);
 				});				
 			}
 			
@@ -3277,8 +3293,8 @@ module Db {
 			}
   			
 			
-			addToInternal(event :string, ds :Spi.DbTreeSnap, val :E, det :EventDetails<E>) {
-				var key = ds.key();
+			addToInternal(event :string, key, val :E, det :EventDetails<E>) {
+				var key = key;
 				if (!this.keys || !this.arrayValue || !this.collection.realField) {
 					this.keys = [];
 					this.arrayValue = [];
@@ -3286,16 +3302,17 @@ module Db {
 				}
 				var curpos = this.findPositionFor(key);
 				if (event == 'child_removed') {
-					delete this.collection.realField[ds.key()];
+					delete this.collection.realField[key];
 					if (curpos > -1) {
 						this.arrayValue.splice(curpos,1);
 						this.keys.splice(curpos,1);
 					}
 					return;
 				}
-				this.collection.realField[ds.key()] = val;
+				this.collection.realField[key] = val;
 
-				var newpos = this.findPositionAfter(det.precedingKey);
+				// TODO this does not keep sorting
+				var newpos = det ? this.findPositionAfter(det.precedingKey) : 0;
 				
 				if (curpos == newpos) {
 					this.arrayValue[curpos] = val;
@@ -3378,8 +3395,8 @@ module Db {
 				return super.add(key,value);
 			}
 
-			addToInternal(event :string, ds :Spi.DbTreeSnap, val :E, det :EventDetails<E>) {
-				this.evarray.addToInternal(event, ds, val, det);
+			addToInternal(event :string, key :string, val :E, det :EventDetails<E>) {
+				this.evarray.addToInternal(event, key, val, det);
 				this.setEntityOnParent(this.evarray.arrayValue);
 			}
 
@@ -3865,7 +3882,7 @@ module Db {
 			
 			erase() {
 				this.reset();
-				new Firebase(this.getUrl()).remove();
+				this.treeRoot.getUrl(this.getUrl()).remove();
 			}
 			
 			reset() {
@@ -4031,6 +4048,10 @@ module Db {
 					return evt['load'](ctx);
 				}
 				throw new Error("The url " + url + " cannot be loaded");
+			}
+			
+			tree() :Spi.DbTreeRoot {
+				return this.treeRoot;
 			}
 			
 			
