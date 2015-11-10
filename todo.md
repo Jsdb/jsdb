@@ -1,3 +1,23 @@
+Setting an array leads to duplication on database
+--------------------------------------------------------
+
+Observed in BattleStatus.moves, creating an array with 4 new moves and settings
+them and then saving, when on the database there were already 4 old moves,
+lead to duplication on the database and 8 moves being there.
+
+This is because the ids can't match, however since the field was explicitly set
+the collections should have been considered loaded and serialized as-is with a set
+and not updated adding the new values.
+
+More in general:
+- if expicit modifier are called, the modification is progressive, and the in ram 
+collection is modified in a plausible way (does not need to be entirely loaded).
+- if a collection is set using the setter, it has to be considered valid in ram as if just loaded
+- if a collection is loaded, must be saved (and serialized) with a SET
+
+  
+
+
 Number of possible weaknesses
 -----------------------------
 
@@ -14,7 +34,10 @@ on the instance (but they would if it was with a .live), but they could an quite
 
 If I load an entity, then later on I modify it and save it back, I could overwrite 
 data written by others. Keeping it live (partially) prevents this. (but, to be honest,
-this is what scalabe dbs do anyway, so may not be a concern).
+this is what scalable dbs do anyway, so may not be a concern). On the other end,
+having it live can lead to incoherent data (for example, i check A, and based on the 
+check I modify B async and the save, but while I was in the process of modifying
+B someone changed A, so now there is a combination of A and B that could not be).
 
 
 Rename "dereference" to "get"

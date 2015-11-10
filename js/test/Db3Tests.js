@@ -752,6 +752,8 @@ describe('Db3 >', function () {
             assert("it's parent is the right one").when(ge.parent).is(M.exactly(ws1event));
             assert("it has the right url").when(ge.getUrl()).is('/withSubs/ws1/sub/');
             assert("it's right type").when(ge).is(M.instanceOf(Db3.Internal.EntityEvent));
+            assert("gets correctly the is").when(Db(ws1).getId()).is('ws1');
+            assert("refuses to get sub entity id").when(Db(ws1.sub).getId()).is(null);
         });
         it("avoids getting confused with other calls to getters", function () {
             var wr1 = Db(WithRef).get('wr1');

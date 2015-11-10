@@ -1842,6 +1842,7 @@ declare module Db {
             getName(): string;
             createInstance(): Api.Entity;
             rightInstance(entity: Api.Entity): boolean;
+            isInstance(entity: Api.Entity): boolean;
             mergeSuper(sup: ClassMetadata): void;
             addSubclass(sub: ClassMetadata): void;
             findForDiscriminator(disc: string): ClassMetadata;

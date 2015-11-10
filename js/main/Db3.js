@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151108_173828_master_1.0.0_db228c1
+ * TSDB version : 20151109_100316_master_1.0.0_705513b
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151108_173828_master_1.0.0_db228c1';
+var Version = '20151109_100316_master_1.0.0_705513b';
 var Db = (function () {
     function Db() {
     }
@@ -1574,10 +1574,15 @@ var Db;
                 return evt.entity;
             };
             EntityEvent.prototype.getId = function () {
-                if (this.parent instanceof EntityRoot) {
-                    return this.parent.idOf(this.entity);
-                }
-                return null;
+                var url = this.getUrl();
+                if (!url)
+                    return null;
+                var er = this.state.entityRootFromUrl(url);
+                url = er.getRemainingUrl(url);
+                if (url.split('/').length > 2)
+                    return null;
+                return url.replace('/', '');
+                ;
             };
             return EntityEvent;
         })(SingleDbHandlerEvent);
@@ -1802,7 +1807,7 @@ var Db;
             ReferenceEvent.prototype.getId = function () {
                 if (!this.pointedEvent)
                     return null;
-                return this.pointedEvent.getUrl();
+                return this.pointedEvent.getId();
             };
             return ReferenceEvent;
         })(SingleDbHandlerEvent);
@@ -2529,6 +2534,8 @@ var Db;
                 return evt.entity;
             };
             EntityRoot.prototype.idOf = function (entity) {
+                if (!this.classMeta.isInstance(entity))
+                    throw new Error("Instance is not of the right type");
                 var ev = this.state.createEvent(entity);
                 if (!ev)
                     return null;
@@ -3179,6 +3186,10 @@ var Db;
                 return new this.ctor();
             };
             ClassMetadata.prototype.rightInstance = function (entity) {
+                // TODO maybe should do a stricter check here?
+                return entity && entity instanceof this.ctor;
+            };
+            ClassMetadata.prototype.isInstance = function (entity) {
                 return entity && entity instanceof this.ctor;
             };
             ClassMetadata.prototype.mergeSuper = function (sup) {

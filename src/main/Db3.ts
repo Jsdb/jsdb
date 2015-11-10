@@ -2679,10 +2679,12 @@ module Db {
 			}
 			
 			getId() :string {
-				if (this.parent instanceof EntityRoot) {
-					return (<EntityRoot<E>>this.parent).idOf(<E>this.entity);
-				}
-				return null;
+				var url = this.getUrl();
+				if (!url) return null;
+				var er = this.state.entityRootFromUrl(url);
+				url = er.getRemainingUrl(url);
+				if (url.split('/').length > 2) return null;
+				return url.replace('/','');;
 			}
 		}
 		
@@ -2901,7 +2903,7 @@ module Db {
 			
 			getId() :string {
 				if (!this.pointedEvent) return null;
-				return this.pointedEvent.getUrl();
+				return this.pointedEvent.getId();
 			}
 			
 		}
@@ -3634,6 +3636,7 @@ module Db {
 			}
 			
 			idOf(entity :E) :string {
+				if (!this.classMeta.isInstance(entity)) throw new Error("Instance is not of the right type");
 				var ev = this.state.createEvent(entity);
 				if (!ev) return null;
 				var eu = ev.getUrl();
@@ -4285,8 +4288,14 @@ module Db {
 			}
 			
 			rightInstance(entity :Api.Entity) :boolean {
+				// TODO maybe should do a stricter check here?
 				return entity && entity instanceof this.ctor;
 			}
+			
+			isInstance(entity :Api.Entity) :boolean {
+				return entity && entity instanceof this.ctor;
+			}
+			
 			
 			mergeSuper(sup :ClassMetadata) {
 				if (!this.root) {
