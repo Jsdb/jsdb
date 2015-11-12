@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151112_153903_master_1.0.0_3b4af54
+ * TSDB version : 20151112_162354_master_1.0.0_b36c693
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151112_153903_master_1.0.0_3b4af54';
+var Version = '20151112_162354_master_1.0.0_b36c693';
 var Db = (function () {
     function Db() {
     }
@@ -750,10 +750,15 @@ var Db;
              */
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
-                // TODO clean the children if entity changed? they could be pointing to old instance data
+                // clean the children if entity changed? they could be pointing to old instance data
+                // TODO maybe to this only if the entity has actually changed!
                 this.eachChildren(function (name, child) { child.destroy(); });
                 this.children = {};
             };
+            /**
+             * Destroy this event, disconnecting it from the parent
+             * and from the entity.
+             */
             GenericEvent.prototype.destroy = function () {
                 this.state.evictFromCache(this);
                 this.setEntity(null);
@@ -762,6 +767,10 @@ var Db;
                 }
                 this.parent = null;
             };
+            /**
+             * Get a value from the entity, triggering the {@link nextInternal}
+             * flag to notify meta getters not to track this request.
+             */
             GenericEvent.prototype.getFromEntity = function (name) {
                 nextInternal = true;
                 try {
@@ -774,6 +783,10 @@ var Db;
                     nextInternal = false;
                 }
             };
+            /**
+             * Set a value on the entity, triggering the {@link nextInternal}
+             * flag to notify meta setters not to track this request.
+             */
             GenericEvent.prototype.setOnEntity = function (name, val) {
                 nextInternal = true;
                 try {
@@ -1366,9 +1379,11 @@ var Db;
                             set[k] = true;
                         }
                     }
+                    // Nullify anything on thte entity not found on the databse
                     for (var k in this.entity) {
                         if (k == 'constructor')
                             continue;
+                        // Respect ignored fields
                         if (k.charAt(0) == '_')
                             continue;
                         if (set[k])
@@ -1376,6 +1391,7 @@ var Db;
                         var val = this.getFromEntity(k);
                         if (typeof val === 'function')
                             continue;
+                        // If there is a child, delegate to it
                         var descr = this.classMeta.descriptors[k];
                         if (descr) {
                             var subev = this.findCreateChildFor(descr);
@@ -2963,6 +2979,9 @@ var Db;
                     return roote;
                 }
             };
+            /**
+             * Adds an event to the cache.
+             */
             DbState.prototype.storeInCache = function (evt) {
                 var url = evt.getUrl();
                 if (!url)
@@ -2973,6 +2992,9 @@ var Db;
                 }
                 this.cache[url] = evt;
             };
+            /**
+             * Removes an event from the cache.
+             */
             DbState.prototype.evictFromCache = function (evt) {
                 var url = evt.getUrl();
                 if (!url)

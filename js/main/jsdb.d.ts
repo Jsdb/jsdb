@@ -1275,8 +1275,20 @@ declare module 'jsdb' {
                                 * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
                                 */
                             setEntity(entity: Api.Entity): void;
+                            /**
+                                * Destroy this event, disconnecting it from the parent
+                                * and from the entity.
+                                */
                             destroy(): void;
+                            /**
+                                * Get a value from the entity, triggering the {@link nextInternal}
+                                * flag to notify meta getters not to track this request.
+                                */
                             getFromEntity(name: string): any;
+                            /**
+                                * Set a value on the entity, triggering the {@link nextInternal}
+                                * flag to notify meta setters not to track this request.
+                                */
                             setOnEntity(name: string, val: any): void;
                             protected setEntityOnParent(val?: any): void;
                             /**
@@ -1770,7 +1782,13 @@ declare module 'jsdb' {
                             bindEntity(e: Api.Entity, ev: EntityEvent<any>): void;
                             createEvent(e: Api.Entity, stack?: MetaDescriptor[] | string[]): GenericEvent;
                             loadEvent(url: string): GenericEvent;
+                            /**
+                                * Adds an event to the cache.
+                                */
                             storeInCache(evt: GenericEvent): void;
+                            /**
+                                * Removes an event from the cache.
+                                */
                             evictFromCache(evt: GenericEvent): void;
                             fetchFromCache(url: string): GenericEvent;
                             loadEventWithInstance(url: string): GenericEvent;
