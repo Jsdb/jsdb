@@ -1870,6 +1870,10 @@ module Db {
 				this.children = {};
 			}
 			
+			/**
+			 * Destroy this event, disconnecting it from the parent
+			 * and from the entity.
+			 */
 			destroy() {
 				this.state.evictFromCache(this);
 				this.setEntity(null);
@@ -1879,6 +1883,10 @@ module Db {
 				this.parent = null;
 			}
 			
+			/**
+			 * Get a value from the entity, triggering the {@link nextInternal}
+			 * flag to notify meta getters not to track this request.
+			 */
 			getFromEntity(name :string) {
 				nextInternal = true;
 				try {
@@ -1890,6 +1898,10 @@ module Db {
 				}
 			}
 			
+			/**
+			 * Set a value on the entity, triggering the {@link nextInternal}
+			 * flag to notify meta setters not to track this request.
+			 */
 			setOnEntity(name :string, val :any) {
 				nextInternal = true;
 				try {
@@ -2480,12 +2492,15 @@ module Db {
 							set[k] = true;
 						}
 					}
+					// Nullify anything on thte entity not found on the databse
 					for (var k in this.entity) {
 						if (k == 'constructor') continue;
+						// Respect ignored fields
 						if (k.charAt(0) == '_') continue;
 						if (set[k]) continue; 
 						var val = this.getFromEntity(k);
 						if (typeof val === 'function') continue;
+						// If there is a child, delegate to it
 						var descr = this.classMeta.descriptors[k];
 						if (descr) {
 							var subev = this.findCreateChildFor(descr);
@@ -4069,6 +4084,9 @@ module Db {
 				}
 			}
 			
+			/**
+			 * Adds an event to the cache.
+			 */
 			storeInCache(evt :GenericEvent) {
 				var url = evt.getUrl();
 				if (!url) return;
@@ -4079,6 +4097,9 @@ module Db {
 				this.cache[url] = evt;
 			}
 			
+			/**
+			 * Removes an event from the cache.
+			 */
 			evictFromCache(evt :GenericEvent) {
 				var url = evt.getUrl();
 				if (!url) return;
