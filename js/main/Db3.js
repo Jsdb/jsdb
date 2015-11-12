@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151112_175501_master_1.0.0_4202d86
+ * TSDB version : 20151112_223030_master_1.0.0_1cea487
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151112_175501_master_1.0.0_4202d86';
+var Version = '20151112_223030_master_1.0.0_1cea487';
 var Db = (function () {
     function Db() {
     }
@@ -2283,8 +2283,8 @@ var Db;
                         subev.applyHooks(det);
                         _this.addToInternal('child_added', ds.key(), val, det);
                     });
+                    this.collectionLoaded = true;
                 }
-                this.collectionLoaded = true;
             };
             MapEvent.prototype.query = function () {
                 var ret = new QueryImpl(this);
@@ -3000,7 +3000,7 @@ var Db;
                 // Find the entity root
                 var entroot = this.entityRootFromUrl(url);
                 if (!entroot) {
-                    throw "The url " + url + " cannot be connected to an entity";
+                    throw new Error("The url " + url + " cannot be connected to an entity");
                 }
                 var remurl = entroot.getRemainingUrl(url);
                 // Tokenize the url

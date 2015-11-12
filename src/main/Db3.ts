@@ -3373,8 +3373,8 @@ module Db {
 						
 						this.addToInternal('child_added',ds.key(),val,det);
 					});
+					this.collectionLoaded = true;		
 				}
-				this.collectionLoaded = true;		
 			}
 			
 			query() :Api.IQuery<E> {
@@ -4105,7 +4105,7 @@ module Db {
 				// Find the entity root
 				var entroot = this.entityRootFromUrl(url);
 				if (!entroot) {
-					throw "The url " + url + " cannot be connected to an entity";
+					throw new Error("The url " + url + " cannot be connected to an entity");
 				}
 				var remurl = entroot.getRemainingUrl(url);
 				

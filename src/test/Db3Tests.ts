@@ -192,6 +192,29 @@ class WithList {
 	
 	@Db3.list(WithProps, true)
 	refList :WithProps[] = [];
+	
+	str :string;
+}
+
+
+@Db3.root('complex')
+class Complex {
+	@Db3.list(SubEntity, false)
+	embedList :SubEntity[] = [];
+	
+	@Db3.reference(WithProps)
+	ref :WithProps;
+	
+	@Db3.embedded(SubEntity)
+	sub :SubEntity; 
+	
+	@Db3.embedded(Complex)
+	nested :Complex;
+	
+	@Db3.reference(Complex)
+	cross :Complex;
+	
+	str :string;	
 }
 
 /*
@@ -266,6 +289,11 @@ describe('Db3 >', () => {
 	var wlt1Fb :Firebase;
 	var wlt2Fb :Firebase;
 	var wlt3Fb :Firebase;
+	
+	var complexFb :Firebase;
+	var cp1Fb :Firebase;
+	var cp2Fb :Firebase;
+	var cp3Fb :Firebase;
 	
 	var rooton;
 	var progr = 0;
@@ -592,7 +620,8 @@ describe('Db3 >', () => {
 					str: '1 c',
 					_dis: 'oth'
 				}
-			}
+			},
+			str: 'dummy'
 		}, opCnter);
 		
 		wlt2Fb = wltFb.child('wl2');
@@ -602,8 +631,55 @@ describe('Db3 >', () => {
 				'0PMg765te9nNvKoP08Ndpa' : { _ref: baseUrl + 'withProps/wp1'},
 				'0PMg765te9nNvKoP08Ndpb' : { _ref: baseUrl + 'withProps/wp2'},
 				'0PMg765te9nNvKoP08Ndpc' : { _ref: baseUrl + 'withProps/more*wp3'}
-			}
+			},
+			str: 'dummy'
 		}, opCnter);
+		
+		
+		complexFb = new Firebase(baseUrl + '/complex');
+		cp1Fb = complexFb.child('cp1');
+		opcnt++;
+		cp1Fb.set({
+			embedList: {
+				'0PMg765te9nNvKoP08Ndpa' : { str: '3 a'},
+				'0PMg765te9nNvKoP08Ndpb' : { str: '2 b'},
+				'0PMg765te9nNvKoP08Ndpc' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			},
+			ref: {
+				_ref: wp1Fb.toString() + '/'
+			},
+			sub: {
+				str: 'Sub String 1'
+			},
+			str: 'dummy'
+		}, opCnter);
+		cp2Fb = complexFb.child('cp2');
+		opcnt++;
+		cp2Fb.set({
+			embedList: {
+				'0PMg765te9nNvKoP08Ndpa' : { str: '3 a'},
+				'0PMg765te9nNvKoP08Ndpb' : { str: '2 b'},
+				'0PMg765te9nNvKoP08Ndpc' : { 
+					str: '1 c',
+					_dis: 'oth'
+				}
+			},
+			ref: {
+				_ref: wp2Fb.toString() + '/'
+			},
+			sub: {
+				str: 'Sub String 1'
+			},
+			cross: {
+				_ref: cp1Fb.toString() + '/'
+			},
+			str: 'dummy'
+		}, opCnter);
+		
+		
 		
 		// Keep reference alive in ram, faster tests and less side effects
 		var myp = progr++;
@@ -1889,7 +1965,6 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
-			
 		});
 	});
 	
@@ -3236,6 +3311,30 @@ describe('Db3 >', () => {
 				return Db(wp2).load(this);
 			}).then(()=>{
 				assert("Chains with true").when(Db(wp1).and(wp2).isLoaded()).is(true);
+			});
+		});
+	});
+
+	describe.only('Bugs >', ()=>{
+		it('should not wipe out collections on a reference', ()=>{
+			var cp2 = Db(Complex).get('cp2');
+			var cp3 = new Complex();
+			return Db(cp2).load(this).then(()=>{
+				Db(cp3).assignUrl();
+				cp3.cross = cp2.cross;
+				return Db(cp3).save();
+			}).then(()=>{
+				cp3.cross.str = 'ciao';
+				return Db(cp3.cross).save();
+			}).then(()=>{
+				return new Promise<FirebaseDataSnapshot>((res)=>{
+					cp1Fb.on("value",res);
+				});
+			}).then((ds)=>{
+				var val = ds.val();
+				console.log(val);
+				assert("Collection still there").when(val['embedList']).is(M.anObject);
+				assert("String changed").when(val['str']).is('ciao');
 			});
 		});
 	});

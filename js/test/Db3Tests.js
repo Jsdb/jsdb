@@ -278,6 +278,30 @@ var WithList = (function () {
     ], WithList);
     return WithList;
 })();
+var Complex = (function () {
+    function Complex() {
+        this.embedList = [];
+    }
+    __decorate([
+        Db3.list(SubEntity, false)
+    ], Complex.prototype, "embedList");
+    __decorate([
+        Db3.reference(WithProps)
+    ], Complex.prototype, "ref");
+    __decorate([
+        Db3.embedded(SubEntity)
+    ], Complex.prototype, "sub");
+    __decorate([
+        Db3.embedded(Complex)
+    ], Complex.prototype, "nested");
+    __decorate([
+        Db3.reference(Complex)
+    ], Complex.prototype, "cross");
+    Complex = __decorate([
+        Db3.root('complex')
+    ], Complex);
+    return Complex;
+})();
 /*
 class WithCollections extends Db.Entity {
     list = Db.list(SubEntity);
@@ -340,6 +364,10 @@ describe('Db3 >', function () {
     var wlt1Fb;
     var wlt2Fb;
     var wlt3Fb;
+    var complexFb;
+    var cp1Fb;
+    var cp2Fb;
+    var cp3Fb;
     var rooton;
     var progr = 0;
     beforeEach(function (done) {
@@ -634,7 +662,8 @@ describe('Db3 >', function () {
                     str: '1 c',
                     _dis: 'oth'
                 }
-            }
+            },
+            str: 'dummy'
         }, opCnter);
         wlt2Fb = wltFb.child('wl2');
         opcnt++;
@@ -643,7 +672,50 @@ describe('Db3 >', function () {
                 '0PMg765te9nNvKoP08Ndpa': { _ref: baseUrl + 'withProps/wp1' },
                 '0PMg765te9nNvKoP08Ndpb': { _ref: baseUrl + 'withProps/wp2' },
                 '0PMg765te9nNvKoP08Ndpc': { _ref: baseUrl + 'withProps/more*wp3' }
-            }
+            },
+            str: 'dummy'
+        }, opCnter);
+        complexFb = new Firebase(baseUrl + '/complex');
+        cp1Fb = complexFb.child('cp1');
+        opcnt++;
+        cp1Fb.set({
+            embedList: {
+                '0PMg765te9nNvKoP08Ndpa': { str: '3 a' },
+                '0PMg765te9nNvKoP08Ndpb': { str: '2 b' },
+                '0PMg765te9nNvKoP08Ndpc': {
+                    str: '1 c',
+                    _dis: 'oth'
+                }
+            },
+            ref: {
+                _ref: wp1Fb.toString() + '/'
+            },
+            sub: {
+                str: 'Sub String 1'
+            },
+            str: 'dummy'
+        }, opCnter);
+        cp2Fb = complexFb.child('cp2');
+        opcnt++;
+        cp2Fb.set({
+            embedList: {
+                '0PMg765te9nNvKoP08Ndpa': { str: '3 a' },
+                '0PMg765te9nNvKoP08Ndpb': { str: '2 b' },
+                '0PMg765te9nNvKoP08Ndpc': {
+                    str: '1 c',
+                    _dis: 'oth'
+                }
+            },
+            ref: {
+                _ref: wp2Fb.toString() + '/'
+            },
+            sub: {
+                str: 'Sub String 1'
+            },
+            cross: {
+                _ref: cp1Fb.toString() + '/'
+            },
+            str: 'dummy'
         }, opCnter);
         // Keep reference alive in ram, faster tests and less side effects
         var myp = progr++;
@@ -3022,6 +3094,29 @@ describe('Db3 >', function () {
                 return Db(wp2).load(_this);
             }).then(function () {
                 assert("Chains with true").when(Db(wp1).and(wp2).isLoaded()).is(true);
+            });
+        });
+    });
+    describe.only('Bugs >', function () {
+        it('should not wipe out collections on a reference', function () {
+            var cp2 = Db(Complex).get('cp2');
+            var cp3 = new Complex();
+            return Db(cp2).load(_this).then(function () {
+                Db(cp3).assignUrl();
+                cp3.cross = cp2.cross;
+                return Db(cp3).save();
+            }).then(function () {
+                cp3.cross.str = 'ciao';
+                return Db(cp3.cross).save();
+            }).then(function () {
+                return new Promise(function (res) {
+                    cp1Fb.on("value", res);
+                });
+            }).then(function (ds) {
+                var val = ds.val();
+                console.log(val);
+                assert("Collection still there").when(val['embedList']).is(M.anObject);
+                assert("String changed").when(val['str']).is('ciao');
             });
         });
     });
