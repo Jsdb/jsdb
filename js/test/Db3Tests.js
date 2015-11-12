@@ -634,14 +634,6 @@ describe('Db3 >', function () {
                     str: '1 c',
                     _dis: 'oth'
                 }
-            },
-            sortedList: {
-                '0PMg765te9nNvKoP08Ndpa': { str: '3 a' },
-                '0PMg765te9nNvKoP08Ndpb': { str: '2 b' },
-                '0PMg765te9nNvKoP08Ndpc': {
-                    str: '1 c',
-                    _dis: 'oth'
-                }
             }
         }, opCnter);
         wlt2Fb = wltFb.child('wl2');
@@ -2192,6 +2184,38 @@ describe('Db3 >', function () {
                     assert('has removed all elements').when(ds.val()).is(M.objectMatchingStrictly({}));
                 });
             });
+            it('should update a cleared map when loading entity', function () {
+                var wm1 = Db(WithMap).get('wm1');
+                return Db(wm1).load(_this).then(function () {
+                    var ks = 0;
+                    for (var k in wm1.embedMap)
+                        ks++;
+                    assert("Map is filled").when(ks).is(3);
+                    wm1Fb.update({ embedMap: null });
+                    return Db(wm1).load(_this);
+                }).then(function () {
+                    var ks = 0;
+                    for (var k in wm1.embedMap)
+                        ks++;
+                    assert("Map is empty").when(ks).is(0);
+                });
+            });
+            it('should update a cleared map when loading map directly', function () {
+                var wm1 = Db(WithMap).get('wm1');
+                return Db(wm1.embedMap).load(_this).then(function () {
+                    var ks = 0;
+                    for (var k in wm1.embedMap)
+                        ks++;
+                    assert("Map is filled").when(ks).is(3);
+                    wm1Fb.update({ embedMap: null });
+                    return Db(wm1.embedMap).load(_this);
+                }).then(function () {
+                    var ks = 0;
+                    for (var k in wm1.embedMap)
+                        ks++;
+                    assert("Map is empty").when(ks).is(0);
+                });
+            });
             it('should fetch an embed with a specific key', function () {
                 var wm1 = Db(WithMap).get('wm1');
                 return Db(wm1.embedMap).fetch(_this, 'b').then(function (det) {
@@ -2469,6 +2493,28 @@ describe('Db3 >', function () {
                     assert("Removed from the set").when(ws1.refSet).is(M.not(M.arrayContaining(wp1)));
                 });
             });
+            it('should update a cleared set when loading entity', function () {
+                var ws1 = Db(WithSet).get('ws1');
+                return Db(ws1).load(_this).then(function () {
+                    assert("Set is filled").when(ws1.embedSet).is(M.withLength(3));
+                    wst1Fb.update({ embedSet: null });
+                    return Db(ws1).load(_this);
+                }).then(function () {
+                    assert("Set is an array").when(ws1.embedSet).is(M.anArray);
+                    assert("Set is empty").when(ws1.embedSet).is(M.withLength(0));
+                });
+            });
+            it('should update a cleared set when loading set directly', function () {
+                var ws1 = Db(WithSet).get('ws1');
+                return Db(ws1.embedSet).load(_this).then(function () {
+                    assert("Set is filled").when(ws1.embedSet).is(M.withLength(3));
+                    wst1Fb.update({ embedSet: null });
+                    return Db(ws1.embedSet).load(_this);
+                }).then(function () {
+                    assert("Set is an array").when(ws1.embedSet).is(M.anArray);
+                    assert("Set is empty").when(ws1.embedSet).is(M.withLength(0));
+                });
+            });
         });
         describe('List >', function () {
             it('should permit same reference more than once', function () {
@@ -2601,6 +2647,28 @@ describe('Db3 >', function () {
                     //assert('list is the new one').when(wl1.embedList).is(M.withLength(2));
                     assert('first element is new1').when(wl1.embedList[0].str).is('new1');
                     assert('second element is new2').when(wl1.embedList[1].str).is('new2');
+                });
+            });
+            it('should update a cleared list when loading entity', function () {
+                var wl1 = Db(WithList).get('wl1');
+                return Db(wl1).load(_this).then(function () {
+                    assert("List is filled").when(wl1.embedList).is(M.withLength(3));
+                    wlt1Fb.update({ embedList: null, mockValue: 1 });
+                    return Db(wl1).load(_this);
+                }).then(function () {
+                    assert("List is an array").when(wl1.embedList).is(M.anArray);
+                    assert("List is empty").when(wl1.embedList).is(M.withLength(0));
+                });
+            });
+            it('should update a cleared list when loading list directly', function () {
+                var wl1 = Db(WithList).get('wl1');
+                return Db(wl1.embedList).load(_this).then(function () {
+                    assert("List is filled").when(wl1.embedList).is(M.withLength(3));
+                    wlt1Fb.update({ embedList: null, mockValue: 1 });
+                    return Db(wl1.embedList).load(_this);
+                }).then(function () {
+                    assert("List is an array").when(wl1.embedList).is(M.anArray);
+                    assert("List is empty").when(wl1.embedList).is(M.withLength(0));
                 });
             });
         });

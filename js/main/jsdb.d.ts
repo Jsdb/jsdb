@@ -1534,6 +1534,9 @@ declare module 'jsdb' {
                             init(h: EventHandler): void;
                             applyHooks(ed: EventDetails<E>): void;
                             protected broadcast(ed: EventDetails<E>): void;
+                            protected nullify(set?: {
+                                    [index: string]: boolean;
+                            }): void;
                             parseValue(ds: Spi.DbTreeSnap): void;
                             internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
@@ -1668,6 +1671,7 @@ declare module 'jsdb' {
                             createKeyFor(value: Api.Entity): string;
                             normalizeKey(key: string | number | Api.Entity): string;
                             addToInternal(event: string, key: string, val: Api.Entity, det: EventDetails<E>): void;
+                            clearInternal(): void;
                             remove(keyOrValue: string | number | Api.Entity): Promise<any>;
                             fetch(ctx: Object, key: string | number | Api.Entity): Promise<EventDetails<E>>;
                             with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
@@ -1685,6 +1689,7 @@ declare module 'jsdb' {
                             keys: string[];
                             constructor(collection: MapEvent<E>);
                             addToInternal(event: string, key: any, val: E, det: EventDetails<E>): void;
+                            clearInternal(): void;
                             prepareSerializeSet(): void;
                             prepareSerializeList(): void;
                     }
@@ -1694,6 +1699,7 @@ declare module 'jsdb' {
                             add(value?: Api.Entity): Promise<any>;
                             intSuperAdd(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
                             addToInternal(event: string, key: string, val: E, det: EventDetails<E>): void;
+                            clearInternal(): void;
                             load(ctx: Object): Promise<E[]>;
                             dereference(ctx: Object): Promise<E[]>;
                     }

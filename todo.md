@@ -35,7 +35,10 @@ collection is modified in a plausible way (does not need to be entirely loaded).
 - if a collection is loaded, must be saved (and serialized) with a SET
 
 > the problem was a bit different : setting an array to empty, caused the entire
-> tree on Firebase to disappear, so when parsing the old value was untouched.  
+> tree on Firebase to disappear, so when parsing the old value was untouched.
+
+> moreover, now the collections are cleared both completely (in parseValue) and
+> incrementally when "value" events are received.  
 
 
 Number of possible weaknesses
@@ -738,3 +741,14 @@ the database it's "possible" children should be explored, and if a value is pres
 they should be created.
 
 
+Handle situation in which an entity has been deleted
+----------------------------------------------------
+
+Right now, loading again an entity that has been in the meanwhile
+deleted from the database gives no error, no warning, returns
+the entity as is.
+
+This is because EntityEvent.parseValue called with an empty value 
+does nothing.
+
+> Now entity event nullifies the entity also in this case.

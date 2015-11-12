@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151112_162354_master_1.0.0_b36c693
+ * TSDB version : 20151112_174302_master_1.0.0_f7dc825
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151112_162354_master_1.0.0_b36c693';
+var Version = '20151112_174302_master_1.0.0_f7dc825';
 var Db = (function () {
     function Db() {
     }
@@ -1328,6 +1328,33 @@ var Db;
                     _super.prototype.broadcast.call(_this, ed);
                 });
             };
+            EntityEvent.prototype.nullify = function (set) {
+                if (set === void 0) { set = {}; }
+                // Nullify anything on the entity not found on the databse
+                for (var k in this.entity) {
+                    if (k == 'constructor')
+                        continue;
+                    // Respect ignored fields
+                    if (k.charAt(0) == '_')
+                        continue;
+                    if (set[k])
+                        continue;
+                    var val = this.getFromEntity(k);
+                    if (!val)
+                        continue;
+                    if (typeof val === 'function')
+                        continue;
+                    // If there is a child, delegate to it
+                    var descr = this.classMeta.descriptors[k];
+                    if (descr) {
+                        var subev = this.findCreateChildFor(descr);
+                        subev.parseValue(null);
+                    }
+                    else {
+                        this.setOnEntity(k, undefined);
+                    }
+                }
+            };
             EntityEvent.prototype.parseValue = function (ds) {
                 this.loaded = true;
                 // Save last data for use in clone later
@@ -1379,31 +1406,11 @@ var Db;
                             set[k] = true;
                         }
                     }
-                    // Nullify anything on thte entity not found on the databse
-                    for (var k in this.entity) {
-                        if (k == 'constructor')
-                            continue;
-                        // Respect ignored fields
-                        if (k.charAt(0) == '_')
-                            continue;
-                        if (set[k])
-                            continue;
-                        var val = this.getFromEntity(k);
-                        if (typeof val === 'function')
-                            continue;
-                        // If there is a child, delegate to it
-                        var descr = this.classMeta.descriptors[k];
-                        if (descr) {
-                            var subev = this.findCreateChildFor(descr);
-                            subev.parseValue(null);
-                        }
-                        else {
-                            this.setOnEntity(k, undefined);
-                        }
-                    }
+                    this.nullify(set);
                 }
                 else {
-                    // if value is null, then set the entity null
+                    // if value is null, then nullify and set the entity null
+                    this.nullify();
                     this.setEntity(null);
                 }
                 // if it's embedded should set the value on the parent entity
@@ -2056,6 +2063,18 @@ var Db;
                     handler.unhook('value');
                     if (handler.ispopulating) {
                         this.collectionLoaded = true;
+                        // Clean not found elements
+                        var dval = ds.val();
+                        if (!dval) {
+                            this.clearInternal();
+                        }
+                        else {
+                            for (var k in this.realField) {
+                                if (typeof dval[k] === undefined) {
+                                    this.addToInternal('child_removed', k, null, null);
+                                }
+                            }
+                        }
                     }
                     handler.ispopulating = false;
                     det.type = Api.EventType.LIST_END;
@@ -2133,7 +2152,7 @@ var Db;
                 return key;
             };
             MapEvent.prototype.addToInternal = function (event, key, val, det) {
-                if (event == 'child_removed') {
+                if (event == 'child_removed' || val === null || typeof val === 'undefined') {
                     if (this.realField) {
                         delete this.realField[key];
                     }
@@ -2143,6 +2162,12 @@ var Db;
                     this.realField[key] = val;
                 }
                 this.setEntityOnParent(this.realField);
+            };
+            MapEvent.prototype.clearInternal = function () {
+                if (this.realField) {
+                    this.realField = {};
+                    this.setEntityOnParent(this.realField);
+                }
             };
             MapEvent.prototype.remove = function (keyOrValue) {
                 var _this = this;
@@ -2198,10 +2223,7 @@ var Db;
             };
             MapEvent.prototype.clear = function () {
                 var _this = this;
-                if (this.realField) {
-                    this.realField = {};
-                    this.setEntityOnParent(this.realField);
-                }
+                this.clearInternal();
                 return new Promise(function (ok, err) {
                     var fb = _this.state.getTree(_this.getUrl());
                     var obj = {};
@@ -2239,6 +2261,8 @@ var Db;
                 det.originalEvent = "child_added";
                 det.populating = true;
                 det.type = Api.EventType.ADDED;
+                // we have to clear the pre-existing data
+                this.clearInternal();
                 if (allds) {
                     allds.forEach(function (ds) {
                         var subev = _this.findCreateChildFor(ds.key());
@@ -2316,6 +2340,11 @@ var Db;
                     this.keys.splice(newpos, 0, key);
                 }
             };
+            EventedArray.prototype.clearInternal = function () {
+                this.keys = [];
+                this.arrayValue = [];
+                this.collection.realField = {};
+            };
             EventedArray.prototype.prepareSerializeSet = function () {
                 if (this.arrayValue) {
                     // Add all elements found in the array to the map
@@ -2389,6 +2418,10 @@ var Db;
             };
             ArrayCollectionEvent.prototype.addToInternal = function (event, key, val, det) {
                 this.evarray.addToInternal(event, key, val, det);
+                this.setEntityOnParent(this.evarray.arrayValue);
+            };
+            ArrayCollectionEvent.prototype.clearInternal = function () {
+                this.evarray.clearInternal();
                 this.setEntityOnParent(this.evarray.arrayValue);
             };
             ArrayCollectionEvent.prototype.load = function (ctx) {

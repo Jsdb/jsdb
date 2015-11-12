@@ -2444,6 +2444,32 @@ module Db {
 				});
 			}
 			
+			/**
+			 * Set to null all the primitive entity fields not named 
+			 * in the set, and triggers a parseValue(null) on all
+			 * children not named in the set, honouring _fields as
+			 * ignored.  
+			 */
+			protected nullify(set :{[index:string]:boolean} = {}) {
+				// Nullify anything on the entity not found on the databse
+				for (var k in this.entity) {
+					if (k == 'constructor') continue;
+					// Respect ignored fields
+					if (k.charAt(0) == '_') continue;
+					if (set[k]) continue; 
+					var val = this.getFromEntity(k);
+					if (!val) continue;
+					if (typeof val === 'function') continue;
+					// If there is a child, delegate to it
+					var descr = this.classMeta.descriptors[k];
+					if (descr) {
+						var subev = this.findCreateChildFor(descr);
+						subev.parseValue(null);
+					} else {
+						this.setOnEntity(k,undefined);
+					}
+				}
+			}
 
 			
 			parseValue(ds :Spi.DbTreeSnap) {
@@ -2475,7 +2501,7 @@ module Db {
 					} else {
 						delete val._ref;
 					}
-					var set = {};
+					var set :{[index:string]:boolean} = {};
 					for (var k in val) {
 						if (k == 'constructor') continue;
 						// find a descriptor if any, a descriptor is there if the 
@@ -2492,25 +2518,10 @@ module Db {
 							set[k] = true;
 						}
 					}
-					// Nullify anything on thte entity not found on the databse
-					for (var k in this.entity) {
-						if (k == 'constructor') continue;
-						// Respect ignored fields
-						if (k.charAt(0) == '_') continue;
-						if (set[k]) continue; 
-						var val = this.getFromEntity(k);
-						if (typeof val === 'function') continue;
-						// If there is a child, delegate to it
-						var descr = this.classMeta.descriptors[k];
-						if (descr) {
-							var subev = this.findCreateChildFor(descr);
-							subev.parseValue(null);
-						} else {
-							this.setOnEntity(k,undefined);
-						}
-					}
+					this.nullify(set);
 				} else {
-					// if value is null, then set the entity null
+					// if value is null, then nullify and set the entity null
+					this.nullify();
 					this.setEntity(null);
 				}
 				// if it's embedded should set the value on the parent entity
@@ -3146,6 +3157,17 @@ module Db {
 					handler.unhook('value');
 					if (handler.ispopulating) {
 						this.collectionLoaded = true;
+						// Clean not found elements
+						var dval = ds.val();
+						if (!dval) {
+							this.clearInternal();
+						} else {
+							for (var k in this.realField) {
+								if (typeof dval[k] === undefined) {
+									this.addToInternal('child_removed',k,null,null);
+								}
+							}
+						}
 					}
 					handler.ispopulating = false;
 					det.type = Api.EventType.LIST_END;
@@ -3224,7 +3246,7 @@ module Db {
 			}
 			
 			addToInternal(event :string, key :string, val :Api.Entity, det :EventDetails<E>) {
-				if (event == 'child_removed') {
+				if (event == 'child_removed' || val === null || typeof val === 'undefined') {
 					if (this.realField) {
 						delete this.realField[key];
 					}
@@ -3233,6 +3255,13 @@ module Db {
 					this.realField[key] = val;
 				}
 				this.setEntityOnParent(this.realField);
+			}
+			
+			clearInternal() {
+				if (this.realField) {
+					this.realField = {};
+					this.setEntityOnParent(this.realField);
+				}
 			}
 
 			remove(keyOrValue :string|number|Api.Entity) :Promise<any> {
@@ -3291,10 +3320,7 @@ module Db {
 			}
 			
 			clear() :Promise<any> {
-				if (this.realField) {
-					this.realField = {};
-					this.setEntityOnParent(this.realField);
-				}
+				this.clearInternal();
 				return new Promise<any>((ok,err) => {
 					var fb = this.state.getTree(this.getUrl());
 					var obj = {};
@@ -3330,6 +3356,8 @@ module Db {
 				det.originalEvent = "child_added";
 				det.populating = true; 
 				det.type = Api.EventType.ADDED;
+				// we have to clear the pre-existing data
+				this.clearInternal();
 				if (allds) {
 					allds.forEach((ds)=>{
 						var subev = this.findCreateChildFor(ds.key());
@@ -3415,6 +3443,12 @@ module Db {
 				}
 			}
 			
+			clearInternal() {
+				this.keys = [];
+				this.arrayValue = [];
+				this.collection.realField = {};
+			}			
+			
 			prepareSerializeSet() {
 				if (this.arrayValue) {
 					// Add all elements found in the array to the map
@@ -3487,6 +3521,12 @@ module Db {
 				this.evarray.addToInternal(event, key, val, det);
 				this.setEntityOnParent(this.evarray.arrayValue);
 			}
+			
+			clearInternal() {
+				this.evarray.clearInternal();
+				this.setEntityOnParent(this.evarray.arrayValue);
+			}
+			
 
 			load(ctx:Object) :Promise<E[]> {
 				return super.load(ctx).then(()=>this.evarray.arrayValue);
