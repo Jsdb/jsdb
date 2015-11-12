@@ -3157,7 +3157,7 @@ module Db {
 					handler.unhook('value');
 					if (handler.ispopulating) {
 						this.collectionLoaded = true;
-						// Clean not found elements
+						// Incrementally clean not found elements
 						var dval = ds.val();
 						if (!dval) {
 							this.clearInternal();

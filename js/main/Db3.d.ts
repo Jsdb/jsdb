@@ -1560,6 +1560,12 @@ declare module Db {
             init(h: EventHandler): void;
             applyHooks(ed: EventDetails<E>): void;
             protected broadcast(ed: EventDetails<E>): void;
+            /**
+             * Set to null all the primitive entity fields not named
+             * in the set, and triggers a parseValue(null) on all
+             * children not named in the set, honouring _fields as
+             * ignored.
+             */
             protected nullify(set?: {
                 [index: string]: boolean;
             }): void;

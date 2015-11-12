@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151112_174302_master_1.0.0_f7dc825
+ * TSDB version : 20151112_175501_master_1.0.0_4202d86
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151112_174302_master_1.0.0_f7dc825';
+var Version = '20151112_175501_master_1.0.0_4202d86';
 var Db = (function () {
     function Db() {
     }
@@ -1328,6 +1328,12 @@ var Db;
                     _super.prototype.broadcast.call(_this, ed);
                 });
             };
+            /**
+             * Set to null all the primitive entity fields not named
+             * in the set, and triggers a parseValue(null) on all
+             * children not named in the set, honouring _fields as
+             * ignored.
+             */
             EntityEvent.prototype.nullify = function (set) {
                 if (set === void 0) { set = {}; }
                 // Nullify anything on the entity not found on the databse
@@ -2063,7 +2069,7 @@ var Db;
                     handler.unhook('value');
                     if (handler.ispopulating) {
                         this.collectionLoaded = true;
-                        // Clean not found elements
+                        // Incrementally clean not found elements
                         var dval = ds.val();
                         if (!dval) {
                             this.clearInternal();
