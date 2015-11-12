@@ -929,10 +929,10 @@ declare module 'jsdb' {
                     }
                     interface MonitoringConf extends Api.DatabaseConf {
                             realConfiguration: Api.DatabaseConf;
-                            log: (...args: any[]) => void;
+                            log?: (...args: any[]) => void;
                             prefix?: string;
                             filter?: {
-                                    [index: string]: {
+                                    [index: string]: string | {
                                             types?: string[];
                                             dump?: boolean;
                                             trace?: boolean;
@@ -941,6 +941,37 @@ declare module 'jsdb' {
                     }
                     class MonitoringDbTreeRoot implements DbTreeRoot {
                             static create(conf: Api.DatabaseConf): MonitoringDbTreeRoot;
+                            static presets: {
+                                    "rw": {
+                                            types: string[];
+                                            dump: boolean;
+                                    };
+                                    "r": {
+                                            types: string[];
+                                            dump: boolean;
+                                    };
+                                    "w": {
+                                            types: string[];
+                                            dump: boolean;
+                                    };
+                                    "full": {
+                                            types: string[];
+                                            dump: boolean;
+                                            trace: boolean;
+                                    };
+                                    "errors": {
+                                            types: string[];
+                                            dump: boolean;
+                                            trace: boolean;
+                                    };
+                                    "none": {
+                                            types: any[];
+                                    };
+                                    "": {
+                                            types: string[];
+                                            dump: boolean;
+                                    };
+                            };
                             conf: MonitoringConf;
                             log: (...args: any[]) => void;
                             filter: {
@@ -1244,6 +1275,9 @@ declare module 'jsdb' {
                                 * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
                                 */
                             setEntity(entity: Api.Entity): void;
+                            destroy(): void;
+                            getFromEntity(name: string): any;
+                            setOnEntity(name: string, val: any): void;
                             protected setEntityOnParent(val?: any): void;
                             /**
                                 * Set the {@link _classMeta} this event works on.
@@ -1737,6 +1771,7 @@ declare module 'jsdb' {
                             createEvent(e: Api.Entity, stack?: MetaDescriptor[] | string[]): GenericEvent;
                             loadEvent(url: string): GenericEvent;
                             storeInCache(evt: GenericEvent): void;
+                            evictFromCache(evt: GenericEvent): void;
                             fetchFromCache(url: string): GenericEvent;
                             loadEventWithInstance(url: string): GenericEvent;
                             load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
@@ -1864,6 +1899,7 @@ declare module 'jsdb' {
                     function isInlineObject(o: any): boolean;
                     function isEmpty(obj: any): boolean;
                     function copyObj(from: Object, to: Object): void;
+                    function copyVal(val: any, to?: any): any;
                     function serializeRefs(from: any): any;
                     function deserializeRefs(db: Api.IDb3Static, ctx: Object, from: any): Promise<any>;
                     class IdGenerator {

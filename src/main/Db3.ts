@@ -1216,15 +1216,25 @@ module Db {
 		
 		export interface MonitoringConf extends Api.DatabaseConf {
 			realConfiguration :Api.DatabaseConf;
-			log :(...args :any[])=>void;
+			log? :(...args :any[])=>void;
 			prefix? :string;
-			filter? :{[index:string]:{types?:string[], dump?:boolean, trace?:boolean}};
+			filter? :{[index:string]:string|{types?:string[], dump?:boolean, trace?:boolean}};
 		}
 
 		export class MonitoringDbTreeRoot implements DbTreeRoot {
 			
 			static create(conf :Api.DatabaseConf) {
 				return new MonitoringDbTreeRoot(conf);
+			}
+			
+			static presets = {
+				"rw" : {types:['RCV','WRT','ERR'],dump:true},
+				"r" : {types:['RCV','ERR'],dump:true},
+				"w" : {types:['WRT','ERR'],dump:true},
+				"full" : {types:['RCV','WRT','TRC','ACK','ERR'],dump:true,trace:true},
+				"errors" : {types:['ERR'],dump:true,trace:true},
+				"none" : {types:[]},
+				"" : {types:['RCV','WRT','TRC','ACK','ERR'],dump:true}
 			}
 			
 			conf :MonitoringConf;
@@ -1237,8 +1247,15 @@ module Db {
 			constructor(conf :Api.DatabaseConf) {
 				this.conf = <MonitoringConf>conf;
 				this.delegateRoot = getRoot(this.conf.realConfiguration);
-				this.log = this.conf.log || console.log;
+				this.log = this.conf.log || function () {console.log.apply(console, arguments)};
 				this.filter = this.conf.filter || {'.*':{types:['RCV','WRT','TRC','ACK','ERR'],dump:true}};
+				for (var k in this.filter) {
+					if (typeof this.filter[k] === 'string') {
+						var preset = MonitoringDbTreeRoot.presets[<string>this.filter[k]];
+						if (!preset) throw new Error("Unknown monitoring preset '" + preset + "'");
+						this.filter[k] = preset;
+					}
+				}
 				this.prefix = this.conf.prefix;
 				this.dtlog("Starting monitor:");
 				this.dtlog("\tunderlying conf", this.conf.realConfiguration);
@@ -1293,7 +1310,7 @@ module Db {
 					} else {
 						this.emit('ACK', name);
 					}
-					fn(error);
+					if (fn) fn(error);
 				}
 			}
 			
@@ -1847,13 +1864,47 @@ module Db {
 			 */
 			setEntity(entity :Api.Entity) {
 				this.entity = entity;
-				// TODO clean the children if entity changed? they could be pointing to old instance data
+				// clean the children if entity changed? they could be pointing to old instance data
+				// TODO maybe to this only if the entity has actually changed!
+				this.eachChildren((name,child)=>{ child.destroy() });
+				this.children = {};
+			}
+			
+			destroy() {
+				this.state.evictFromCache(this);
+				this.setEntity(null);
+				for (var i = 0; i < this.dependants.length; i++) {
+					this.dependants[i].destroy();
+				}
+				this.parent = null;
+			}
+			
+			getFromEntity(name :string) {
+				nextInternal = true;
+				try {
+					return this.entity[name];
+				} catch (e) {
+					throw e;
+				} finally {
+					nextInternal = false;
+				}
+			}
+			
+			setOnEntity(name :string, val :any) {
+				nextInternal = true;
+				try {
+					this.entity[name] = val;
+				} catch (e) {
+					throw e;
+				} finally {
+					nextInternal = false;
+				}
 			}
 			
 			protected setEntityOnParent(val? :any) {
 				val = val || this.entity;
 				if (this.parent && this.nameOnParent && this.parent.entity) {
-					this.parent.entity[this.nameOnParent] = val;
+					this.parent.setOnEntity(this.nameOnParent, val);
 				}
 			}
 			
@@ -1929,7 +1980,7 @@ module Db {
 				if (this.entity) {
 					for (var k in this.classMeta.descriptors) {
 						var subdes = this.classMeta.descriptors[k];
-						if (subdes.localName && typeof this.entity[subdes.localName] !== 'undefined') {
+						if (subdes.localName && typeof this.getFromEntity(subdes.localName) !== 'undefined') {
 							this.findCreateChildFor(k,true);
 						}
 					}
@@ -2035,14 +2086,14 @@ module Db {
 				var ret = this.children[meta.localName];
 				if (ret && !force) return ret;
 				if (ret && this.entity) {
-					ret.setEntity(this.entity[meta.localName]);
+					ret.setEntity(this.getFromEntity(meta.localName));
 					return ret;
 				}
 				ret = meta.createEvent(this.state.myMeta);
 				ret.state = this.state;
 				ret.parent = this;
 				if (this.entity) {
-					ret.setEntity(this.entity[meta.localName]);
+					ret.setEntity(this.getFromEntity(meta.localName));
 				}
 				this.children[meta.localName] = ret;
 				// TODO should we give then urlInited if the url is already present?
@@ -2387,7 +2438,7 @@ module Db {
 				this.loaded = true;
 				// Save last data for use in clone later
 				this.lastDs = ds;
-				var val = ds.val();
+				var val = ds && ds.val();
 				if (val) {
 					// Avoid messing with the entity if we are processing a reference
 					if (!val._ref) {  
@@ -2412,6 +2463,7 @@ module Db {
 					} else {
 						delete val._ref;
 					}
+					var set = {};
 					for (var k in val) {
 						if (k == 'constructor') continue;
 						// find a descriptor if any, a descriptor is there if the 
@@ -2421,9 +2473,25 @@ module Db {
 							// if we have a descriptor, find/create the event and delegate to it 
 							var subev = this.findCreateChildFor(descr);
 							subev.parseValue(ds.child(k));
+							set[k] = true;
 						} else {
 							// otherwise, simply copy the value in the proper field
-							this.entity[k] = val[k];
+							this.setOnEntity(k,val[k]);
+							set[k] = true;
+						}
+					}
+					for (var k in this.entity) {
+						if (k == 'constructor') continue;
+						if (k.charAt(0) == '_') continue;
+						if (set[k]) continue; 
+						var val = this.getFromEntity(k);
+						if (typeof val === 'function') continue;
+						var descr = this.classMeta.descriptors[k];
+						if (descr) {
+							var subev = this.findCreateChildFor(descr);
+							subev.parseValue(null);
+						} else {
+							this.setOnEntity(k,undefined);
 						}
 					}
 				} else {
@@ -2523,7 +2591,7 @@ module Db {
 				var ret = {};
 				for (var k in this.entity) {
 					if (fields && fields.indexOf(k) < 0) continue;
-					var val = this.entity[k];
+					var val = this.getFromEntity(k);
 					if (typeof val === 'function') continue;
 					if (typeof val === 'undefined') continue;
 
@@ -2798,7 +2866,7 @@ module Db {
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
-				var val = ds.val();
+				var val = ds && ds.val();
 				if (val && val._ref) {
 					// We have a value, and the value is a reference.
 					// If there is no pointedEvent, or it was pointing to another entity ..
@@ -3247,20 +3315,23 @@ module Db {
 				det.originalEvent = "child_added";
 				det.populating = true; 
 				det.type = Api.EventType.ADDED;
-				allds.forEach((ds)=>{
-					var subev = this.findCreateChildFor(ds.key());
-					var val :E = null;
-					subev.parseValue(ds);
-					val = <E>subev.entity;
-					det.originalKey = ds.key();
-					det.originalUrl = ds.ref().toString();
-					det.precedingKey = prevKey;
-					det.payload = val;
-					prevKey = ds.key();
-					subev.applyHooks(det);
-					
-					this.addToInternal('child_added',ds.key(),val,det);
-				});				
+				if (allds) {
+					allds.forEach((ds)=>{
+						var subev = this.findCreateChildFor(ds.key());
+						var val :E = null;
+						subev.parseValue(ds);
+						val = <E>subev.entity;
+						det.originalKey = ds.key();
+						det.originalUrl = ds.ref().toString();
+						det.precedingKey = prevKey;
+						det.payload = val;
+						prevKey = ds.key();
+						subev.applyHooks(det);
+						
+						this.addToInternal('child_added',ds.key(),val,det);
+					});
+				}
+				this.collectionLoaded = true;		
 			}
 			
 			query() :Api.IQuery<E> {
@@ -3418,7 +3489,7 @@ module Db {
 				var enturl = this.state.createEvent(value).getUrl();
 				if (!enturl)  return Utils.IdGenerator.next();
 				if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-					throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .clone()");
+					throw new Error("Cannot add to a list (" + this.getUrl() + ") the embedded entity loaded or saved somewhere else (" + enturl + "), use .clone()");
 				}
 				enturl = enturl.substr(this.getUrl().length);
 				enturl = enturl.replace(/\//g,'');
@@ -3530,7 +3601,7 @@ module Db {
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
-				this.val = ds.val();
+				this.val = ds && ds.val();
 			}
 			
 			serialize() {
@@ -3558,7 +3629,7 @@ module Db {
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
-				this.setEntity(ds.val());
+				this.setEntity(ds && ds.val());
 				this.setEntityOnParent();
 			}
 			
@@ -4006,6 +4077,12 @@ module Db {
 					throw new Error('Storing in cache two different events for the same key ' + url);
 				}
 				this.cache[url] = evt;
+			}
+			
+			evictFromCache(evt :GenericEvent) {
+				var url = evt.getUrl();
+				if (!url) return;
+				delete this.cache[url];
 			}
 			
 			fetchFromCache(url :string) {
@@ -4635,13 +4712,25 @@ module Db {
 			for (var k in from) {
 				if (k == 'constructor') continue;
 				var val = from[k];
-				if (typeof val === 'object') {
-					var valto = to[k] || {};
-					copyObj(val, valto);
-					val = valto;
-				}
-				to[k] = val;
+				to[k] = copyVal(val, to[k]);
 			}
+		}
+		
+		export function copyVal(val :any, to?:any):any {
+			if (val === null) return null;
+			if (typeof val === 'undefined') return;
+			if (Object.prototype.toString.call(val) === '[object Array]') {
+				var arrto = to || [];
+				var arrfrom = <any[]>val;
+				for (var i = 0; i < arrfrom.length; i++) {
+					arrto[i] = (copyVal(arrfrom[i], arrto[i]));
+				}
+			} else if (typeof val === 'object') {
+				var valto = to || {};
+				copyObj(val, valto);
+				return valto;
+			}
+			return val;
 		}
 		
 		export function serializeRefs(from :any) :any {
@@ -4980,26 +5069,56 @@ module Db {
 	var lastCantBe = 'ciao';
 	var lastExpect :any = null;
 	
+	var nextInternal = false;
+
+	function getProp(target :Object, name: string) {
+		var map = props.get(target);
+		if (!map) return;
+		return map[name];
+	}
+	
+	function setProp(target :Object, name :string, val :any) {
+		var map = props.get(target);
+		if (!map) {
+			map = {};
+			props.set(target, map);
+		}
+		map[name] = val;
+	}
+	
 	function installMetaGetter(target: Object, propertyKey: string, descr :Internal.MetaDescriptor) {
-		var nkey = '__' + propertyKey;
-		
+		//var nkey = '__' + propertyKey;
+
 		Object.defineProperty(target,propertyKey, {
 			enumerable: true,
 			set: function(v) {
+				if (nextInternal) {
+					nextInternal = false;
+					setProp(this, propertyKey, v);
+					//this[nkey] = v;
+					return;
+				}
 				Internal.clearLastStack();
-				this[nkey] = v;
+				setProp(this, propertyKey, v);
+				//this[nkey] = v;
 				var mye = entEvent.get(this);
 				if (mye) {
 					mye.findCreateChildFor(propertyKey, true);
 				}
 			},
 			get: function() {
+				if (nextInternal) {
+					nextInternal = false;
+					return getProp(this, propertyKey);
+					//return this[nkey];
+				}
 				if (lastExpect && this !== lastExpect) {
 					Internal.clearLastStack();
 				}
 				if (!lastEntity) lastEntity = this;
 				lastMetaPath.push(descr);
-				var ret = this[nkey];
+				//var ret = this[nkey];
+				var ret = getProp(this, propertyKey);
 				if (!ret) {
 					lastExpect = lastCantBe;
 				} else {
@@ -5106,6 +5225,11 @@ var defaultDb :Db.Api.IDb3Static = null;
  */
 var entEvent = new Db.Utils.WeakWrap<Db.Internal.EntityEvent<any>>();
 
+
+/**
+ * Weak association for properties handled by meta getters and setters.
+ */
+var props = new Db.Utils.WeakWrap<{[index:string]:any}>();
 
 export = Db;
 

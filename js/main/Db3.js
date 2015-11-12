@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151109_100316_master_1.0.0_705513b
+ * TSDB version : 20151112_153903_master_1.0.0_3b4af54
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151109_100316_master_1.0.0_705513b';
+var Version = '20151112_153903_master_1.0.0_3b4af54';
 var Db = (function () {
     function Db() {
     }
@@ -190,8 +190,16 @@ var Db;
             function MonitoringDbTreeRoot(conf) {
                 this.conf = conf;
                 this.delegateRoot = getRoot(this.conf.realConfiguration);
-                this.log = this.conf.log || console.log;
+                this.log = this.conf.log || function () { console.log.apply(console, arguments); };
                 this.filter = this.conf.filter || { '.*': { types: ['RCV', 'WRT', 'TRC', 'ACK', 'ERR'], dump: true } };
+                for (var k in this.filter) {
+                    if (typeof this.filter[k] === 'string') {
+                        var preset = MonitoringDbTreeRoot.presets[this.filter[k]];
+                        if (!preset)
+                            throw new Error("Unknown monitoring preset '" + preset + "'");
+                        this.filter[k] = preset;
+                    }
+                }
                 this.prefix = this.conf.prefix;
                 this.dtlog("Starting monitor:");
                 this.dtlog("\tunderlying conf", this.conf.realConfiguration);
@@ -235,6 +243,15 @@ var Db;
                     }
                 }
             };
+            MonitoringDbTreeRoot.presets = {
+                "rw": { types: ['RCV', 'WRT', 'ERR'], dump: true },
+                "r": { types: ['RCV', 'ERR'], dump: true },
+                "w": { types: ['WRT', 'ERR'], dump: true },
+                "full": { types: ['RCV', 'WRT', 'TRC', 'ACK', 'ERR'], dump: true, trace: true },
+                "errors": { types: ['ERR'], dump: true, trace: true },
+                "none": { types: [] },
+                "": { types: ['RCV', 'WRT', 'TRC', 'ACK', 'ERR'], dump: true }
+            };
             return MonitoringDbTreeRoot;
         })();
         Spi.MonitoringDbTreeRoot = MonitoringDbTreeRoot;
@@ -260,7 +277,8 @@ var Db;
                     else {
                         _this.emit('ACK', name);
                     }
-                    fn(error);
+                    if (fn)
+                        fn(error);
                 };
             };
             MonitoringDbTreeQuery.prototype.emitDataWrap = function (fn, name) {
@@ -733,11 +751,45 @@ var Db;
             GenericEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 // TODO clean the children if entity changed? they could be pointing to old instance data
+                this.eachChildren(function (name, child) { child.destroy(); });
+                this.children = {};
+            };
+            GenericEvent.prototype.destroy = function () {
+                this.state.evictFromCache(this);
+                this.setEntity(null);
+                for (var i = 0; i < this.dependants.length; i++) {
+                    this.dependants[i].destroy();
+                }
+                this.parent = null;
+            };
+            GenericEvent.prototype.getFromEntity = function (name) {
+                nextInternal = true;
+                try {
+                    return this.entity[name];
+                }
+                catch (e) {
+                    throw e;
+                }
+                finally {
+                    nextInternal = false;
+                }
+            };
+            GenericEvent.prototype.setOnEntity = function (name, val) {
+                nextInternal = true;
+                try {
+                    this.entity[name] = val;
+                }
+                catch (e) {
+                    throw e;
+                }
+                finally {
+                    nextInternal = false;
+                }
             };
             GenericEvent.prototype.setEntityOnParent = function (val) {
                 val = val || this.entity;
                 if (this.parent && this.nameOnParent && this.parent.entity) {
-                    this.parent.entity[this.nameOnParent] = val;
+                    this.parent.setOnEntity(this.nameOnParent, val);
                 }
             };
             Object.defineProperty(GenericEvent.prototype, "classMeta", {
@@ -826,7 +878,7 @@ var Db;
                 if (this.entity) {
                     for (var k in this.classMeta.descriptors) {
                         var subdes = this.classMeta.descriptors[k];
-                        if (subdes.localName && typeof this.entity[subdes.localName] !== 'undefined') {
+                        if (subdes.localName && typeof this.getFromEntity(subdes.localName) !== 'undefined') {
                             this.findCreateChildFor(k, true);
                         }
                     }
@@ -930,14 +982,14 @@ var Db;
                 if (ret && !force)
                     return ret;
                 if (ret && this.entity) {
-                    ret.setEntity(this.entity[meta.localName]);
+                    ret.setEntity(this.getFromEntity(meta.localName));
                     return ret;
                 }
                 ret = meta.createEvent(this.state.myMeta);
                 ret.state = this.state;
                 ret.parent = this;
                 if (this.entity) {
-                    ret.setEntity(this.entity[meta.localName]);
+                    ret.setEntity(this.getFromEntity(meta.localName));
                 }
                 this.children[meta.localName] = ret;
                 // TODO should we give then urlInited if the url is already present?
@@ -1267,7 +1319,7 @@ var Db;
                 this.loaded = true;
                 // Save last data for use in clone later
                 this.lastDs = ds;
-                var val = ds.val();
+                var val = ds && ds.val();
                 if (val) {
                     // Avoid messing with the entity if we are processing a reference
                     if (!val._ref) {
@@ -1295,6 +1347,7 @@ var Db;
                     else {
                         delete val._ref;
                     }
+                    var set = {};
                     for (var k in val) {
                         if (k == 'constructor')
                             continue;
@@ -1305,10 +1358,31 @@ var Db;
                             // if we have a descriptor, find/create the event and delegate to it 
                             var subev = this.findCreateChildFor(descr);
                             subev.parseValue(ds.child(k));
+                            set[k] = true;
                         }
                         else {
                             // otherwise, simply copy the value in the proper field
-                            this.entity[k] = val[k];
+                            this.setOnEntity(k, val[k]);
+                            set[k] = true;
+                        }
+                    }
+                    for (var k in this.entity) {
+                        if (k == 'constructor')
+                            continue;
+                        if (k.charAt(0) == '_')
+                            continue;
+                        if (set[k])
+                            continue;
+                        var val = this.getFromEntity(k);
+                        if (typeof val === 'function')
+                            continue;
+                        var descr = this.classMeta.descriptors[k];
+                        if (descr) {
+                            var subev = this.findCreateChildFor(descr);
+                            subev.parseValue(null);
+                        }
+                        else {
+                            this.setOnEntity(k, undefined);
                         }
                     }
                 }
@@ -1406,7 +1480,7 @@ var Db;
                 for (var k in this.entity) {
                     if (fields && fields.indexOf(k) < 0)
                         continue;
-                    var val = this.entity[k];
+                    var val = this.getFromEntity(k);
                     if (typeof val === 'function')
                         continue;
                     if (typeof val === 'undefined')
@@ -1700,7 +1774,7 @@ var Db;
                 _super.prototype.on.call(this, h);
             };
             ReferenceEvent.prototype.parseValue = function (ds) {
-                var val = ds.val();
+                var val = ds && ds.val();
                 if (val && val._ref) {
                     // We have a value, and the value is a reference.
                     // If there is no pointedEvent, or it was pointing to another entity ..
@@ -2149,19 +2223,22 @@ var Db;
                 det.originalEvent = "child_added";
                 det.populating = true;
                 det.type = Api.EventType.ADDED;
-                allds.forEach(function (ds) {
-                    var subev = _this.findCreateChildFor(ds.key());
-                    var val = null;
-                    subev.parseValue(ds);
-                    val = subev.entity;
-                    det.originalKey = ds.key();
-                    det.originalUrl = ds.ref().toString();
-                    det.precedingKey = prevKey;
-                    det.payload = val;
-                    prevKey = ds.key();
-                    subev.applyHooks(det);
-                    _this.addToInternal('child_added', ds.key(), val, det);
-                });
+                if (allds) {
+                    allds.forEach(function (ds) {
+                        var subev = _this.findCreateChildFor(ds.key());
+                        var val = null;
+                        subev.parseValue(ds);
+                        val = subev.entity;
+                        det.originalKey = ds.key();
+                        det.originalUrl = ds.ref().toString();
+                        det.precedingKey = prevKey;
+                        det.payload = val;
+                        prevKey = ds.key();
+                        subev.applyHooks(det);
+                        _this.addToInternal('child_added', ds.key(), val, det);
+                    });
+                }
+                this.collectionLoaded = true;
             };
             MapEvent.prototype.query = function () {
                 var ret = new QueryImpl(this);
@@ -2321,7 +2398,7 @@ var Db;
                 if (!enturl)
                     return Utils.IdGenerator.next();
                 if (!this.getUrl() || enturl.indexOf(this.getUrl()) != 0) {
-                    throw new Error("Cannot add to a list an embedded entity loaded or saved somewhere else, use .clone()");
+                    throw new Error("Cannot add to a list (" + this.getUrl() + ") the embedded entity loaded or saved somewhere else (" + enturl + "), use .clone()");
                 }
                 enturl = enturl.substr(this.getUrl().length);
                 enturl = enturl.replace(/\//g, '');
@@ -2437,7 +2514,7 @@ var Db;
                 // can't set entity, will refuse it, it's unmutable
             };
             IgnoreEvent.prototype.parseValue = function (ds) {
-                this.val = ds.val();
+                this.val = ds && ds.val();
             };
             IgnoreEvent.prototype.serialize = function () {
                 return this.val;
@@ -2465,7 +2542,7 @@ var Db;
                 this.updated(ctx, function () { });
             };
             ObservableEvent.prototype.parseValue = function (ds) {
-                this.setEntity(ds.val());
+                this.setEntity(ds && ds.val());
                 this.setEntityOnParent();
             };
             ObservableEvent.prototype.serialize = function () {
@@ -2895,6 +2972,12 @@ var Db;
                     throw new Error('Storing in cache two different events for the same key ' + url);
                 }
                 this.cache[url] = evt;
+            };
+            DbState.prototype.evictFromCache = function (evt) {
+                var url = evt.getUrl();
+                if (!url)
+                    return;
+                delete this.cache[url];
             };
             DbState.prototype.fetchFromCache = function (url) {
                 return this.cache[url];
@@ -3563,15 +3646,30 @@ var Db;
                 if (k == 'constructor')
                     continue;
                 var val = from[k];
-                if (typeof val === 'object') {
-                    var valto = to[k] || {};
-                    copyObj(val, valto);
-                    val = valto;
-                }
-                to[k] = val;
+                to[k] = copyVal(val, to[k]);
             }
         }
         Utils.copyObj = copyObj;
+        function copyVal(val, to) {
+            if (val === null)
+                return null;
+            if (typeof val === 'undefined')
+                return;
+            if (Object.prototype.toString.call(val) === '[object Array]') {
+                var arrto = to || [];
+                var arrfrom = val;
+                for (var i = 0; i < arrfrom.length; i++) {
+                    arrto[i] = (copyVal(arrfrom[i], arrto[i]));
+                }
+            }
+            else if (typeof val === 'object') {
+                var valto = to || {};
+                copyObj(val, valto);
+                return valto;
+            }
+            return val;
+        }
+        Utils.copyVal = copyVal;
         function serializeRefs(from) {
             if (from === null || typeof from === 'undefined')
                 return null;
@@ -3907,26 +4005,53 @@ var Db;
     var lastMetaPath = [];
     var lastCantBe = 'ciao';
     var lastExpect = null;
+    var nextInternal = false;
+    function getProp(target, name) {
+        var map = props.get(target);
+        if (!map)
+            return;
+        return map[name];
+    }
+    function setProp(target, name, val) {
+        var map = props.get(target);
+        if (!map) {
+            map = {};
+            props.set(target, map);
+        }
+        map[name] = val;
+    }
     function installMetaGetter(target, propertyKey, descr) {
-        var nkey = '__' + propertyKey;
+        //var nkey = '__' + propertyKey;
         Object.defineProperty(target, propertyKey, {
             enumerable: true,
             set: function (v) {
+                if (nextInternal) {
+                    nextInternal = false;
+                    setProp(this, propertyKey, v);
+                    //this[nkey] = v;
+                    return;
+                }
                 Internal.clearLastStack();
-                this[nkey] = v;
+                setProp(this, propertyKey, v);
+                //this[nkey] = v;
                 var mye = entEvent.get(this);
                 if (mye) {
                     mye.findCreateChildFor(propertyKey, true);
                 }
             },
             get: function () {
+                if (nextInternal) {
+                    nextInternal = false;
+                    return getProp(this, propertyKey);
+                }
                 if (lastExpect && this !== lastExpect) {
                     Internal.clearLastStack();
                 }
                 if (!lastEntity)
                     lastEntity = this;
                 lastMetaPath.push(descr);
-                var ret = this[nkey];
+                //var ret = this[nkey];
+                var ret = getProp(this, propertyKey);
                 if (!ret) {
                     lastExpect = lastCantBe;
                 }
@@ -4030,6 +4155,10 @@ var defaultDb = null;
  * connected only to a single database event, and as such to a single database.
  */
 var entEvent = new Db.Utils.WeakWrap();
+/**
+ * Weak association for properties handled by meta getters and setters.
+ */
+var props = new Db.Utils.WeakWrap();
 module.exports = Db;
 
 //# sourceMappingURL=Db3.js.map

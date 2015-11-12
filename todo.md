@@ -1,3 +1,22 @@
+Un-evented unboxing
+-------------------
+
+Sometimes it's enough to properly "unbox" data, that is parse the json into the right class,
+without the need to have "proper" events for it, and most importantly not wanting them to
+be "proper" entities.
+
+For example, the Move or the HexCoords are good examples. We don't want the to be updated, they
+can be replaced. We don't want the side effects of a correspondence beetween URL and instance, we 
+want to use it as throw away.
+
+Eventually, if emitDecoratorMetadata could emit metadata for all the properties of a class,
+also non annotated, then we could automatically do the right unboxing for all the non-annotated,
+non-primitive types.
+
+
+
+
+
 Setting an array leads to duplication on database
 --------------------------------------------------------
 
@@ -15,7 +34,8 @@ collection is modified in a plausible way (does not need to be entirely loaded).
 - if a collection is set using the setter, it has to be considered valid in ram as if just loaded
 - if a collection is loaded, must be saved (and serialized) with a SET
 
-  
+> the problem was a bit different : setting an array to empty, caused the entire
+> tree on Firebase to disappear, so when parsing the old value was untouched.  
 
 
 Number of possible weaknesses
@@ -27,10 +47,15 @@ overwriting actual values. It should not save locals at all if they were not loa
 previously. (we need an isFromDb:boolean, checking only the url is not enought,
 cause the url could be there because of a reference or an assignUrl)
 
+> this has been changed, now everything not found on the database is set to undefined,
+> except ignored (@ignore and _*) fields.
+
 If I load an entity with a collection, then modify the collection using appropriate 
 methods, the save the collection, it will serialize the collection again overwriting
 my changes. Moreover, changes made by methods to the collection are not reflected
 on the instance (but they would if it was with a .live), but they could an quite easily.
+
+> now modifications with local methods are reflected on the local (ram) collection.
 
 If I load an entity, then later on I modify it and save it back, I could overwrite 
 data written by others. Keeping it live (partially) prevents this. (but, to be honest,
@@ -61,7 +86,7 @@ Test loading an embedded referenced directly by a url
 It should instantiate all preceding entities, and load/resolve what needed for binding.
 Not sure it does. 
 
-Moreover, if i load an embedded, the load the parent entity, it should bind the
+Moreover, if i load an embedded, then load the parent entity, it should bind the
 two, meaning it should set on the parent entity the previously loaded embedded
 entity.
 
@@ -137,8 +162,8 @@ This latter incoherency may happen also on non-rooted entities.
 > around, which could by mistake end up being a new row on the db if saved.
 
 
-Global error handling / retying / notification on anomalous situations
-----------------------------------------------------------------------
+Global error handling / retrying / notification on anomalous situations
+-----------------------------------------------------------------------
 
 While we can chain promises and/or return errors to callbacks, usually we will
 have a ton of callbacks in place, and maybe also a few promises running at the same time,
@@ -301,20 +326,6 @@ This is somehow an alternative to projections, which are used for the same reaso
 but with better data access.
 
 > I hit this on user application.
-
-
-Un-evented unboxing
--------------------
-
-Sometimes it's enough to properly "unbox" data, that is parse the json into the right class,
-without the need to have "proper" events for it.
-
-Evaluate if it's a good idea to have a specific annotation for this case, if it really can 
-reduce the weight of using a normal "embedded" or not.
-
-Eventually, if emitDecoratorMetadata could emit metadata for all the properties of a class,
-also non annotated, then we could automatically do the right unboxing for all the non-annotated,
-non-primitive types.
 
 
 

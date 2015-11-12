@@ -226,6 +226,7 @@ describe('Db3 >', () => {
 	var wp2Fb :Firebase;
 	var wp3Fb :Firebase;
 	var wp4Fb :Firebase;
+	var wp5Fb :Firebase;
 	
 	var wsFb :Firebase;
 	var ws1Fb :Firebase;
@@ -335,6 +336,15 @@ describe('Db3 >', () => {
 			str: 'String 4',
 			num: 500,
 			arr: [4,5,6],
+			subobj: {
+				substr: 'Sub String'
+			}
+		}, opCnter);
+
+		wp5Fb = wpFb.child('wp5');
+		opcnt++;
+		wp5Fb.set({
+			num: 500,
 			subobj: {
 				substr: 'Sub String'
 			}
@@ -610,6 +620,52 @@ describe('Db3 >', () => {
 		opCnter();
 	});
 	
+	describe('Utils >', ()=>{
+		it('should copy various type of values', ()=>{
+			assert("copy of null").when(Db3.Utils.copyVal(null)).is(M.exactly(null));
+			assert("copy of undefined").when(Db3.Utils.copyVal(undefined)).is(M.exactly(undefined));
+			assert("copy of string").when(Db3.Utils.copyVal("str")).is("str");
+			assert("copy of number").when(Db3.Utils.copyVal(1)).is(1);
+			assert("copy of array").when(Db3.Utils.copyVal([1,2])).is(M.arrayEquals([1,2]));
+			assert("copy of object").when(Db3.Utils.copyVal({a:1,b:2})).is(M.objectMatchingStrictly({a:1,b:2}));
+			// works but assertion doesn't
+			//assert("copy of array of array").when(Db3.Utils.copyVal([[1,2],[3,4]])).is(M.arrayEquals([[1,2],[3,4]]));
+			assert("copy of object of objects").when(Db3.Utils.copyVal(
+					{x:{a:1,b:2},y:{c:3,d:4}}
+				)).is(M.objectMatchingStrictly(
+					{x:M.objectMatchingStrictly({a:1,b:2}),y:M.objectMatchingStrictly({c:3,d:4})}));
+		});
+		
+		it('should merge objects', ()=>{
+			var obj1 = {
+				a:'ciao',
+				b:[1,2,3],
+				c:{
+					a:'hello',
+					b:[1,2,3]
+				}
+			};
+			
+			var obj2 = {
+				a:'bonjour',
+				c:{
+					a:'shalom'
+				}	
+			};
+			
+			Db3.Utils.copyObj(obj2,obj1);
+			
+			assert("objects merged correctly").when(obj1).is(M.objectMatchingStrictly({
+				a:'bonjour',
+				b:M.arrayEquals([1,2,3]),
+				c:M.objectMatchingStrictly({
+					a:'shalom',
+					b:M.arrayEquals([1,2,3])
+				})
+			}));
+		});
+	});
+	
 	describe('Metadata >', ()=>{
 		it('should detect WithSubentity class',()=> {
 			var allmeta = Db3.Internal.getAllMetadata();
@@ -840,7 +896,6 @@ describe('Db3 >', () => {
 			console.log(lastPath);
 		});
 		// TODO implement the .props property to clean any ambiguity
-		
 	});
 	
 	describe('Entity reading >', ()=>{
@@ -927,6 +982,30 @@ describe('Db3 >', () => {
 		it('should load polimorphic on rooted',() => {
 			var wp3 = Db(WithProps).get('more*wp3');
 			assert('it\'s right entity type').when(wp3).is(M.instanceOf(WithMoreProps));
+		});
+		
+		it('should remove null preinited values', ()=>{
+			var wp1 = Db(WithProps).get('wp5');
+			return Db(wp1).load(this).then(()=>{
+				assert("the null field is null").when(wp1.str).is(M.aFalsey);
+			});
+		});
+		
+		it('should handle null update on natives', ()=>{
+			var wp1 = Db(WithProps).get('wp1');
+			return Db(wp1).load(this).then(()=>{
+				wp1Fb.set({
+					str: 'String 1',
+					num: 200,
+					subobj: {
+						substr: 'Sub String'
+					},
+					ignored: 'never seen'
+				});
+				return Db(wp1).load(this);
+			}).then(()=>{
+				assert("the modified field is now null").when(wp1.arr).is(M.aFalsey);
+			});
 		});
 		
 		it('should update data',(done) => {
@@ -1760,6 +1839,39 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			it('should support swapping also nested sub entities', ()=>{
+				var ws2 = Db(WithSubentity).get('ws2');
+				return Db(ws2).load(this)
+				.then(()=>{
+					var nsub = new SubEntity();
+					nsub.str = 'new sub';
+					var nwsub = new WithSubentity();
+					nwsub.sub = nsub;
+					nwsub.str = 'new nested';
+					ws2.nested = nwsub;
+					return Db(ws2).save();
+				})
+				.then(()=>{
+					return new Promise((ok) => {
+						ws2Fb.once('value',ok);
+					});
+				})
+				.then((ds :FirebaseDataSnapshot) => {
+					M.assert('Updated correctly').when(ds.val()).is(M.objectMatching({
+						str: 'String 1',
+						sub: {
+							str: 'Sub String 1'
+						},
+						nested: {
+							str: 'new nested',
+							sub: {
+								str: 'new sub'
+							}
+						}
+					}));
+				});
+			});
+			
 			it('should support swapping polimorphic sub entities', ()=>{
 				var ws1 = Db(WithSubentity).get('ws2');
 				return Db(ws1).load(this)
@@ -2051,7 +2163,7 @@ describe('Db3 >', () => {
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.refMap).load(this).then(() => {
 					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
-						a : {
+						a : M.objectMatching({
 							str: 'String 1',
 							num: 200,
 							arr: [1,2,3],
@@ -2059,16 +2171,16 @@ describe('Db3 >', () => {
 								substr: 'Sub String'
 							},
 							ignored: 'ignored'
-						},
-						b: {
+						}),
+						b: M.objectMatching({
 							str: 'String 2',
 							num: 300,
 							arr: [2,3,4],
 							subobj: {
 								substr: 'Sub String'
 							}
-						},
-						c:{
+						}),
+						c:M.objectMatching({
 							str: 'String 3',
 							num: 400,
 							moreNum: 401,
@@ -2077,7 +2189,7 @@ describe('Db3 >', () => {
 								substr: 'Sub String'
 							},
 							_dis:'more'
-						}
+						})
 					}));
 				});
 			});
@@ -2088,6 +2200,25 @@ describe('Db3 >', () => {
 				var state = evt.state;
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.refMap).dereference(this).then(() => {
+					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
+						a : {
+							ignored: 'ignored',
+							_local: 1,
+							str: M.undefinedValue,
+						},
+						b: {
+							ignored: 'ignored',
+							_local: 1,
+							str: M.undefinedValue,
+						},
+						c:{
+							ignored: 'ignored',
+							_local: 1,
+							str: M.undefinedValue,
+						}
+					}));
+					
+					/*
 					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
 						a : {
 							str: 'useless',
@@ -2114,6 +2245,7 @@ describe('Db3 >', () => {
 							}
 						}
 					}));
+					*/
 				});
 			});
 			
@@ -2578,6 +2710,58 @@ describe('Db3 >', () => {
 					assert('second is still the second one').when(wl1.embedList[1].str).is('2 b');
 				});
 			});
+			
+			it('should replace an array with a new one', ()=>{
+				var wl1 = Db(WithList).get('wl1');
+				
+				var newarr :SubEntity[] = [];
+				var sub = new SubEntity();
+				sub.str = 'new1';
+				newarr.push(sub);
+				sub = new SubEntity();
+				sub.str = 'new2';
+				newarr.push(sub);
+				
+				return Db(wl1).load(this).then(()=>{
+					assert("Loaded the array").when(wl1.embedList).is(M.withLength(3));
+					wl1.embedList = newarr;
+					return Db(wl1).save(); 
+				}).then(()=>{
+					Db().reset();
+					wl1 = Db(WithList).get('wl1');
+					return Db(wl1).load(this);
+				}).then(()=>{
+					assert('list is the new one').when(wl1.embedList).is(M.withLength(2));
+					assert('first element is new1').when(wl1.embedList[0].str).is('new1');
+					assert('second element is new2').when(wl1.embedList[1].str).is('new2');
+				});
+			});
+			
+			it('should replace an array with a new one also when saving directly', ()=>{
+				var wl1 = Db(WithList).get('wl1');
+				return Db(wl1).load(this).then(()=>{
+					assert("Loaded the array").when(wl1.embedList).is(M.withLength(3));
+					var newarr :SubEntity[] = [];
+					var sub = new SubEntity();
+					sub.str = 'new1';
+					newarr.push(sub);
+					sub = new SubEntity();
+					sub.str = 'new2';
+					newarr.push(sub);
+					
+					wl1.embedList = newarr;
+					return Db(wl1.embedList).save(); 
+				}).then(()=>{
+					Db().reset();
+					wl1 = Db(WithList).get('wl1');
+					return Db(wl1).load(this);
+				}).then(()=>{
+					//assert('list is the new one').when(wl1.embedList).is(M.withLength(2));
+					assert('first element is new1').when(wl1.embedList[0].str).is('new1');
+					assert('second element is new2').when(wl1.embedList[1].str).is('new2');
+				});
+			})
+			
 		});
 		
 		describe('Query >', ()=> {
