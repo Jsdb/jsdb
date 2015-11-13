@@ -5,9 +5,12 @@ import Firebase = require('firebase');
 import M = require('tsMatchers');
 import assert = M.assert;
 
-var baseUrl :string = "https://swashp.firebaseio.com/test3/"
+var baseUrl :string = "https://tsdb.firebaseio.com/test3/"
 
-var Db = Db3.configure(<Db3.Spi.FirebaseConf>{baseUrl:baseUrl});
+var Db = Db3.configure(<Db3.Spi.FirebaseConf>{
+	baseUrl:baseUrl,
+	secret: "5tGSMCySw95AtYBFh3RQSzBw8CfT4WIxSXh6WbB0"
+});
 
 var lastRemoteCallArgs :IArguments = null;
 var lastLocalStubArgs :IArguments = null;
@@ -301,16 +304,15 @@ describe('Db3 >', () => {
 	beforeEach(function (done) {
 		//console.log("before starts");
 		this.timeout(100000);
-		
-		// TODO reenable this
-		Db().reset();
-		
 		var opcnt = 1;
 		function opCnter() { 
 			opcnt--
 			//console.log('Dones ' + opcnt);
 			if (opcnt == 0) done(); 
 		};
+			
+		// TODO reenable this
+		Db().reset();
 		
 		if (root && rooton) {
 			root.off('value', rooton);
@@ -678,8 +680,6 @@ describe('Db3 >', () => {
 			},
 			str: 'dummy'
 		}, opCnter);
-		
-		
 		
 		// Keep reference alive in ram, faster tests and less side effects
 		var myp = progr++;
@@ -3315,7 +3315,7 @@ describe('Db3 >', () => {
 		});
 	});
 
-	describe.only('Bugs >', ()=>{
+	describe('Bugs >', ()=>{
 		it('should not wipe out collections on a reference', ()=>{
 			var cp2 = Db(Complex).get('cp2');
 			var cp3 = new Complex();
@@ -3332,7 +3332,6 @@ describe('Db3 >', () => {
 				});
 			}).then((ds)=>{
 				var val = ds.val();
-				console.log(val);
 				assert("Collection still there").when(val['embedList']).is(M.anObject);
 				assert("String changed").when(val['str']).is('ciao');
 			});

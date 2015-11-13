@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151112_223030_master_1.0.0_1cea487
+ * TSDB version : 20151113_131054_master_1.0.0_40dd184
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151112_223030_master_1.0.0_1cea487';
+var Version = '20151113_131054_master_1.0.0_40dd184';
 var Db = (function () {
     function Db() {
     }
@@ -171,16 +171,60 @@ var Db;
                     this.conf.baseUrl += '/';
                 }
             }
+            FirebaseDbTreeRoot.prototype.isReady = function () {
+                return FirebaseDbTreeRoot.ready;
+            };
+            FirebaseDbTreeRoot.prototype.whenReady = function () {
+                return FirebaseDbTreeRoot.readyProm;
+            };
             FirebaseDbTreeRoot.prototype.getUrl = function (url) {
-                return new Firebase(this.conf.baseUrl + url);
+                if (this.isReady()) {
+                    return new Firebase(this.conf.baseUrl + url);
+                }
+                else {
+                    var ret = new Firebase(this.conf.baseUrl + url);
+                    ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
+                    ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
+                }
             };
             FirebaseDbTreeRoot.prototype.makeRelative = function (url) {
                 if (url.indexOf(this.conf.baseUrl) != 0)
                     return null;
                 return "/" + url.substr(this.conf.baseUrl.length);
             };
-            FirebaseDbTreeRoot.create = function (conf) {
-                return new FirebaseDbTreeRoot(conf);
+            FirebaseDbTreeRoot.create = function (dbconf) {
+                var fbconf = dbconf;
+                var ret = new FirebaseDbTreeRoot(fbconf);
+                if (!FirebaseDbTreeRoot.readyProm) {
+                    if (fbconf.secret) {
+                        FirebaseDbTreeRoot.ready = false;
+                        FirebaseDbTreeRoot.readyProm = new Promise(function (res, rej) {
+                            new Firebase(fbconf.baseUrl).authWithCustomToken(fbconf.secret, function (err, data) {
+                                if (err) {
+                                    console.log(err);
+                                    rej(err);
+                                    return;
+                                }
+                                FirebaseDbTreeRoot.ready = true;
+                                res();
+                            });
+                        });
+                    }
+                    else {
+                        FirebaseDbTreeRoot.ready = true;
+                        FirebaseDbTreeRoot.readyProm = Promise.resolve(true);
+                    }
+                }
+                return ret;
+            };
+            FirebaseDbTreeRoot.wrapReady = function (f) {
+                return function () {
+                    var args = Array.prototype.slice.apply(arguments);
+                    var me = this;
+                    FirebaseDbTreeRoot.readyProm.then(function () {
+                        f.apply(me, args);
+                    });
+                };
             };
             return FirebaseDbTreeRoot;
         })();
@@ -206,6 +250,12 @@ var Db;
             }
             MonitoringDbTreeRoot.create = function (conf) {
                 return new MonitoringDbTreeRoot(conf);
+            };
+            MonitoringDbTreeRoot.prototype.isReady = function () {
+                return this.delegateRoot.isReady();
+            };
+            MonitoringDbTreeRoot.prototype.whenReady = function () {
+                return this.delegateRoot.whenReady();
             };
             MonitoringDbTreeRoot.prototype.getUrl = function (url) {
                 return new MonitoringDbTree(this, this.delegateRoot.getUrl(url));

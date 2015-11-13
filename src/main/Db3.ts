@@ -1052,6 +1052,8 @@ module Db {
 		export interface DbTreeRoot {
 			getUrl(url :string) :DbTree;
 			makeRelative(url :string) :string;
+			isReady() :boolean;
+			whenReady() :Promise<any>;
 		}
 		
 		export interface DbTreeSnap {
@@ -1187,25 +1189,78 @@ module Db {
 			 * Url of the Firebase server.
 			 */
 			baseUrl :string;
+			
+			/**
+			 * Optional app secret to authernticate servers
+			 */
+			secret? :string;
 		}
 		
 		export class FirebaseDbTreeRoot implements DbTreeRoot {
 			private conf :FirebaseConf;
+			
 			constructor(conf :Api.DatabaseConf) {
 				this.conf = <FirebaseConf>conf;
 				if (this.conf.baseUrl.charAt(this.conf.baseUrl.length - 1) != '/') {
 					this.conf.baseUrl += '/';
 				}
 			}
+			isReady() {
+				return FirebaseDbTreeRoot.ready;
+			}
+			whenReady() {
+				return FirebaseDbTreeRoot.readyProm;
+			}
 			getUrl(url :string) :DbTree {
-				return new Firebase(this.conf.baseUrl + url);
+				if (this.isReady()) {
+					return new Firebase(this.conf.baseUrl + url);
+				} else {
+					var ret = new Firebase(this.conf.baseUrl + url);
+					ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
+					ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
+				}
 			}
 			makeRelative(url :string):string {
 				if (url.indexOf(this.conf.baseUrl) != 0) return null;
 				return "/" + url.substr(this.conf.baseUrl.length);
 			}
-			static create(conf :Api.DatabaseConf) {
-				return new FirebaseDbTreeRoot(conf);
+			
+			static ready :boolean;
+			static readyProm :Promise<any>;
+			
+			static create(dbconf :Api.DatabaseConf) {
+				var fbconf = <FirebaseConf>dbconf;
+				var ret = new FirebaseDbTreeRoot(fbconf);
+				if (!FirebaseDbTreeRoot.readyProm) {
+					if (fbconf.secret) {
+						FirebaseDbTreeRoot.ready = false;
+						FirebaseDbTreeRoot.readyProm = new Promise((res,rej)=>{
+							new Firebase(fbconf.baseUrl).authWithCustomToken(fbconf.secret, (err,data) => {
+								if (err) {
+									console.log(err);
+									rej(err);
+									return;
+								}
+								FirebaseDbTreeRoot.ready = true;
+								res();
+							});
+						});
+					} else {
+						FirebaseDbTreeRoot.ready = true;
+						FirebaseDbTreeRoot.readyProm = Promise.resolve(true);
+					}
+				}
+				return ret;
+			}
+			
+			static wrapReady<X extends Function>(f :X) :X {
+				return <X><any>function() {
+					var args = Array.prototype.slice.apply(arguments);
+					var me = this;
+					FirebaseDbTreeRoot.readyProm.then(()=>{
+						f.apply(me,args);
+					});
+				}
 			}
 		}
 		
@@ -1259,6 +1314,12 @@ module Db {
 				this.prefix = this.conf.prefix;
 				this.dtlog("Starting monitor:");
 				this.dtlog("\tunderlying conf", this.conf.realConfiguration);
+			}
+			isReady() {
+				return this.delegateRoot.isReady();
+			}
+			whenReady() {
+				return this.delegateRoot.whenReady();
 			}
 			getUrl(url :string) :DbTree {
 				return new MonitoringDbTree(this, this.delegateRoot.getUrl(url));

@@ -16,8 +16,11 @@ var Db3 = require('../main/Db3');
 var Firebase = require('firebase');
 var M = require('tsMatchers');
 var assert = M.assert;
-var baseUrl = "https://swashp.firebaseio.com/test3/";
-var Db = Db3.configure({ baseUrl: baseUrl });
+var baseUrl = "https://tsdb.firebaseio.com/test3/";
+var Db = Db3.configure({
+    baseUrl: baseUrl,
+    secret: "5tGSMCySw95AtYBFh3RQSzBw8CfT4WIxSXh6WbB0"
+});
 var lastRemoteCallArgs = null;
 var lastLocalStubArgs = null;
 var WithProps = (function () {
@@ -373,8 +376,6 @@ describe('Db3 >', function () {
     beforeEach(function (done) {
         //console.log("before starts");
         this.timeout(100000);
-        // TODO reenable this
-        Db().reset();
         var opcnt = 1;
         function opCnter() {
             opcnt--;
@@ -383,6 +384,8 @@ describe('Db3 >', function () {
                 done();
         }
         ;
+        // TODO reenable this
+        Db().reset();
         if (root && rooton) {
             root.off('value', rooton);
             rooton = null;
@@ -3097,7 +3100,7 @@ describe('Db3 >', function () {
             });
         });
     });
-    describe.only('Bugs >', function () {
+    describe('Bugs >', function () {
         it('should not wipe out collections on a reference', function () {
             var cp2 = Db(Complex).get('cp2');
             var cp3 = new Complex();
@@ -3114,7 +3117,6 @@ describe('Db3 >', function () {
                 });
             }).then(function (ds) {
                 var val = ds.val();
-                console.log(val);
                 assert("Collection still there").when(val['embedList']).is(M.anObject);
                 assert("String changed").when(val['str']).is('ciao');
             });

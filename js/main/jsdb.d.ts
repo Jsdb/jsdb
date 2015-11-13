@@ -813,6 +813,8 @@ declare module 'jsdb' {
                     interface DbTreeRoot {
                             getUrl(url: string): DbTree;
                             makeRelative(url: string): string;
+                            isReady(): boolean;
+                            whenReady(): Promise<any>;
                     }
                     interface DbTreeSnap {
                             /**
@@ -920,12 +922,21 @@ declare module 'jsdb' {
                                 * Url of the Firebase server.
                                 */
                             baseUrl: string;
+                            /**
+                                * Optional app secret to authernticate servers
+                                */
+                            secret?: string;
                     }
                     class FirebaseDbTreeRoot implements DbTreeRoot {
                             constructor(conf: Api.DatabaseConf);
+                            isReady(): boolean;
+                            whenReady(): Promise<any>;
                             getUrl(url: string): DbTree;
                             makeRelative(url: string): string;
-                            static create(conf: Api.DatabaseConf): FirebaseDbTreeRoot;
+                            static ready: boolean;
+                            static readyProm: Promise<any>;
+                            static create(dbconf: Api.DatabaseConf): FirebaseDbTreeRoot;
+                            static wrapReady<X extends Function>(f: X): X;
                     }
                     interface MonitoringConf extends Api.DatabaseConf {
                             realConfiguration: Api.DatabaseConf;
@@ -984,6 +995,8 @@ declare module 'jsdb' {
                             prefix: string;
                             delegateRoot: DbTreeRoot;
                             constructor(conf: Api.DatabaseConf);
+                            isReady(): boolean;
+                            whenReady(): Promise<any>;
                             getUrl(url: string): DbTree;
                             makeRelative(url: string): string;
                             emit(url: string, type: string, name: string, val: any, others: any[]): void;

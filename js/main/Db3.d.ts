@@ -822,6 +822,8 @@ declare module Db {
         interface DbTreeRoot {
             getUrl(url: string): DbTree;
             makeRelative(url: string): string;
+            isReady(): boolean;
+            whenReady(): Promise<any>;
         }
         interface DbTreeSnap {
             /**
@@ -929,13 +931,22 @@ declare module Db {
              * Url of the Firebase server.
              */
             baseUrl: string;
+            /**
+             * Optional app secret to authernticate servers
+             */
+            secret?: string;
         }
         class FirebaseDbTreeRoot implements DbTreeRoot {
             private conf;
             constructor(conf: Api.DatabaseConf);
+            isReady(): boolean;
+            whenReady(): Promise<any>;
             getUrl(url: string): DbTree;
             makeRelative(url: string): string;
-            static create(conf: Api.DatabaseConf): FirebaseDbTreeRoot;
+            static ready: boolean;
+            static readyProm: Promise<any>;
+            static create(dbconf: Api.DatabaseConf): FirebaseDbTreeRoot;
+            static wrapReady<X extends Function>(f: X): X;
         }
         interface MonitoringConf extends Api.DatabaseConf {
             realConfiguration: Api.DatabaseConf;
@@ -994,6 +1005,8 @@ declare module Db {
             prefix: string;
             delegateRoot: DbTreeRoot;
             constructor(conf: Api.DatabaseConf);
+            isReady(): boolean;
+            whenReady(): Promise<any>;
             getUrl(url: string): DbTree;
             makeRelative(url: string): string;
             private dtlog(...args);
