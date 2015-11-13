@@ -1212,13 +1212,14 @@ module Db {
 				return FirebaseDbTreeRoot.readyProm;
 			}
 			getUrl(url :string) :DbTree {
-				if (this.isReady()) {
-					return new Firebase(this.conf.baseUrl + url);
-				} else {
-					var ret = new Firebase(this.conf.baseUrl + url);
+				var ret = new Firebase(this.conf.baseUrl + url);
+				if (!this.isReady()) {
 					ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
 					ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
+					ret.set = FirebaseDbTreeRoot.wrapReady(ret.set);
+					ret.update = FirebaseDbTreeRoot.wrapReady(ret.update);
 				}
+				return ret;
 			}
 			makeRelative(url :string):string {
 				if (url.indexOf(this.conf.baseUrl) != 0) return null;

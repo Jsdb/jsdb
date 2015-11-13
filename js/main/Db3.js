@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151113_131054_master_1.0.0_40dd184
+ * TSDB version : 20151113_134253_master_1.0.0_17d6529
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151113_131054_master_1.0.0_40dd184';
+var Version = '20151113_134253_master_1.0.0_17d6529';
 var Db = (function () {
     function Db() {
     }
@@ -178,14 +178,14 @@ var Db;
                 return FirebaseDbTreeRoot.readyProm;
             };
             FirebaseDbTreeRoot.prototype.getUrl = function (url) {
-                if (this.isReady()) {
-                    return new Firebase(this.conf.baseUrl + url);
-                }
-                else {
-                    var ret = new Firebase(this.conf.baseUrl + url);
+                var ret = new Firebase(this.conf.baseUrl + url);
+                if (!this.isReady()) {
                     ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
                     ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
+                    ret.set = FirebaseDbTreeRoot.wrapReady(ret.set);
+                    ret.update = FirebaseDbTreeRoot.wrapReady(ret.update);
                 }
+                return ret;
             };
             FirebaseDbTreeRoot.prototype.makeRelative = function (url) {
                 if (url.indexOf(this.conf.baseUrl) != 0)
