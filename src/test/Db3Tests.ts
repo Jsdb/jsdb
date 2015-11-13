@@ -3037,7 +3037,8 @@ describe('Db3 >', () => {
 				obj: {
 					str: 'str',
 					num: 1,
-					ent: wp1
+					ent: wp1,
+					dummy: null
 				}
 			};
 			

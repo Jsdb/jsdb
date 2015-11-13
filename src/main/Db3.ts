@@ -4327,6 +4327,7 @@ module Db {
 					});
 				} catch (e) {
 					console.log("Error executing remote invocation", e);
+					console.log(e.stack);
 					return Promise.resolve({error: e.toString()});
 				}
 			}
@@ -4899,7 +4900,7 @@ module Db {
 				for (var i = 0; i < from.length; i++) {
 					intDeserializeRefs(db, ctx, promises, from, retArr, i);
 				}
-			} else if (typeof(from) === 'object') {
+			} else if (from != null && typeof(from) === 'object') {
 				if (from._ref) {
 					var prom = db().load(ctx, from._ref);
 					promises.push(prom);

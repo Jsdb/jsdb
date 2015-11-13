@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151113_134253_master_1.0.0_17d6529
+ * TSDB version : 20151113_193048_master_1.0.0_8e54ac5
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151113_134253_master_1.0.0_17d6529';
+var Version = '20151113_193048_master_1.0.0_8e54ac5';
 var Db = (function () {
     function Db() {
     }
@@ -3213,6 +3213,7 @@ var Db;
                 }
                 catch (e) {
                     console.log("Error executing remote invocation", e);
+                    console.log(e.stack);
                     return Promise.resolve({ error: e.toString() });
                 }
             };
@@ -3827,7 +3828,7 @@ var Db;
                     intDeserializeRefs(db, ctx, promises, from, retArr, i);
                 }
             }
-            else if (typeof (from) === 'object') {
+            else if (from != null && typeof (from) === 'object') {
                 if (from._ref) {
                     var prom = db().load(ctx, from._ref);
                     promises.push(prom);

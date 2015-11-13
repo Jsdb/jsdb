@@ -2863,7 +2863,8 @@ describe('Db3 >', function () {
                 obj: {
                     str: 'str',
                     num: 1,
-                    ent: wp1
+                    ent: wp1,
+                    dummy: null
                 }
             };
             var to = Db3.Utils.serializeRefs(from);
