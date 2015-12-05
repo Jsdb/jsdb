@@ -7,10 +7,20 @@ import assert = M.assert;
 
 var baseUrl :string = "https://tsdb.firebaseio.com/test3/"
 
+
 var Db = Db3.configure(<Db3.Spi.FirebaseConf>{
 	baseUrl:baseUrl,
 	secret: "5tGSMCySw95AtYBFh3RQSzBw8CfT4WIxSXh6WbB0"
 });
+/*
+var Db = Db3.configure(<Db3.Spi.MonitoringConf>{
+	adapter: 'monitor',
+	realConfiguration: <Db3.Spi.FirebaseConf>{
+		baseUrl:baseUrl,
+		secret: "5tGSMCySw95AtYBFh3RQSzBw8CfT4WIxSXh6WbB0"
+	}
+});
+*/
 
 var lastRemoteCallArgs :IArguments = null;
 var lastLocalStubArgs :IArguments = null;
@@ -266,6 +276,8 @@ describe('Db3 >', () => {
 	var wr3Fb :Firebase;
 	var wr4Fb :Firebase;
 	var wr5Fb :Firebase;
+	var wr6Fb :Firebase;
+	var wr7Fb :Firebase;
 	
 	var wcFb :Firebase;
 	var wc1Fb :Firebase;
@@ -479,6 +491,23 @@ describe('Db3 >', () => {
 			}
 		}, opCnter);
 		
+		wr6Fb = wrFb.child('wr6');
+		opcnt++;
+		wr6Fb.set({
+			str: 'String 6',
+			cross: {
+				_ref: wr5Fb.toString() + '/'
+			}
+		}, opCnter);
+		
+		wr7Fb = wrFb.child('wr7');
+		opcnt++;
+		wr7Fb.set({
+			str: 'String 7',
+			cross: {
+				_ref: wr6Fb.toString() + '/'
+			}
+		}, opCnter);
 
 		wcFb = new Firebase(baseUrl + '/withCols');
 		wc1Fb = wcFb.child('wc1');
@@ -1824,6 +1853,25 @@ describe('Db3 >', () => {
 				ws.sub = se;
 				Db(ws).assignUrl();
 				assert('subentity is bound').when(Db3.of(se)).is(M.aTruthy);
+			});
+			
+			it('should assign url and save refernced new entity', ()=>{
+				var wr1 = Db(WithRef).get("wr1");
+				return Db(wr1).load(this).then(()=>{
+					var nwp = new WithProps();
+					nwp.num = 1000;
+					wr1.ref = nwp;
+					return Db(wr1.ref).save();
+				}).then(()=>{
+					return new Promise<FirebaseDataSnapshot>((res)=>{
+						wr1Fb.on('value', (ds)=>{
+							res(ds);
+						});
+					});
+				}).then((ds)=>{
+					var val = ds.val();
+					assert("Set the reference correctly").when(val.ref._ref).is(M.stringContaining('/withProps/'));
+				});
 			});
 		});
 		
@@ -3335,6 +3383,22 @@ describe('Db3 >', () => {
 				var val = ds.val();
 				assert("Collection still there").when(val['embedList']).is(M.anObject);
 				assert("String changed").when(val['str']).is('ciao');
+			});
+		});
+		
+		it('should not wipe out references in referenced entities', ()=>{
+			var wr7 = Db(WithRef).get('wr7');
+			var wr6 = null;
+			return Db(wr7).load(this).then(()=>{
+				wr6 = wr7.cross;
+				wr6.str = 'ciao';
+				return Db(wr6).save();
+			}).then(()=>{
+				return new Promise<FirebaseDataSnapshot>((res)=>{wr6Fb.on('value', res);});
+			}).then((ds)=>{
+				var val = ds.val();
+				assert("String changed").when(val['str']).is('ciao');
+				assert("Reference still there").when(val['cross']).is(M.aTruthy);
 			});
 		});
 	});

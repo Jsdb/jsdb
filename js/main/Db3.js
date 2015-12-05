@@ -1,5 +1,5 @@
 /**
- * TSDB version : 20151113_193048_master_1.0.0_8e54ac5
+ * TSDB version : 20151205_022955_master_1.0.0_48835b6
  */
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9,7 +9,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Firebase = require('firebase');
 var PromiseModule = require('es6-promise');
 var Promise = PromiseModule.Promise;
-var Version = '20151113_193048_master_1.0.0_8e54ac5';
+var Version = '20151205_022955_master_1.0.0_48835b6';
 var Db = (function () {
     function Db() {
     }
@@ -1775,6 +1775,7 @@ var Db;
             ReferenceEvent.prototype.setEntity = function (entity) {
                 this.entity = entity;
                 if (entity) {
+                    this.loaded = true;
                     this.pointedEvent = this.state.createEvent(entity, []);
                 }
                 else {
@@ -1853,6 +1854,7 @@ var Db;
                 _super.prototype.on.call(this, h);
             };
             ReferenceEvent.prototype.parseValue = function (ds) {
+                this.loaded = true;
                 var val = ds && ds.val();
                 if (val && val._ref) {
                     // We have a value, and the value is a reference.
@@ -1882,6 +1884,9 @@ var Db;
             };
             ReferenceEvent.prototype.serialize = function (localsOnly) {
                 if (localsOnly === void 0) { localsOnly = false; }
+                // Not loaded, don't serialize.
+                if (!this.isLoaded())
+                    return undefined;
                 // No event, serialize null
                 if (!this.pointedEvent)
                     return null;
@@ -1922,6 +1927,8 @@ var Db;
             };
             ReferenceEvent.prototype.internalSave = function () {
                 var _this = this;
+                if (!this.isLoaded())
+                    return;
                 return new Promise(function (ok, err) {
                     var fb = _this.state.getTree(_this.getUrl());
                     fb.set(_this.serialize(false), function (fberr) {
@@ -1935,10 +1942,11 @@ var Db;
                 });
             };
             ReferenceEvent.prototype.save = function () {
-                var proms = [this.internalSave()];
+                var proms = [];
                 if (this.pointedEvent) {
                     proms.push(this.pointedEvent.save());
                 }
+                proms.push(this.internalSave());
                 return Promise.all(proms);
             };
             ReferenceEvent.prototype.remove = function () {

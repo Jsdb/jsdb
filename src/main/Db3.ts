@@ -2879,6 +2879,7 @@ module Db {
 			setEntity(entity :Api.Entity) {
 				this.entity = entity;
 				if (entity) {
+					this.loaded = true;
 					this.pointedEvent = <EntityEvent<E>>this.state.createEvent(entity,[]);
 				} else {
 					this.pointedEvent = null;
@@ -2954,6 +2955,7 @@ module Db {
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
+				this.loaded = true;
 				var val = ds && ds.val();
 				if (val && val._ref) {
 					// We have a value, and the value is a reference.
@@ -2982,6 +2984,8 @@ module Db {
 			}
 			
 			serialize(localsOnly :boolean = false):Object {
+				// Not loaded, don't serialize.
+				if (!this.isLoaded()) return undefined;
 				// No event, serialize null
 				if (!this.pointedEvent) return null;
 				var obj = null;
@@ -3020,6 +3024,7 @@ module Db {
 			}
 			
 			internalSave() {
+				if (!this.isLoaded()) return;
 				return new Promise<any>((ok,err) => {
 					var fb = this.state.getTree(this.getUrl());
 					fb.set(this.serialize(false), (fberr) => {
@@ -3033,10 +3038,11 @@ module Db {
 			}
 			
 			save() {
-				var proms = [this.internalSave()];
+				var proms = [];
 				if (this.pointedEvent) {
 					proms.push(this.pointedEvent.save());
 				}
+				proms.push(this.internalSave());
 				return Promise.all(proms);
 			}
 			
