@@ -18,9 +18,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else if (typeof define === 'function' && define.amd) {
         define(deps, factory);
     }
-})(["require", "exports", '../main/Db3', 'firebase', 'tsMatchers'], function (require, exports) {
+})(["require", "exports", '../main/Tsdb', 'firebase', 'tsMatchers'], function (require, exports) {
     var _this = this;
-    var Db3 = require('../main/Db3');
+    var Db3 = require('../main/Tsdb');
     var Firebase = require('firebase');
     var M = require('tsMatchers');
     var assert = M.assert;

@@ -310,7 +310,7 @@ gulp.task("ts", ["ts:src"], function () {
 	var tsProject = ts.createProject('src/tsconfig.json', {
 		typescript: require('typescript')
 	});
-	var tsResult = gulp.src(paths.ts, {base:'./src'})
+	var tsResult = gulp.src(paths.ts, {base:'./src/'})
 		.pipe(sourcemaps.init())
 		.pipe(ts(tsProject));
 	
@@ -335,13 +335,14 @@ gulp.task("ts", ["ts:src"], function () {
 		}))
 		.pipe(gulp.dest(paths.tsout))
 		.on('finish', function() {
-			gulp.src(paths.tsout + '/main/Db3.js', {base: './'})
+			gulp.src(paths.tsout + '/main/Tsdb.js', {base: './'})
 				.pipe(replace(UMDDef,UMDGlobal))
 				.pipe(gulp.dest('./'))
 		})
 	,
 	tsResult.dts
 		.pipe(replace('VERSION_TAG', versionTag()))
+		.pipe(replace(/.*reference path.*/g,''))
 		.pipe(gulp.dest(paths.tsout))
 		.on('finish', function() {
 			if (paths.mainDts) {

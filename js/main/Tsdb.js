@@ -1,3 +1,4 @@
+/// <reference path="../../typings/tsd.d.ts" />
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -16,16 +17,16 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20151230_175153_master_1.0.0_30a0ba2
+     * TSDB version : 20151230_184826_master_1.0.0_c0cd29e
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20151230_175153_master_1.0.0_30a0ba2';
-    var Db = (function () {
-        function Db() {
+    var Version = '20151230_184826_master_1.0.0_c0cd29e';
+    var Tsdb = (function () {
+        function Tsdb() {
         }
-        Object.defineProperty(Db, "of", {
+        Object.defineProperty(Tsdb, "of", {
             /**
              * Static way of accessing the database. This works only
              * if the entity passed in was already connected to a database,
@@ -38,15 +39,15 @@ var __extends = (this && this.__extends) || function (d, b) {
              * opts for a share-nothing architecture.
              */
             get: function () {
-                Db.Internal.clearLastStack();
+                Tsdb.Internal.clearLastStack();
                 return function (param) {
-                    var e = Db.Internal.getLastEntity();
+                    var e = Tsdb.Internal.getLastEntity();
                     if (!e) {
                         if (!param)
                             throw new Error("A parameter is needed to find the database");
-                        return Db.entEvent.get(param);
+                        return Tsdb.entEvent.get(param);
                     }
-                    var evt = Db.entEvent.get(e);
+                    var evt = Tsdb.entEvent.get(e);
                     if (!evt)
                         return null;
                     var db = evt.db;
@@ -56,13 +57,13 @@ var __extends = (this && this.__extends) || function (d, b) {
             enumerable: true,
             configurable: true
         });
-        return Db;
+        return Tsdb;
     })();
     /**
      * The main Db module.
      */
-    var Db;
-    (function (Db) {
+    var Tsdb;
+    (function (Tsdb) {
         /**
          * Create a database instance using given configuration. The first call to this function
          * will also initialize the {@link defaultDb}.
@@ -73,14 +74,14 @@ var __extends = (this && this.__extends) || function (d, b) {
          */
         function configure(conf) {
             if (!defaultDb) {
-                defaultDb = Db.Internal.createDb(conf);
+                defaultDb = Tsdb.Internal.createDb(conf);
                 return defaultDb;
             }
             else {
-                return Db.Internal.createDb(conf);
+                return Tsdb.Internal.createDb(conf);
             }
         }
-        Db.configure = configure;
+        Tsdb.configure = configure;
         /*
         export var of :Api.IDb3Static = function(param? :any) {
             var e = lastEntity;
@@ -101,7 +102,7 @@ var __extends = (this && this.__extends) || function (d, b) {
         function getDefaultDb() {
             return defaultDb;
         }
-        Db.getDefaultDb = getDefaultDb;
+        Tsdb.getDefaultDb = getDefaultDb;
         var Api;
         (function (Api) {
             /**
@@ -151,7 +152,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return DefaultClientSideSocketFactory;
             })();
             Api.DefaultClientSideSocketFactory = DefaultClientSideSocketFactory;
-        })(Api = Db.Api || (Db.Api = {}));
+        })(Api = Tsdb.Api || (Tsdb.Api = {}));
         var Spi;
         (function (Spi) {
             Spi.registry = {};
@@ -432,7 +433,7 @@ var __extends = (this && this.__extends) || function (d, b) {
             })(MonitoringDbTreeQuery);
             Spi.MonitoringDbTree = MonitoringDbTree;
             Spi.registry['monitor'] = MonitoringDbTreeRoot.create;
-        })(Spi = Db.Spi || (Db.Spi = {}));
+        })(Spi = Tsdb.Spi || (Tsdb.Spi = {}));
         /**
          * Internal module, most of the stuff inside this module are either internal use only or exposed by other methods,
          * they should never be used directly.
@@ -1617,7 +1618,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (!er)
                         throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
                     var url = er.getUrl();
-                    var nid = id || Db.Utils.IdGenerator.next();
+                    var nid = id || Tsdb.Utils.IdGenerator.next();
                     var disc = this.classMeta.discriminator || '';
                     if (disc)
                         disc += '*';
@@ -2117,12 +2118,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     var meta = metaOrkey;
                     if (!(metaOrkey instanceof MetaDescriptor)) {
                         if (this.isReference) {
-                            var refmeta = Db.meta.reference(this.classMeta.ctor, this.project);
+                            var refmeta = Tsdb.meta.reference(this.classMeta.ctor, this.project);
                             refmeta.localName = metaOrkey;
                             meta = refmeta;
                         }
                         else {
-                            var embmeta = Db.meta.embedded(this.classMeta.ctor, this.binding);
+                            var embmeta = Tsdb.meta.embedded(this.classMeta.ctor, this.binding);
                             embmeta.localName = metaOrkey;
                             meta = embmeta;
                         }
@@ -3030,11 +3031,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 DbState.prototype.bindEntity = function (e, ev) {
                     // TODO probably we should check and raise an error is the entity was already bound
-                    Db.entEvent.set(e, ev);
+                    Tsdb.entEvent.set(e, ev);
                 };
                 DbState.prototype.createEvent = function (e, stack) {
                     if (stack === void 0) { stack = []; }
-                    var roote = Db.entEvent.get(e);
+                    var roote = Tsdb.entEvent.get(e);
                     if (!roote) {
                         var clmeta = this.myMeta.findMeta(e);
                         var nre = new EntityEvent();
@@ -3042,7 +3043,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         nre.setEntity(e);
                         nre.classMeta = clmeta;
                         roote = nre;
-                        Db.entEvent.set(e, roote);
+                        Tsdb.entEvent.set(e, roote);
                     }
                     else {
                         if (roote.state != this)
@@ -3278,7 +3279,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                 }
                 else {
-                    var ev = Db.of(inst);
+                    var ev = Tsdb.of(inst);
                     if (!ev)
                         throw new Error("The object is not bound to a database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
                     if (!ev.getUrl())
@@ -3310,7 +3311,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     ident = "staticCall:" + Utils.findName(inst);
                 }
                 else {
-                    var ev = Db.of(inst);
+                    var ev = Tsdb.of(inst);
                     ident = ev.getUrl();
                 }
                 return {
@@ -3676,7 +3677,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 lastExpect = null;
             }
             Internal.clearLastStack = clearLastStack;
-        })(Internal = Db.Internal || (Db.Internal = {}));
+        })(Internal = Tsdb.Internal || (Tsdb.Internal = {}));
         var Utils;
         (function (Utils) {
             function findName(o) {
@@ -3815,7 +3816,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 }
                 if (typeof (from) === 'object') {
                     // Check if it's an entity
-                    var ev = Db.of(from);
+                    var ev = Tsdb.of(from);
                     if (ev && ev.getUrl()) {
                         return { _ref: ev.getUrl() };
                     }
@@ -4001,14 +4002,14 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return WeakWrap;
             })();
             Utils.WeakWrap = WeakWrap;
-        })(Utils = Db.Utils || (Db.Utils = {}));
+        })(Utils = Tsdb.Utils || (Tsdb.Utils = {}));
         function bind(localName, targetName, live) {
             if (live === void 0) { live = true; }
             var ret = new Internal.BindingImpl();
             ret.bind(localName, targetName, live);
             return ret;
         }
-        Db.bind = bind;
+        Tsdb.bind = bind;
         function sortBy(field, desc) {
             if (desc === void 0) { desc = false; }
             return {
@@ -4016,7 +4017,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 desc: desc
             };
         }
-        Db.sortBy = sortBy;
+        Tsdb.sortBy = sortBy;
         // --- Annotations
         function embedded(def, binding) {
             return function (target, propertyKey) {
@@ -4027,7 +4028,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.embedded = embedded;
+        Tsdb.embedded = embedded;
         function reference(def, project) {
             return function (target, propertyKey) {
                 //if (!def) throw new Error("Cannot find referenced class for " + propertyKey.toString());
@@ -4036,7 +4037,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.reference = reference;
+        Tsdb.reference = reference;
         function map(valueType, reference) {
             if (reference === void 0) { reference = false; }
             return function (target, propertyKey) {
@@ -4047,7 +4048,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.map = map;
+        Tsdb.map = map;
         function set(valueType, reference) {
             if (reference === void 0) { reference = false; }
             return function (target, propertyKey) {
@@ -4058,7 +4059,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.set = set;
+        Tsdb.set = set;
         function list(valueType, reference) {
             if (reference === void 0) { reference = false; }
             return function (target, propertyKey) {
@@ -4069,7 +4070,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.list = list;
+        Tsdb.list = list;
         function root(name, override) {
             return function (target) {
                 var myname = name;
@@ -4082,20 +4083,20 @@ var __extends = (this && this.__extends) || function (d, b) {
                 meta.define(target, myname, null, override);
             };
         }
-        Db.root = root;
+        Tsdb.root = root;
         function discriminator(disc) {
             return function (target) {
                 meta.define(target, null, disc);
             };
         }
-        Db.discriminator = discriminator;
+        Tsdb.discriminator = discriminator;
         function override(override) {
             if (override === void 0) { override = 'server'; }
             return function (target) {
                 meta.define(target, null, null, override);
             };
         }
-        Db.override = override;
+        Tsdb.override = override;
         function observable() {
             return function (target, propertyKey) {
                 var ret = meta.observable();
@@ -4103,14 +4104,14 @@ var __extends = (this && this.__extends) || function (d, b) {
                 installMetaGetter(target, propertyKey.toString(), ret);
             };
         }
-        Db.observable = observable;
+        Tsdb.observable = observable;
         function ignore() {
             return function (target, propertyKey) {
                 var ret = meta.ignore();
                 addDescriptor(target, propertyKey, ret);
             };
         }
-        Db.ignore = ignore;
+        Tsdb.ignore = ignore;
         function remote(settings) {
             return function (target, propertyKey, descriptor) {
                 var localStub = descriptor.value;
@@ -4126,7 +4127,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
             };
         }
-        Db.remote = remote;
+        Tsdb.remote = remote;
         function addDescriptor(target, propertyKey, ret) {
             ret.setLocalName(propertyKey.toString());
             var clmeta = allMetadata.findMeta(target.constructor);
@@ -4167,7 +4168,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     Internal.clearLastStack();
                     setProp(this, propertyKey, v);
                     //this[nkey] = v;
-                    var mye = Db.entEvent.get(this);
+                    var mye = Tsdb.entEvent.get(this);
                     if (mye) {
                         mye.findCreateChildFor(propertyKey, true);
                     }
@@ -4204,7 +4205,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 }
                 if (!def)
                     throw new Error("Cannot find embedded class");
-                var ret = new Db.Internal.EmbeddedMetaDescriptor();
+                var ret = new Tsdb.Internal.EmbeddedMetaDescriptor();
                 ret.setType(def);
                 ret.setBinding(binding);
                 return ret;
@@ -4216,7 +4217,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     def = def.type;
                 }
                 //if (!def) throw new Error("Cannot find referenced class");
-                var ret = new Db.Internal.ReferenceMetaDescriptor();
+                var ret = new Tsdb.Internal.ReferenceMetaDescriptor();
                 ret.setType(def);
                 ret.project = project;
                 return ret;
@@ -4243,24 +4244,24 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return ret;
             }
             function map(def, reference) {
-                return configureCollectionMeta(new Db.Internal.MapMetaDescriptor(), def, reference);
+                return configureCollectionMeta(new Tsdb.Internal.MapMetaDescriptor(), def, reference);
             }
             meta_1.map = map;
             function set(def, reference) {
-                return configureCollectionMeta(new Db.Internal.SetMetaDescriptor(), def, reference);
+                return configureCollectionMeta(new Tsdb.Internal.SetMetaDescriptor(), def, reference);
             }
             meta_1.set = set;
             function list(def, reference) {
-                return configureCollectionMeta(new Db.Internal.ListMetaDescriptor(), def, reference);
+                return configureCollectionMeta(new Tsdb.Internal.ListMetaDescriptor(), def, reference);
             }
             meta_1.list = list;
             function observable() {
-                var ret = new Db.Internal.ObservableMetaDescriptor();
+                var ret = new Tsdb.Internal.ObservableMetaDescriptor();
                 return ret;
             }
             meta_1.observable = observable;
             function ignore() {
-                var ret = new Db.Internal.IgnoreMetaDescriptor();
+                var ret = new Tsdb.Internal.IgnoreMetaDescriptor();
                 return ret;
             }
             meta_1.ignore = ignore;
@@ -4277,7 +4278,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 }
             }
             meta_1.define = define;
-        })(meta = Db.meta || (Db.meta = {}));
+        })(meta = Tsdb.meta || (Tsdb.meta = {}));
         /**
         * The default db, will be the first database created, handy since most projects will only use one db.
         */
@@ -4286,20 +4287,20 @@ var __extends = (this && this.__extends) || function (d, b) {
         * Weak association between entities and their database events. Each entity instance can be
         * connected only to a single database event, and as such to a single database.
         */
-        Db.entEvent = new Db.Utils.WeakWrap();
+        Tsdb.entEvent = new Tsdb.Utils.WeakWrap();
         /**
         * Weak association for properties handled by meta getters and setters.
         */
-        var props = new Db.Utils.WeakWrap();
-    })(Db || (Db = {}));
+        var props = new Tsdb.Utils.WeakWrap();
+    })(Tsdb || (Tsdb = {}));
     if (typeof module === 'object' && typeof module.exports === 'object') {
     }
     else if (typeof define === 'function' && define.amd) {
     }
     else {
-        window['Tsdb'] = Db;
+        window['Tsdb'] = Tsdb;
     }
-    return Db;
+    return Tsdb;
 });
 
-//# sourceMappingURL=Db3.js.map
+//# sourceMappingURL=Tsdb.js.map

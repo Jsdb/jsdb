@@ -1,4 +1,5 @@
-declare class Db {
+
+declare class Tsdb {
     /**
      * Static way of accessing the database. This works only
      * if the entity passed in was already connected to a database,
@@ -10,12 +11,12 @@ declare class Db {
      * database instances, especially in a server side environment that
      * opts for a share-nothing architecture.
      */
-    static of: Db.Api.IDb3Static;
+    static of: Tsdb.Api.IDb3Static;
 }
 /**
  * The main Db module.
  */
-declare module Db {
+declare module Tsdb {
     /**
      * Create a database instance using given configuration. The first call to this function
      * will also initialize the {@link defaultDb}.
@@ -24,11 +25,11 @@ declare module Db {
      *
      * @return An initialized and configured db instance
      */
-    function configure(conf: Api.DatabaseConf): Db.Api.IDb3Static;
+    function configure(conf: Api.DatabaseConf): Tsdb.Api.IDb3Static;
     /**
      * Return the {@link defaultDb} if any has been created.
      */
-    function getDefaultDb(): Db.Api.IDb3Static;
+    function getDefaultDb(): Tsdb.Api.IDb3Static;
     module Api {
         /**
          * Empty interface, and as such useless in typescript, just to name things.
@@ -2017,13 +2018,13 @@ declare module Db {
     }
     function remote(settings?: Api.RemoteCallParams): TypedMethodDecorator<(...args: any[]) => Promise<any>>;
     module meta {
-        function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Db.Internal.EmbeddedMetaDescriptor;
-        function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Db.Internal.ReferenceMetaDescriptor;
-        function map(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.MapMetaDescriptor;
-        function set(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.SetMetaDescriptor;
-        function list(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Db.Internal.ListMetaDescriptor;
-        function observable(): Db.Internal.ObservableMetaDescriptor;
-        function ignore(): Db.Internal.IgnoreMetaDescriptor;
+        function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Tsdb.Internal.EmbeddedMetaDescriptor;
+        function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Tsdb.Internal.ReferenceMetaDescriptor;
+        function map(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.MapMetaDescriptor;
+        function set(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.SetMetaDescriptor;
+        function list(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.ListMetaDescriptor;
+        function observable(): Tsdb.Internal.ObservableMetaDescriptor;
+        function ignore(): Tsdb.Internal.IgnoreMetaDescriptor;
         function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;
     }
     /**
@@ -2032,4 +2033,4 @@ declare module Db {
     */
     var entEvent: Utils.WeakWrap<Internal.EntityEvent<any>>;
 }
-export = Db;
+export = Tsdb;

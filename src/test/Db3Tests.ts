@@ -1,6 +1,6 @@
 
 
-import Db3 = require('../main/Db3');
+import Db3 = require('../main/Tsdb');
 import Firebase = require('firebase');
 import M = require('tsMatchers');
 import assert = M.assert;

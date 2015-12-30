@@ -1,7 +1,7 @@
 {
   "name": "jsdb",
   "description": "",
-  "main": "js/main/Db3.js",
+  "main": "js/main/Tsdb.js",
   "authors": [
     "Simone Gianni"
   ],
@@ -28,6 +28,9 @@
     "tests"
   ],
   "typescript": {
-    "definition": "js/main/jsdb.d.ts"
+    "definitions": [ 
+      "js/main/jsdb.d.ts",
+      "js/main/Tsdb.d.ts"
+    ]
   }
 }

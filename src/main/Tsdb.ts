@@ -1,3 +1,5 @@
+/// <reference path="../../typings/tsd.d.ts" />
+
 /**
  * TSDB version : VERSION_TAG
  */
@@ -30,7 +32,7 @@ interface WeakMapConstructor {
 }
 declare var WeakMap: WeakMapConstructor;
 
-class Db {
+class Tsdb {
 	/**
 	 * Static way of accessing the database. This works only
 	 * if the entity passed in was already connected to a database,
@@ -42,16 +44,16 @@ class Db {
 	 * database instances, especially in a server side environment that
 	 * opts for a share-nothing architecture.
 	 */
-	static get of():Db.Api.IDb3Static {
-		Db.Internal.clearLastStack();
+	static get of():Tsdb.Api.IDb3Static {
+		Tsdb.Internal.clearLastStack();
 		return function(param? :any) {
-			var e = Db.Internal.getLastEntity();
+			var e = Tsdb.Internal.getLastEntity();
 			if (!e) {
 				if (!param) throw new Error("A parameter is needed to find the database");	
-				return Db.entEvent.get(param);
+				return Tsdb.entEvent.get(param);
 			}
 			
-			var evt = Db.entEvent.get(e);
+			var evt = Tsdb.entEvent.get(e);
 			if (!evt) return null;
 			var db = evt.db;
 			return db.apply(db, arguments); 
@@ -62,7 +64,7 @@ class Db {
 /**
  * The main Db module.
  */
-module Db {
+module Tsdb {
 	
 	/**
 	 * Create a database instance using given configuration. The first call to this function
@@ -72,12 +74,12 @@ module Db {
 	 * 
 	 * @return An initialized and configured db instance
 	 */
-	export function configure(conf :Api.DatabaseConf) :Db.Api.IDb3Static {
+	export function configure(conf :Api.DatabaseConf) :Tsdb.Api.IDb3Static {
 		if (!defaultDb) {
-			defaultDb = Db.Internal.createDb(conf);
+			defaultDb = Tsdb.Internal.createDb(conf);
 			return defaultDb;
 		} else {
-			return Db.Internal.createDb(conf);
+			return Tsdb.Internal.createDb(conf);
 		}
 	}
 	
@@ -99,7 +101,7 @@ module Db {
 	/**
 	 * Return the {@link defaultDb} if any has been created.
 	 */
-	export function getDefaultDb() :Db.Api.IDb3Static {
+	export function getDefaultDb() :Tsdb.Api.IDb3Static {
 		return defaultDb;
 	}
 	
@@ -2696,7 +2698,7 @@ module Db {
 				var er = this.state.entityRoot(this.classMeta);
 				if (!er) throw new Error("The entity " + Utils.findName(this.entity.constructor) + " doesn't have a root");
 				var url = er.getUrl();
-				var nid = id || Db.Utils.IdGenerator.next();
+				var nid = id || Tsdb.Utils.IdGenerator.next();
 				var disc = this.classMeta.discriminator || '';
 				if (disc) disc+= '*';
 				this.url = url + disc + nid + '/';
@@ -3179,11 +3181,11 @@ module Db {
 				var meta:MetaDescriptor = <MetaDescriptor>metaOrkey;
 				if (!(metaOrkey instanceof MetaDescriptor)) {
 					if (this.isReference) {
-						var refmeta = Db.meta.reference(this.classMeta.ctor, this.project);
+						var refmeta = Tsdb.meta.reference(this.classMeta.ctor, this.project);
 						refmeta.localName = <string>metaOrkey;
 						meta = refmeta;
 					} else {
-						var embmeta = Db.meta.embedded(this.classMeta.ctor, this.binding);
+						var embmeta = Tsdb.meta.embedded(this.classMeta.ctor, this.binding);
 						embmeta.localName = <string>metaOrkey;
 						meta = embmeta;
 					}
@@ -4352,7 +4354,7 @@ module Db {
 					state = <DbState>defaultDb();
 				}
 			} else {
-				var ev = <GenericEvent><any>Db.of(inst);
+				var ev = <GenericEvent><any>Tsdb.of(inst);
 				if (!ev) throw new Error("The object is not bound to a database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
 				if (!ev.getUrl()) throw new Error("The object is not saved on the database, cannot invoke remote method, while invoking " + Utils.findName(inst) + "." + name);
 				state = ev.state;
@@ -4381,7 +4383,7 @@ module Db {
 			if (typeof(inst) === 'function') {
 				ident = "staticCall:" + Utils.findName(inst);
 			} else {
-				var ev = <GenericEvent><any>Db.of(inst);
+				var ev = <GenericEvent><any>Tsdb.of(inst);
 				ident = ev.getUrl();
 			}
 			
@@ -4852,7 +4854,7 @@ module Db {
 			}
 			if (typeof(from) === 'object') {
 				// Check if it's an entity
-				var ev = Db.of(from);
+				var ev = Tsdb.of(from);
 				if (ev && ev.getUrl()) {
 					return {_ref:ev.getUrl()};
 				}
@@ -5240,31 +5242,31 @@ module Db {
 
 	
 	export module meta {
-		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.EmbeddedParams, binding? :Api.IBinding) :Db.Internal.EmbeddedMetaDescriptor {
+		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.EmbeddedParams, binding? :Api.IBinding) :Tsdb.Internal.EmbeddedMetaDescriptor {
 			if ((<Api.EmbeddedParams>def).type) {
 				binding = binding || (<Api.EmbeddedParams>def).binding;
 				def = (<Api.EmbeddedParams>def).type;
 			}
 			if (!def) throw new Error("Cannot find embedded class");
-			var ret = new Db.Internal.EmbeddedMetaDescriptor();
+			var ret = new Tsdb.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
 			ret.setBinding(binding);
 			return ret;
 		}
 		
-		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Db.Internal.ReferenceMetaDescriptor {
+		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Tsdb.Internal.ReferenceMetaDescriptor {
 			if (arguments.length == 1 && def && ((<Api.ReferenceParams>def).type || (<Api.ReferenceParams>def).projections)) {
 				project = project || (<Api.ReferenceParams>def).projections;
 				def = (<Api.ReferenceParams>def).type;
 			}
 			//if (!def) throw new Error("Cannot find referenced class");
-			var ret = new Db.Internal.ReferenceMetaDescriptor();
+			var ret = new Tsdb.Internal.ReferenceMetaDescriptor();
 			ret.setType(def);
 			ret.project = project;
 			return ret;
 		}
 		
-		function configureCollectionMeta<X extends Db.Internal.CollectionMetaDescriptor>(ret :X, def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :X {
+		function configureCollectionMeta<X extends Tsdb.Internal.CollectionMetaDescriptor>(ret :X, def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :X {
 			var sorting :Api.SortingData;
 			var project :string[];
 			var binding :Api.IBinding;
@@ -5284,25 +5286,25 @@ module Db {
 			return ret;
 		}
 		
-		export function map(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.MapMetaDescriptor {
-			return configureCollectionMeta(new Db.Internal.MapMetaDescriptor(), def, reference);
+		export function map(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Tsdb.Internal.MapMetaDescriptor {
+			return configureCollectionMeta(new Tsdb.Internal.MapMetaDescriptor(), def, reference);
 		}
 		
-		export function set(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.SetMetaDescriptor {
-			return configureCollectionMeta(new Db.Internal.SetMetaDescriptor(), def, reference);
+		export function set(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Tsdb.Internal.SetMetaDescriptor {
+			return configureCollectionMeta(new Tsdb.Internal.SetMetaDescriptor(), def, reference);
 		}
 		
-		export function list(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Db.Internal.ListMetaDescriptor {
-			return configureCollectionMeta(new Db.Internal.ListMetaDescriptor(), def, reference);
+		export function list(def: Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.CollectionParams, reference? :boolean) :Tsdb.Internal.ListMetaDescriptor {
+			return configureCollectionMeta(new Tsdb.Internal.ListMetaDescriptor(), def, reference);
 		}
 		
-		export function observable() :Db.Internal.ObservableMetaDescriptor {
-			var ret = new Db.Internal.ObservableMetaDescriptor();
+		export function observable() :Tsdb.Internal.ObservableMetaDescriptor {
+			var ret = new Tsdb.Internal.ObservableMetaDescriptor();
 			return ret;
 		}
 		
-		export function ignore() :Db.Internal.IgnoreMetaDescriptor {
-			var ret = new Db.Internal.IgnoreMetaDescriptor();
+		export function ignore() :Tsdb.Internal.IgnoreMetaDescriptor {
+			var ret = new Tsdb.Internal.IgnoreMetaDescriptor();
 			return ret;
 		}
 		
@@ -5323,30 +5325,30 @@ module Db {
 	/**
 	* The default db, will be the first database created, handy since most projects will only use one db.
 	*/
-	var defaultDb :Db.Api.IDb3Static = null;
+	var defaultDb :Tsdb.Api.IDb3Static = null;
 	
 	/**
 	* Weak association between entities and their database events. Each entity instance can be 
 	* connected only to a single database event, and as such to a single database.
 	*/
-	export var entEvent = new Db.Utils.WeakWrap<Db.Internal.EntityEvent<any>>();
+	export var entEvent = new Tsdb.Utils.WeakWrap<Tsdb.Internal.EntityEvent<any>>();
 	
 	
 	/**
 	* Weak association for properties handled by meta getters and setters.
 	*/
-	var props = new Db.Utils.WeakWrap<{[index:string]:any}>();
+	var props = new Tsdb.Utils.WeakWrap<{[index:string]:any}>();
 
 }
 
 
-export = Db;
+export = Tsdb;
 
 // Fallback to global
 declare var define;
 if (typeof module === 'object' && typeof module.exports === 'object') {
 } else if (typeof define === 'function' && define.amd) {
 } else {
-	window['Tsdb'] = Db;
+	window['Tsdb'] = Tsdb;
 }
 

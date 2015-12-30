@@ -8,10 +8,10 @@
       "tests": [
         "./js/test/Db3Tests.js"
       ],
-      "mainDts": "./js/main/Db3.d.ts"
+      "mainDts": "./js/main/Tsdb.d.ts"
     }
   },
-  "main": "js/main/Db3.js",
+  "main": "js/main/Tsdb.js",
   "scripts": {
     "test": "gulp test"
   },
@@ -54,6 +54,9 @@
     }
   },
   "typescript": {
-    "definition": "js/main/jsdb.d.ts"
+    "definitions": [ 
+      "js/main/jsdb.d.ts",
+      "js/main/Tsdb.d.ts"
+    ]
   }
 }

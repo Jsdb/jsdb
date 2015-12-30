@@ -13,8 +13,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else if (typeof define === 'function' && define.amd) {
         define(deps, factory);
     }
-})(["require", "exports", '../main/Db3'], function (require, exports) {
-    var Tsdb = require('../main/Db3');
+})(["require", "exports", '../main/Tsdb'], function (require, exports) {
+    var Tsdb = require('../main/Tsdb');
     var ForwardWrong;
     (function (ForwardWrong) {
         var A = (function () {

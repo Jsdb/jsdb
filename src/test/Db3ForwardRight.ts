@@ -1,4 +1,4 @@
-import Tsdb = require('../main/Db3');
+import Tsdb = require('../main/Tsdb');
 
 export = ForwardWrong;
 module ForwardWrong {
