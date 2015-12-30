@@ -100,15 +100,6 @@ declare module Db {
          */
         interface ChainedIDb3Static<PE> {
             /**
-             * Pass-thru for when db(something) is used also when not needed.
-             */
-            /**
-             * Access to an entity root given the entity class.
-             */
-            /**
-             * TBD
-             */
-            /**
              * Access to an {@link observable} value in an entity.
              */
             <V extends nativeArrObj>(value: V): IObservableEvent<any> | PE;
@@ -2035,5 +2026,10 @@ declare module Db {
         function ignore(): Db.Internal.IgnoreMetaDescriptor;
         function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;
     }
+    /**
+    * Weak association between entities and their database events. Each entity instance can be
+    * connected only to a single database event, and as such to a single database.
+    */
+    var entEvent: Utils.WeakWrap<Internal.EntityEvent<any>>;
 }
 export = Db;

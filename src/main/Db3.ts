@@ -1,12 +1,11 @@
 /**
  * TSDB version : VERSION_TAG
  */
-
-
-import Firebase = require('firebase');
+var glb = typeof window !== 'undefined' ? window : global; 
+import FirebaseType = require('firebase');
+var Firebase = glb['Firebase'] || require('firebase');
 import PromiseModule = require('es6-promise');
-
-var Promise = PromiseModule.Promise;
+var Promise :typeof PromiseModule.Promise = glb['Promise'] || require('es6-promise').Promise;
 
 var Version = 'VERSION_TAG';
 
@@ -49,10 +48,10 @@ class Db {
 			var e = Db.Internal.getLastEntity();
 			if (!e) {
 				if (!param) throw new Error("A parameter is needed to find the database");	
-				return entEvent.get(param);
+				return Db.entEvent.get(param);
 			}
 			
-			var evt = entEvent.get(e);
+			var evt = Db.entEvent.get(e);
 			if (!evt) return null;
 			var db = evt.db;
 			return db.apply(db, arguments); 
@@ -189,28 +188,6 @@ module Db {
 		 * Main interface of the Db.
 		 */
 		export interface ChainedIDb3Static<PE> {
-			/**
-			 * Pass-thru for when db(something) is used also when not needed. 
-			 */
-			/*
-			<E extends Internal.GenericEvent>(evt :E):E|PE;
-			*/
-		
-			
-			/**
-			 * Access to an entity root given the entity class.
-			 */
-			/*
-			<T extends Entity>(c :EntityType<T>) :IEntityRoot<any>|PE;
-			*/
-			
-			/**
-			 * TBD
-			 */
-			/*
-			(meta :MetaDescriptor,entity :Entity):any;
-			*/
-
 			/**
 			 * Access to an {@link observable} value in an entity.
 			 */
@@ -1212,7 +1189,7 @@ module Db {
 				return FirebaseDbTreeRoot.readyProm;
 			}
 			getUrl(url :string) :DbTree {
-				var ret = new Firebase(this.conf.baseUrl + url);
+				var ret = <FirebaseType>new Firebase(this.conf.baseUrl + url);
 				if (!this.isReady()) {
 					ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
 					ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
@@ -1236,7 +1213,8 @@ module Db {
 					if (fbconf.secret) {
 						FirebaseDbTreeRoot.ready = false;
 						FirebaseDbTreeRoot.readyProm = new Promise((res,rej)=>{
-							new Firebase(fbconf.baseUrl).authWithCustomToken(fbconf.secret, (err,data) => {
+							var ref = <FirebaseType>new Firebase(fbconf.baseUrl); 
+							ref.authWithCustomToken(fbconf.secret, (err,data) => {
 								if (err) {
 									console.log(err);
 									rej(err);
@@ -5342,26 +5320,33 @@ module Db {
 		}
 	}
 
+	/**
+	* The default db, will be the first database created, handy since most projects will only use one db.
+	*/
+	var defaultDb :Db.Api.IDb3Static = null;
+	
+	/**
+	* Weak association between entities and their database events. Each entity instance can be 
+	* connected only to a single database event, and as such to a single database.
+	*/
+	export var entEvent = new Db.Utils.WeakWrap<Db.Internal.EntityEvent<any>>();
+	
+	
+	/**
+	* Weak association for properties handled by meta getters and setters.
+	*/
+	var props = new Db.Utils.WeakWrap<{[index:string]:any}>();
+
 }
 
-/**
- * The default db, will be the first database created, handy since most projects will only use one db.
- */
-var defaultDb :Db.Api.IDb3Static = null;
-
-/**
- * Weak association between entities and their database events. Each entity instance can be 
- * connected only to a single database event, and as such to a single database.
- */
-var entEvent = new Db.Utils.WeakWrap<Db.Internal.EntityEvent<any>>();
-
-
-/**
- * Weak association for properties handled by meta getters and setters.
- */
-var props = new Db.Utils.WeakWrap<{[index:string]:any}>();
 
 export = Db;
 
-
+// Fallback to global
+declare var define;
+if (typeof module === 'object' && typeof module.exports === 'object') {
+} else if (typeof define === 'function' && define.amd) {
+} else {
+	window['Tsdb'] = Db;
+}
 

@@ -234,7 +234,7 @@ ref :TheType
 > (already done), while here we have to wait for the language to support it properly.
 
 > Note that in the meantime, references does not need to specify a type anymore,
-> so this would apply to embeddeds only, which s stilla great part of the use
+> so this would apply to embeddeds only, which is still a great part of the use
 > cases anyway.
 
 
@@ -447,7 +447,7 @@ Support for calling server side methods
 > !! Need to clarify the semantics a bit, what can be passed, what is serialized and how etc..
 
 A method on the client can be called, the call will be forwared to the server, the server will
-perform checks and eventually modify data on the database and/ore return a value, the returned value
+perform checks and eventually modify data on the database and/or return a value, the returned value
 will resolve a server side promise that will resolve a client side promise.
 
 The method operates on an object, the url of the object will be sent to the server.
@@ -509,7 +509,7 @@ and passed as last parameter if the parameter name is "ctx".
 Programmatically trigger an update
 ----------------------------------
 
-A normal Firebase scenario is that when an entity is updated lcoally and then saved,
+A normal Firebase scenario is that when an entity is updated locally and then saved,
 the updated events are triggered locally early, and later the database sync is performed.
 
 This is beneficial for the user experience.

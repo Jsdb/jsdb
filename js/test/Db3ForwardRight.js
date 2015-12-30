@@ -6,25 +6,34 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
         case 4: return decorators.reduceRight(function(o, d) { return (d && d(target, key, o)) || o; }, desc);
     }
 };
-var Tsdb = require('../main/Db3');
-var ForwardWrong;
-(function (ForwardWrong) {
-    var A = (function () {
-        function A() {
-        }
-        __decorate([
-            Tsdb.embedded(function () { return B; })
-        ], A.prototype, "prop");
-        return A;
-    })();
-    ForwardWrong.A = A;
-    var B = (function () {
-        function B() {
-        }
-        return B;
-    })();
-    ForwardWrong.B = B;
-})(ForwardWrong || (ForwardWrong = {}));
-module.exports = ForwardWrong;
+(function (deps, factory) {
+    if (typeof module === 'object' && typeof module.exports === 'object') {
+        var v = factory(require, exports); if (v !== undefined) module.exports = v;
+    }
+    else if (typeof define === 'function' && define.amd) {
+        define(deps, factory);
+    }
+})(["require", "exports", '../main/Db3'], function (require, exports) {
+    var Tsdb = require('../main/Db3');
+    var ForwardWrong;
+    (function (ForwardWrong) {
+        var A = (function () {
+            function A() {
+            }
+            __decorate([
+                Tsdb.embedded(function () { return B; })
+            ], A.prototype, "prop");
+            return A;
+        })();
+        ForwardWrong.A = A;
+        var B = (function () {
+            function B() {
+            }
+            return B;
+        })();
+        ForwardWrong.B = B;
+    })(ForwardWrong || (ForwardWrong = {}));
+    return ForwardWrong;
+});
 
 //# sourceMappingURL=Db3ForwardRight.js.map

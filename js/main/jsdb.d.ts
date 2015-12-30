@@ -1988,6 +1988,11 @@ declare module 'jsdb' {
                     function ignore(): Db.Internal.IgnoreMetaDescriptor;
                     function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;
             }
+            /**
+             * Weak association between entities and their database events. Each entity instance can be
+             * connected only to a single database event, and as such to a single database.
+             */
+            var entEvent: Utils.WeakWrap<Internal.EntityEvent<any>>;
     }
     export = Db;
 }
