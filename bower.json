@@ -26,5 +26,8 @@
     "bower_components",
     "test",
     "tests"
-  ]
+  ],
+  "typescript": {
+    "definition": "js/main/jsdb.d.ts"
+  }
 }
