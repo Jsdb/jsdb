@@ -7,20 +7,21 @@ var __extends = (this && this.__extends) || function (d, b) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
     }
-    else if (typeof define === 'function' && define.amd) {
+        else if (typeof define === 'function' && define.amd) {
         define(deps, factory);
     } else {
         var glb = typeof window !== 'undefined' ? window : global;
         glb['Tsdb'] = factory(null, {});
-    };
+    }
+
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20151230_164405_master_1.0.0_11deb16
+     * TSDB version : 20151230_175153_master_1.0.0_30a0ba2
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20151230_164405_master_1.0.0_11deb16';
+    var Version = '20151230_175153_master_1.0.0_30a0ba2';
     var Db = (function () {
         function Db() {
         }
@@ -4291,6 +4292,13 @@ var __extends = (this && this.__extends) || function (d, b) {
         */
         var props = new Db.Utils.WeakWrap();
     })(Db || (Db = {}));
+    if (typeof module === 'object' && typeof module.exports === 'object') {
+    }
+    else if (typeof define === 'function' && define.amd) {
+    }
+    else {
+        window['Tsdb'] = Db;
+    }
     return Db;
 });
 

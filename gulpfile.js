@@ -281,6 +281,22 @@ gulp.task("ts:src", function (cb) {
 	cb();
 });
 
+/*
+var UMDDef = '' + 
+'    else if (typeof define === \'function\' && define.amd) {\n'+
+'        define(deps, factory);\n'+
+'    };';
+*/
+var UMDDef = /else if \(typeof define[^}]*}/;
+var UMDGlobal = ''+
+'    else if (typeof define === \'function\' && define.amd) {\n'+
+'        define(deps, factory);\n'+
+'    } else {\n'+
+'        var glb = typeof window !== \'undefined\' ? window : global;\n'+
+'        glb[\'Tsdb\'] = factory(null, {});\n'+
+'    }\n';
+
+
 /**
  * Used to perform compliation of the TypeScript source in the src directory and
  * output the JavaScript to js/bundle.js. Compilation parameters are located
@@ -318,6 +334,11 @@ gulp.task("ts", ["ts:src"], function () {
 			}
 		}))
 		.pipe(gulp.dest(paths.tsout))
+		.on('finish', function() {
+			gulp.src(paths.tsout + '/main/Db3.js', {base: './'})
+				.pipe(replace(UMDDef,UMDGlobal))
+				.pipe(gulp.dest('./'))
+		})
 	,
 	tsResult.dts
 		.pipe(replace('VERSION_TAG', versionTag()))
