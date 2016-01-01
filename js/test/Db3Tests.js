@@ -2289,6 +2289,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         return Db(wm1.embedMap).remove('b');
                     }).then(function () {
                         assert("Removed from the local map").when(wm1.embedMap['b']).is(M.aFalsey);
+                        return Db(wm1.embedMap).fetch(_this, 'b');
+                    }).then(function (val) {
+                        assert("Should not return a removed element when using fetch").when(val.type).is(Db3.Api.EventType.REMOVED);
                         return new Promise(function (ok) {
                             wm1Fb.child('embedMap').once('value', ok);
                         });
@@ -2357,7 +2360,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         }));
                     });
                 });
-                it('should fetch a ref with a specific key', function () {
+                it('should fetch a ref with a specific key and remove it', function () {
                     var wm1 = Db(WithMap).get('wm2');
                     return Db(wm1.refMap).fetch(_this, 'b').then(function (det) {
                         assert("event is right").when(det).is(M.objectMatching({
@@ -2374,6 +2377,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                                 }
                             }
                         }));
+                        return Db(wm1.refMap).remove('b');
+                    }).then(function () {
+                        return Db(wm1.embedMap).fetch(_this, 'b');
+                    }).then(function (val) {
+                        assert("Should not return a removed element when using fetch").when(val.type).is(Db3.Api.EventType.REMOVED);
                     });
                 });
                 it('should save a new entity with a manually built map', function () {

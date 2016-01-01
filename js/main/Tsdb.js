@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20151230_184826_master_1.0.0_c0cd29e
+     * TSDB version : 20160101_213252_master_1.0.0_90d7881
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20151230_184826_master_1.0.0_c0cd29e';
+    var Version = '20160101_213252_master_1.0.0_90d7881';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2725,12 +2725,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     event.url = url;
                     event.state = this.state;
                     var inst = meta.createInstance();
-                    if (inst['dbInit']) {
-                        inst.dbInit(url, this.state.db);
-                    }
                     event.setEntity(inst);
                     this.state.storeInCache(event);
                     this.state.bindEntity(inst, event);
+                    if (inst['dbInit']) {
+                        inst.dbInit(url, this.state.db);
+                    }
                     return event;
                 };
                 EntityRoot.prototype.get = function (id) {
@@ -3142,10 +3142,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                                     meta = nmeta;
                             }
                             var inst = new meta.ctor();
+                            event.setEntity(inst);
                             if (inst.dbInit) {
                                 inst.dbInit(url, this.db);
                             }
-                            event.setEntity(inst);
                         }
                     }
                     return event;

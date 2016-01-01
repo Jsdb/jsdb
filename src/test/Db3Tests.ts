@@ -2406,6 +2406,9 @@ describe('Db3 >', () => {
 					return Db(wm1.embedMap).remove('b');	
 				}).then(() => {
 					assert("Removed from the local map").when(wm1.embedMap['b']).is(M.aFalsey);
+					return Db(wm1.embedMap).fetch(this,'b');
+				}).then((val) => {
+					assert("Should not return a removed element when using fetch").when(val.type).is(Db3.Api.EventType.REMOVED);
 					return new Promise((ok) => {
 						wm1Fb.child('embedMap').once('value',ok);
 					});
@@ -2476,7 +2479,7 @@ describe('Db3 >', () => {
 				});
 			});
 			
-			it ('should fetch a ref with a specific key', () => {
+			it('should fetch a ref with a specific key and remove it', () => {
 				var wm1 = Db(WithMap).get('wm2');
 				return Db(wm1.refMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
@@ -2493,6 +2496,11 @@ describe('Db3 >', () => {
 							}
 						}
 					}));
+					return Db(wm1.refMap).remove('b');
+				}).then(()=>{
+					return Db(wm1.embedMap).fetch(this,'b');
+				}).then((val) => {
+					assert("Should not return a removed element when using fetch").when(val.type).is(Db3.Api.EventType.REMOVED);
 				});
 			});
 			

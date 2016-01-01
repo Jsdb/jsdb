@@ -3793,14 +3793,14 @@ module Tsdb {
 				event.state = this.state;
 				
 				var inst = meta.createInstance();
-				if (inst['dbInit']) {
-					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
-				}
 				event.setEntity(inst);
 				
 				this.state.storeInCache(event);
 				this.state.bindEntity(inst, event);
-				
+
+				if (inst['dbInit']) {
+					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
+				}
 				return event;
 			} 
 			
@@ -4222,10 +4222,10 @@ module Tsdb {
 							if (nmeta) meta = nmeta;
 						}
 						var inst = <any>new meta.ctor();
+						event.setEntity(inst);
 						if (inst.dbInit) {
 							(<Api.IDb3Initable>inst).dbInit(url, this.db);
 						}
-						event.setEntity(inst);
 					}
 				}
 				return event;
