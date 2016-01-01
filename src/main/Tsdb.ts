@@ -2600,6 +2600,7 @@ module Tsdb {
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				return new Promise<EventDetails<E>>((resolve,error) => {
 					this.updated(ctx, (ed) => {
+						if (ed.projected) return;
 						ed.offMe();
 						resolve(ed);
 					}, this.progDiscriminator++);

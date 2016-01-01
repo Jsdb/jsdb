@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160101_213252_master_1.0.0_90d7881
+     * TSDB version : 20160102_003841_master_1.0.0_c0a0c03
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160101_213252_master_1.0.0_90d7881';
+    var Version = '20160102_003841_master_1.0.0_c0a0c03';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1517,6 +1517,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                     var _this = this;
                     return new Promise(function (resolve, error) {
                         _this.updated(ctx, function (ed) {
+                            if (ed.projected)
+                                return;
                             ed.offMe();
                             resolve(ed);
                         }, _this.progDiscriminator++);
