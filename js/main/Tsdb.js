@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160103_160833_master_1.0.0_6a477fe
+     * TSDB version : 20160103_195740_master_1.0.0_898659c
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160103_160833_master_1.0.0_6a477fe';
+    var Version = '20160103_195740_master_1.0.0_898659c';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2245,7 +2245,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 MapEvent.prototype.clearInternal = function () {
                     if (this.realField) {
-                        this.realField = {};
+                        // Clean it without changing the reference
+                        //this.realField = {};
+                        for (var k in this.realField)
+                            delete this.realField[k];
                         this.setEntityOnParent(this.realField);
                     }
                 };
@@ -2421,9 +2424,15 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                 };
                 EventedArray.prototype.clearInternal = function () {
-                    this.keys = [];
-                    this.arrayValue = [];
-                    this.collection.realField = {};
+                    // Empty the arrays without changing the reference
+                    if (this.keys)
+                        this.keys.splice(0, this.keys.length);
+                    if (this.arrayValue)
+                        this.arrayValue.splice(0, this.arrayValue.length);
+                    // Emtpy the object without changing the reference
+                    if (this.collection.realField)
+                        for (var k in this.collection.realField)
+                            delete this.collection.realField[k];
                 };
                 EventedArray.prototype.prepareSerializeSet = function () {
                     if (this.arrayValue) {

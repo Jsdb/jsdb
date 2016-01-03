@@ -3316,7 +3316,9 @@ module Tsdb {
 			
 			clearInternal() {
 				if (this.realField) {
-					this.realField = {};
+					// Clean it without changing the reference
+					//this.realField = {};
+					for (var k in this.realField) delete this.realField[k];
 					this.setEntityOnParent(this.realField);
 				}
 			}
@@ -3501,9 +3503,11 @@ module Tsdb {
 			}
 			
 			clearInternal() {
-				this.keys = [];
-				this.arrayValue = [];
-				this.collection.realField = {};
+				// Empty the arrays without changing the reference
+				if (this.keys) this.keys.splice(0, this.keys.length);
+				if (this.arrayValue) this.arrayValue.splice(0, this.arrayValue.length);
+				// Emtpy the object without changing the reference
+				if (this.collection.realField) for (var k in this.collection.realField) delete this.collection.realField[k];
 			}			
 			
 			prepareSerializeSet() {
