@@ -5267,8 +5267,8 @@ module Tsdb {
 			return ret;
 		}
 		
-		export function reference(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Tsdb.Internal.ReferenceMetaDescriptor {
-			if (arguments.length == 1 && def && ((<Api.ReferenceParams>def).type || (<Api.ReferenceParams>def).projections)) {
+		export function reference(def? :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.ReferenceParams, project? :string[]) :Tsdb.Internal.ReferenceMetaDescriptor {
+			if (!project && def && ((<Api.ReferenceParams>def).type || (<Api.ReferenceParams>def).projections)) {
 				project = project || (<Api.ReferenceParams>def).projections;
 				def = (<Api.ReferenceParams>def).type;
 			}

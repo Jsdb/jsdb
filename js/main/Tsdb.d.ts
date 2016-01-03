@@ -2027,7 +2027,7 @@ declare module Tsdb {
     function remote(settings?: Api.RemoteCallParams): TypedMethodDecorator<(...args: any[]) => Promise<any>>;
     module meta {
         function embedded(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.EmbeddedParams, binding?: Api.IBinding): Tsdb.Internal.EmbeddedMetaDescriptor;
-        function reference(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Tsdb.Internal.ReferenceMetaDescriptor;
+        function reference(def?: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.ReferenceParams, project?: string[]): Tsdb.Internal.ReferenceMetaDescriptor;
         function map(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.MapMetaDescriptor;
         function set(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.SetMetaDescriptor;
         function list(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.ListMetaDescriptor;
