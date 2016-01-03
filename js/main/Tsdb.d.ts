@@ -724,6 +724,13 @@ declare module Tsdb {
             range(from: any, to: any): IQuery<E>;
             equals(val: any): IQuery<E>;
             /**
+             * Convenience sync method to be used inside the handler for {@link updated} to retrieve all the
+             * current elements, in right order.
+             *
+             * This will work only if updated is called, otherwise use {@link load}.
+             */
+            getValues(): E[];
+            /**
              * Allow for events chaining to reduce the verbosity of calling
              * the same method (for example, load to obtain a promise) on a series
              * of objects.
@@ -1802,6 +1809,7 @@ declare module Tsdb {
             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
             save(): Promise<any>;
             urlInited(): void;
+            getValues(): E[];
         }
         class ChainedEvent {
             private state;

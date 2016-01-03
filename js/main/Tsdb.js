@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160102_003841_master_1.0.0_c0a0c03
+     * TSDB version : 20160103_151723_master_1.0.0_28f0a71
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160102_003841_master_1.0.0_c0a0c03';
+    var Version = '20160103_151723_master_1.0.0_28f0a71';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2850,6 +2850,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 QueryImpl.prototype.urlInited = function () {
                     // Do nothing, we are not a proper event, should not be stored in cache or something
+                };
+                QueryImpl.prototype.getValues = function () {
+                    return this.evarray.arrayValue;
                 };
                 return QueryImpl;
             })(ArrayCollectionEvent);
