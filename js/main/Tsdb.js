@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160103_195740_master_1.0.0_898659c
+     * TSDB version : 20160105_143013_master_1.0.0_259998f
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160103_195740_master_1.0.0_898659c';
+    var Version = '20160105_143013_master_1.0.0_259998f';
     var Tsdb = (function () {
         function Tsdb() {
         }

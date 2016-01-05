@@ -352,6 +352,9 @@ gulp.task("ts", ["ts:src"], function () {
 					out: CODENAME + '.d.ts'
 				});
 			}
+			gulp.src(paths.tsout + '/main/Tsdb.d.ts', {base: './'})
+				.pipe(replace('export = Tsdb;',''))
+				.pipe(gulp.dest('./'));
 		})
 	]);
 });

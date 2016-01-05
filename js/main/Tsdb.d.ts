@@ -2041,4 +2041,4 @@ declare module Tsdb {
     */
     var entEvent: Utils.WeakWrap<Internal.EntityEvent<any>>;
 }
-export = Tsdb;
+
