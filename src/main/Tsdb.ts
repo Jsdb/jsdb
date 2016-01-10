@@ -3858,7 +3858,7 @@ module Tsdb {
 			private _limit :number = 0;
 			private _rangeFrom :any = null;
 			private _rangeTo :any = null;
-			private _equals :any = null;
+			private _equals :any;
 
 			constructor(ev :GenericEvent) {
 				super();
@@ -3899,7 +3899,7 @@ module Tsdb {
 				h.ref = this.state.getTree(this.parent.getUrl());
 				if (this.sorting) {
 					h.ref = h.ref.orderByChild(this.sorting.field);
-					if (this._equals) {
+					if (typeof(this._equals) !== 'undefined') {
 						h.ref = h.ref.equalTo(this._equals);
 					} else {
 						if (this._rangeFrom) {

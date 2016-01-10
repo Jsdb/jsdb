@@ -45,6 +45,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             this._local = 1;
             this.str = 'useless';
             this.num = 0;
+            this.bool = false;
             this.arr = [];
             this.subobj = {
                 substr: ''
@@ -420,6 +421,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 str: 'String 1',
                 num: 200,
                 arr: [1, 2, 3],
+                bool: false,
                 subobj: {
                     substr: 'Sub String'
                 },
@@ -442,6 +444,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 num: 400,
                 moreNum: 401,
                 arr: [3, 4, 5],
+                bool: true,
                 subobj: {
                     substr: 'Sub String'
                 },
@@ -453,6 +456,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 str: 'String 4',
                 num: 500,
                 arr: [4, 5, 6],
+                bool: true,
                 subobj: {
                     substr: 'Sub String'
                 }
@@ -461,6 +465,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             opcnt++;
             wp5Fb.set({
                 num: 500,
+                bool: true,
                 subobj: {
                     substr: 'Sub String'
                 }
@@ -2849,6 +2854,20 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     return Db(WithProps).query().onField('num').equals(200).load(_this).then(function (vals) {
                         assert('the list has right size').when(vals).is(M.withLength(1));
                         assert('the first element is right').when(vals[0].str).is('String 1');
+                    });
+                });
+                it('should filter boolean values', function () {
+                    return Db(WithProps).query().onField('bool').equals(false).load(_this).then(function (vals) {
+                        assert('the false list has right size').when(vals).is(M.withLength(1));
+                        assert('the false first element is right').when(vals[0].str).is('String 1');
+                        return Db(WithProps).query().onField('bool').equals(true).load(_this);
+                    }).then(function (vals) {
+                        assert('the true list has right size').when(vals).is(M.withLength(3));
+                        assert('the true first element is right').when(vals[0].str).is('String 3');
+                        return Db(WithProps).query().onField('bool').equals(null).load(_this);
+                    }).then(function (vals) {
+                        assert('the true list has right size').when(vals).is(M.withLength(1));
+                        assert('the true first element is right').when(vals[0].str).is('String 2');
                     });
                 });
                 // Tentative approach to find the double-event bug on entity root queries 

@@ -32,6 +32,7 @@ class WithProps implements Db3.Api.IEntityHooks {
 	str :string = 'useless';
 	@Db3.observable()
 	num :number = 0;
+	bool :boolean = false;
 	arr :number[] = [];
 	subobj = {
 		substr : ''
@@ -342,6 +343,7 @@ describe('Db3 >', () => {
 			str: 'String 1',
 			num: 200,
 			arr: [1,2,3],
+			bool: false,
 			subobj: {
 				substr: 'Sub String'
 			},
@@ -366,6 +368,7 @@ describe('Db3 >', () => {
 			num: 400,
 			moreNum: 401,
 			arr: [3,4,5],
+			bool: true,
 			subobj: {
 				substr: 'Sub String'
 			},
@@ -378,6 +381,7 @@ describe('Db3 >', () => {
 			str: 'String 4',
 			num: 500,
 			arr: [4,5,6],
+			bool: true,
 			subobj: {
 				substr: 'Sub String'
 			}
@@ -387,6 +391,7 @@ describe('Db3 >', () => {
 		opcnt++;
 		wp5Fb.set({
 			num: 500,
+			bool: true,
 			subobj: {
 				substr: 'Sub String'
 			}
@@ -3007,6 +3012,20 @@ describe('Db3 >', () => {
 				return Db(WithProps).query().onField('num').equals(200).load(this).then((vals)=>{
 					assert('the list has right size').when(vals).is(M.withLength(1));
 					assert('the first element is right').when(vals[0].str).is('String 1');
+				});
+			});
+			it('should filter boolean values', ()=> {
+				return Db(WithProps).query().onField('bool').equals(false).load(this).then((vals)=>{
+					assert('the false list has right size').when(vals).is(M.withLength(1));
+					assert('the false first element is right').when(vals[0].str).is('String 1');
+					return Db(WithProps).query().onField('bool').equals(true).load(this);
+				}).then((vals)=>{
+					assert('the true list has right size').when(vals).is(M.withLength(3));
+					assert('the true first element is right').when(vals[0].str).is('String 3');
+					return Db(WithProps).query().onField('bool').equals(null).load(this);
+				}).then((vals)=>{
+					assert('the true list has right size').when(vals).is(M.withLength(1));
+					assert('the true first element is right').when(vals[0].str).is('String 2');
 				});
 			});
 			// Tentative approach to find the double-event bug on entity root queries 

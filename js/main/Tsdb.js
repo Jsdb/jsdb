@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160105_143013_master_1.0.0_259998f
+     * TSDB version : 20160110_191922_master_1.0.0_f76ea42
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160105_143013_master_1.0.0_259998f';
+    var Version = '20160110_191922_master_1.0.0_f76ea42';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2787,7 +2787,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this._limit = 0;
                     this._rangeFrom = null;
                     this._rangeTo = null;
-                    this._equals = null;
                     this.realField = {};
                     //this.
                 }
@@ -2821,7 +2820,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     h.ref = this.state.getTree(this.parent.getUrl());
                     if (this.sorting) {
                         h.ref = h.ref.orderByChild(this.sorting.field);
-                        if (this._equals) {
+                        if (typeof (this._equals) !== 'undefined') {
                             h.ref = h.ref.equalTo(this._equals);
                         }
                         else {
