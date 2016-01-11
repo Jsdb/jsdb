@@ -43,6 +43,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     var WithProps = (function () {
         function WithProps() {
             this._local = 1;
+            this.$moreLocal = 1;
             this.str = 'useless';
             this.num = 0;
             this.bool = false;
@@ -1131,13 +1132,15 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         // Done loading event
                         assert("Should receive done loading event").when(det.type).is(Db3.Api.EventType.LOAD);
                         wp1._local = 5;
+                        wp1.$moreLocal = 5;
                         Db(wp1).triggerLocalSave();
                     }
                     else if (times == 2) {
                         assert("Given event should be an update").when(det.type).is(Db3.Api.EventType.UPDATE);
                         assert("Given event is synthetic").when(det.synthetic).is(true);
                         assert("Given event has right payload").when(det.payload).is(wp1);
-                        assert("In payload there is modification").when(det.payload._local).is(5);
+                        assert("In payload there is modification of _").when(det.payload._local).is(5);
+                        assert("In payload there is modification of $").when(det.payload.$moreLocal).is(5);
                         det.offMe();
                         done();
                     }
@@ -1491,6 +1494,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 it('should serialize basic entity correctly', function () {
                     var wp = new WithProps();
                     wp._local = 5;
+                    wp.$moreLocal = 5;
                     wp.num = 1;
                     wp.str = 'abc';
                     wp.arr = [1];
@@ -1507,6 +1511,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 it('should serialize basic entity respecting given field names', function () {
                     var wp = new WithProps();
                     wp._local = 5;
+                    wp.$moreLocal = 5;
                     wp.num = 1;
                     wp.str = 'abc';
                     wp.arr = [1];
@@ -2211,16 +2216,19 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                             a: {
                                 ignored: 'ignored',
                                 _local: 1,
+                                $moreLocal: 1,
                                 str: M.undefinedValue,
                             },
                             b: {
                                 ignored: 'ignored',
                                 _local: 1,
+                                $moreLocal: 1,
                                 str: M.undefinedValue,
                             },
                             c: {
                                 ignored: 'ignored',
                                 _local: 1,
+                                $moreLocal: 1,
                                 str: M.undefinedValue,
                             }
                         }));

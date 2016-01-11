@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160110_191922_master_1.0.0_f76ea42
+     * TSDB version : 20160111_180500_master_1.0.0_f373bb4
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160110_191922_master_1.0.0_f76ea42';
+    var Version = '20160111_180500_master_1.0.0_f373bb4';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -441,6 +441,10 @@ var __extends = (this && this.__extends) || function (d, b) {
         var Internal;
         (function (Internal) {
             Internal.VERSION = Version;
+            function isPrivate(key) {
+                return !key || key.length == 0 || key.charAt(0) == '_' || key.charAt(0) == '$';
+            }
+            Internal.isPrivate = isPrivate;
             /**
              * Creates a Db based on the given configuration.
              */
@@ -1405,7 +1409,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         if (k == 'constructor')
                             continue;
                         // Respect ignored fields
-                        if (k.charAt(0) == '_')
+                        if (isPrivate(k))
                             continue;
                         if (set[k])
                             continue;
@@ -1596,7 +1600,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         }
                         else {
                             // Skip every property starting with "_"
-                            if (k.charAt(0) == '_')
+                            if (isPrivate(k))
                                 continue;
                             ret[k] = val;
                         }

@@ -1041,6 +1041,7 @@ declare module 'jsdb' {
                 */
             module Internal {
                     var VERSION: string;
+                    function isPrivate(key: string): boolean;
                     /**
                         * Creates a Db based on the given configuration.
                         */

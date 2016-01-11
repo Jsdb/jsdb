@@ -1476,6 +1476,10 @@ module Tsdb {
 		
 		export var VERSION = Version;
 		
+		export function isPrivate(key :string) {
+			return !key || key.length == 0 || key.charAt(0) == '_' || key.charAt(0) == '$';
+		}
+		
 		/**
 		 * Creates a Db based on the given configuration.
 		 */
@@ -2505,7 +2509,7 @@ module Tsdb {
 				for (var k in this.entity) {
 					if (k == 'constructor') continue;
 					// Respect ignored fields
-					if (k.charAt(0) == '_') continue;
+					if (isPrivate(k)) continue;
 					if (set[k]) continue; 
 					var val = this.getFromEntity(k);
 					if (!val) continue;
@@ -2686,7 +2690,7 @@ module Tsdb {
 						}
 					} else {
 						// Skip every property starting with "_"
-						if (k.charAt(0) == '_') continue;
+						if (isPrivate(k)) continue;
 						ret[k] = val;
 					}
 				}

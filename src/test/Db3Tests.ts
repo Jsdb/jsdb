@@ -28,6 +28,7 @@ var lastLocalStubArgs :IArguments = null;
 @Db3.root()
 class WithProps implements Db3.Api.IEntityHooks {
 	_local :number = 1;
+	$moreLocal :number = 1;
 	_lastUpdateEv :Db3.Api.IEventDetails<WithProps>;
 	str :string = 'useless';
 	@Db3.observable()
@@ -1138,12 +1139,14 @@ describe('Db3 >', () => {
 					// Done loading event
 					assert("Should receive done loading event").when(det.type).is(Db3.Api.EventType.LOAD);
 					wp1._local = 5;
+					wp1.$moreLocal = 5;
 					Db(wp1).triggerLocalSave();
 				} else if (times == 2) {
 					assert("Given event should be an update").when(det.type).is(Db3.Api.EventType.UPDATE);
 					assert("Given event is synthetic").when(det.synthetic).is(true);
 					assert("Given event has right payload").when(det.payload).is(wp1);
-					assert("In payload there is modification").when(det.payload._local).is(5);
+					assert("In payload there is modification of _").when(det.payload._local).is(5);
+					assert("In payload there is modification of $").when(det.payload.$moreLocal).is(5);
 					det.offMe();
 					done();
 				} else {
@@ -1533,6 +1536,7 @@ describe('Db3 >', () => {
 			it('should serialize basic entity correctly', () => {
 				var wp = new WithProps();
 				wp._local = 5;
+				wp.$moreLocal = 5;
 				wp.num = 1;
 				wp.str = 'abc';
 				wp.arr = [1];
@@ -1551,6 +1555,7 @@ describe('Db3 >', () => {
 			it('should serialize basic entity respecting given field names', () => {
 				var wp = new WithProps();
 				wp._local = 5;
+				wp.$moreLocal = 5;
 				wp.num = 1;
 				wp.str = 'abc';
 				wp.arr = [1];
@@ -2324,16 +2329,19 @@ describe('Db3 >', () => {
 						a : {
 							ignored: 'ignored',
 							_local: 1,
+							$moreLocal: 1,
 							str: M.undefinedValue,
 						},
 						b: {
 							ignored: 'ignored',
 							_local: 1,
+							$moreLocal: 1,
 							str: M.undefinedValue,
 						},
 						c:{
 							ignored: 'ignored',
 							_local: 1,
+							$moreLocal: 1,
 							str: M.undefinedValue,
 						}
 					}));
