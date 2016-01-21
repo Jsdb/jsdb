@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160111_180500_master_1.0.0_f373bb4
+     * TSDB version : 20160121_132506_master_1.0.0_f2831bf
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160111_180500_master_1.0.0_f373bb4';
+    var Version = '20160121_132506_master_1.0.0_f2831bf';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -39,7 +39,12 @@ var __extends = (this && this.__extends) || function (d, b) {
              * opts for a share-nothing architecture.
              */
             get: function () {
-                Tsdb.Internal.clearLastStack();
+                // TODO reconsider this
+                // Older V8 implementations (chrome 33, node 0.14 .. more or less .. maybe others) FIRST resolve parameters, and 
+                // THEN calls this getter to get the function to call. In theory, the normal flow, is to FIRST call this getter to 
+                // fetch the function (so that we can hook the clearLastStack) and THEN resolve the parameters (so that it can
+                // build the proper call stack).
+                //Tsdb.Internal.clearLastStack();
                 return function (param) {
                     var e = Tsdb.Internal.getLastEntity();
                     if (!e) {
@@ -383,10 +388,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MonitoringDbTreeQuery.prototype.orderByKey = function () {
                     this.emit('TRC', 'orderByKey');
                     return new MonitoringDbTreeQuery(this.root, this.delegate.orderByKey());
-                };
-                MonitoringDbTreeQuery.prototype.limit = function (limit) {
-                    this.emit('TRC', 'limit', null, limit);
-                    return new MonitoringDbTreeQuery(this.root, this.delegate.limit(limit));
                 };
                 MonitoringDbTreeQuery.prototype.startAt = function (value, key) {
                     this.emit('TRC', 'startAt', null, value, key);

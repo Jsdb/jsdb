@@ -45,7 +45,14 @@ class Tsdb {
 	 * opts for a share-nothing architecture.
 	 */
 	static get of():Tsdb.Api.IDb3Static {
-		Tsdb.Internal.clearLastStack();
+		// TODO reconsider this
+		// Older V8 implementations (chrome 33, node 0.14 .. more or less .. maybe others) FIRST resolve parameters, and 
+		// THEN calls this getter to get the function to call. In theory, the normal flow, is to FIRST call this getter to 
+		// fetch the function (so that we can hook the clearLastStack) and THEN resolve the parameters (so that it can
+		// build the proper call stack).
+		
+		//Tsdb.Internal.clearLastStack();
+		
 		return function(param? :any) {
 			var e = Tsdb.Internal.getLastEntity();
 			if (!e) {
@@ -1095,11 +1102,6 @@ module Tsdb {
 			orderByKey(): DbTreeQuery;
 			
 			/**
-			* @deprecated Use limitToFirst() and limitToLast() instead.
-			* Generates a new Query object limited to the specified number of children.
-			*/
-			limit(limit: number): DbTreeQuery;
-			/**
 			* Creates a Query with the specified starting point. 
 			* The generated Query includes children which match the specified starting point.
 			*/
@@ -1410,11 +1412,6 @@ module Tsdb {
 				return new MonitoringDbTreeQuery(this.root,this.delegate.orderByKey());
 			}
 			
-			limit(limit: number): DbTreeQuery {
-				this.emit('TRC','limit',null,limit);
-				return new MonitoringDbTreeQuery(this.root,this.delegate.limit(limit));
-			}
-
 			startAt(value: string|number, key?: string): DbTreeQuery {
 				this.emit('TRC','startAt',null,value,key);
 				return new MonitoringDbTreeQuery(this.root,this.delegate.startAt(value, key));

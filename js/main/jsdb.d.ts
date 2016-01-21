@@ -872,11 +872,6 @@ declare module 'jsdb' {
                              */
                             orderByKey(): DbTreeQuery;
                             /**
-                             * @deprecated Use limitToFirst() and limitToLast() instead.
-                             * Generates a new Query object limited to the specified number of children.
-                             */
-                            limit(limit: number): DbTreeQuery;
-                            /**
                              * Creates a Query with the specified starting point.
                              * The generated Query includes children which match the specified starting point.
                              */
@@ -1021,7 +1016,6 @@ declare module 'jsdb' {
                             once(eventType: string, successCallback: (dataSnapshot: DbTreeSnap) => void, context?: Object): void;
                             orderByChild(key: string): DbTreeQuery;
                             orderByKey(): DbTreeQuery;
-                            limit(limit: number): DbTreeQuery;
                             startAt(value: string | number, key?: string): DbTreeQuery;
                             endAt(value: string | number, key?: string): DbTreeQuery;
                             equalTo(value: string | number, key?: string): DbTreeQuery;
