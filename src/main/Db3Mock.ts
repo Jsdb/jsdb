@@ -8,9 +8,6 @@ interface RawListenerData {
 	$listener? :Db3MockRoot.Listener;
 }
 
-TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
-
-
 function findChain<T>(url :string|string[], from :T, leaf = true, create = false) :T[] {
 	var sp :string[];
 	if (typeof(url) === 'string') {
@@ -677,6 +674,6 @@ module Db3MockRoot {
 	}
 }
 
-
+TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
 
 export = Db3MockRoot;

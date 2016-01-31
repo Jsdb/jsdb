@@ -17,7 +17,6 @@ var __extends = (this && this.__extends) || function (d, b) {
 })(["require", "exports"], function (require, exports) {
     var glb = typeof window !== 'undefined' ? window : global;
     var TsdbImpl = glb['Tsdb'] || require('./Tsdb');
-    TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
     function findChain(url, from, leaf, create) {
         if (leaf === void 0) { leaf = true; }
         if (create === void 0) { create = false; }
@@ -670,6 +669,7 @@ var __extends = (this && this.__extends) || function (d, b) {
         })(Listener);
         Db3MockRoot.QueryListener = QueryListener;
     })(Db3MockRoot || (Db3MockRoot = {}));
+    TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
     return Db3MockRoot;
 });
 
