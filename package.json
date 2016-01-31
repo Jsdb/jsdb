@@ -6,7 +6,8 @@
     "fullName": "TsDb",
     "paths": {
       "tests": [
-        "./js/test/Db3Tests.js"
+        "./js/test/Db3Tests.js",
+        "./js/test/Db3MockTests.js"
       ],
       "mainDts": "./js/main/Tsdb.d.ts"
     }
@@ -36,6 +37,7 @@
     "gulp-typedoc": "^1.2.1",
     "gulp-typescript": "2.8.1",
     "gulp-util": "2.2.14",
+    "gulp-wait": "0.0.2",
     "merge2": "^0.3.6",
     "moment": "^2.10.6",
     "run-sequence": "1.1.1",
@@ -54,7 +56,7 @@
     }
   },
   "typescript": {
-    "definitions": [ 
+    "definitions": [
       "js/main/jsdb.d.ts",
       "js/main/Tsdb.d.ts"
     ]
