@@ -17,6 +17,7 @@ var path = require('path');
 var dts = require('dts-bundle');
 var tslint = require("gulp-tslint");
 var typedoc = require("gulp-typedoc");
+var wait = require('gulp-wait');
 // Other Modules
 var runSequence = require("run-sequence");
 var mocha = require("gulp-mocha");
@@ -196,8 +197,9 @@ gulp.task("lint", function (cb) {
 /**
  * Run all of the unit tests once and then exit.
  */
-gulp.task("test", ["ts"], function (cb) {
+gulp.task("test", function (cb) {
 	gulp.src(paths.jsApp)
+		.pipe(wait(5000))
 		.pipe(replace('var __decorate =','/* istanbul ignore next */ var __decorate ='))
 		.pipe(replace('var __extends =','/* istanbul ignore next */ var __extends ='))
 		.pipe(istanbul()) // Covering files
