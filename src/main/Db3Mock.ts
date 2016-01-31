@@ -1,11 +1,14 @@
 
+var glb = typeof window !== 'undefined' ? window : global; 
 import Tsdb = require('./Tsdb');
+var TsdbImpl = glb['Tsdb'] || require('./Tsdb');
+
 
 interface RawListenerData {
 	$listener? :Db3MockRoot.Listener;
 }
 
-Tsdb.Spi.registry['mock'] = Db3MockRoot.create;
+TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
 
 
 function findChain<T>(url :string|string[], from :T, leaf = true, create = false) :T[] {

@@ -14,9 +14,10 @@ var __extends = (this && this.__extends) || function (d, b) {
         glb['Tsdb'] = factory(null, {});
     }
 
-})(["require", "exports", './Tsdb'], function (require, exports) {
-    var Tsdb = require('./Tsdb');
-    Tsdb.Spi.registry['mock'] = Db3MockRoot.create;
+})(["require", "exports"], function (require, exports) {
+    var glb = typeof window !== 'undefined' ? window : global;
+    var TsdbImpl = glb['Tsdb'] || require('./Tsdb');
+    TsdbImpl.Spi.registry['mock'] = Db3MockRoot.create;
     function findChain(url, from, leaf, create) {
         if (leaf === void 0) { leaf = true; }
         if (create === void 0) { create = false; }
