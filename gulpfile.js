@@ -337,7 +337,7 @@ gulp.task("ts", ["ts:src"], function () {
 		}))
 		.pipe(gulp.dest(paths.tsout))
 		.on('finish', function() {
-			gulp.src(paths.tsout + '/main/Tsdb.js', {base: './'})
+			gulp.src(paths.tsout + '/main/*.js', {base: './'})
 				.pipe(replace(UMDDef,UMDGlobal))
 				.pipe(gulp.dest('./'))
 		})

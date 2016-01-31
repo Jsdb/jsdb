@@ -13,7 +13,7 @@
         baseUrl: 'http://testing.mock/something/'
     };
     var mock = null;
-    describe.only('Db3Mock >', function () {
+    describe('Db3Mock >', function () {
         beforeEach(function () {
             mock = Mock.create(conf);
         });

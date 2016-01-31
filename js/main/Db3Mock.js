@@ -7,10 +7,16 @@ var __extends = (this && this.__extends) || function (d, b) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
     }
-    else if (typeof define === 'function' && define.amd) {
+        else if (typeof define === 'function' && define.amd) {
         define(deps, factory);
+    } else {
+        var glb = typeof window !== 'undefined' ? window : global;
+        glb['Tsdb'] = factory(null, {});
     }
-})(["require", "exports"], function (require, exports) {
+
+})(["require", "exports", './Tsdb'], function (require, exports) {
+    var Tsdb = require('./Tsdb');
+    Tsdb.Spi.registry['mock'] = Db3MockRoot.create;
     function findChain(url, from, leaf, create) {
         if (leaf === void 0) { leaf = true; }
         if (create === void 0) { create = false; }
