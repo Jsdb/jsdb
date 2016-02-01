@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160201_005943_master_1.0.0_9c1a009
+     * TSDB version : 20160201_200132_master_1.0.0_ec9a2e8
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160201_005943_master_1.0.0_9c1a009';
+    var Version = '20160201_200132_master_1.0.0_ec9a2e8';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2875,16 +2875,16 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.state = state;
                     this.events = [];
                     if (firstEvent)
-                        this.add(firstEvent);
+                        this.addOther(firstEvent);
                     if (secondCall)
                         this.and(secondCall);
                 }
                 ChainedEvent.prototype.and = function (param) {
                     var evt = this.state.internalDb(param);
-                    this.add(evt);
+                    this.addOther(evt);
                     return this;
                 };
-                ChainedEvent.prototype.add = function (evt) {
+                ChainedEvent.prototype.addOther = function (evt) {
                     this.events.push(evt);
                     var methods = Utils.findAllMethods(evt);
                     for (var name in methods) {

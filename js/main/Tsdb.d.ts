@@ -1811,7 +1811,7 @@ declare module Tsdb {
             private events;
             constructor(state: DbState, firstEvent?: Api.IEvent, secondCall?: any);
             and(param: any): ChainedEvent;
-            add(evt: Api.IEvent): void;
+            addOther(evt: Api.IEvent): void;
             private makeProxyMethod(name);
             private proxyCalled(name, args);
         }

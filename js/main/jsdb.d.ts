@@ -1785,7 +1785,7 @@ declare module 'jsdb' {
                     class ChainedEvent {
                             constructor(state: DbState, firstEvent?: Api.IEvent, secondCall?: any);
                             and(param: any): ChainedEvent;
-                            add(evt: Api.IEvent): void;
+                            addOther(evt: Api.IEvent): void;
                     }
                     class DbState implements Api.IDbOperations {
                             cache: {

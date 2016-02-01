@@ -3949,17 +3949,17 @@ module Tsdb {
 			private events :Api.IEvent[] = [];
 			
 			constructor(private state :DbState, firstEvent? :Api.IEvent, secondCall? :any) {
-				if (firstEvent) this.add(firstEvent);
+				if (firstEvent) this.addOther(firstEvent);
 				if (secondCall) this.and(secondCall);
 			}
 			
 			and(param:any):ChainedEvent {
 				var evt = <Api.IEvent>this.state.internalDb(param);
-				this.add(evt);
+				this.addOther(evt);
 				return this;
 			}
 			
-			add(evt :Api.IEvent) {
+			addOther(evt :Api.IEvent) {
 				this.events.push(evt);
 				var methods = Utils.findAllMethods(evt);
 				for (var name in methods) {
