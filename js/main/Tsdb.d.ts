@@ -2003,6 +2003,7 @@ declare module Tsdb {
             set(k: any, val: V): void;
             delete(k: any): void;
         }
+        function findDbFor(param: any): any;
     }
     function bind(localName: string, targetName: string, live?: boolean): Api.IBinding;
     function sortBy(field: string, desc?: boolean): Api.SortingData;

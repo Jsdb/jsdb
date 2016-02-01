@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160201_200132_master_1.0.0_ec9a2e8
+     * TSDB version : 20160202_004106_master_1.0.0_8eb64ee
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160201_200132_master_1.0.0_ec9a2e8';
+    var Version = '20160202_004106_master_1.0.0_8eb64ee';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -46,17 +46,19 @@ var __extends = (this && this.__extends) || function (d, b) {
                 // build the proper call stack).
                 //Tsdb.Internal.clearLastStack();
                 return function (param) {
+                    /*
                     var e = Tsdb.Internal.getLastEntity();
                     if (!e) {
-                        if (!param)
-                            throw new Error("A parameter is needed to find the database");
+                        if (!param) throw new Error("A parameter is needed to find the database");
                         return Tsdb.entEvent.get(param);
                     }
+                    
                     var evt = Tsdb.entEvent.get(e);
-                    if (!evt)
-                        return null;
+                    if (!evt) return null;
                     var db = evt.db;
                     return db.apply(db, arguments);
+                    */
+                    return Tsdb.Utils.findDbFor(param);
                 };
             },
             enumerable: true,
@@ -4020,6 +4022,27 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return WeakWrap;
             })();
             Utils.WeakWrap = WeakWrap;
+            function findDbFor(param) {
+                var use = null;
+                if (lastExpect === lastCantBe) {
+                    if (param)
+                        use = param;
+                }
+                else if (param !== lastExpect) {
+                    use = param;
+                }
+                if (!use) {
+                    use = Tsdb.Internal.getLastEntity();
+                }
+                if (!use)
+                    throw new Error("A parameter is needed to find the database");
+                var evt = Tsdb.entEvent.get(use);
+                if (!evt)
+                    return null;
+                var db = evt.db;
+                return db.apply(db, arguments);
+            }
+            Utils.findDbFor = findDbFor;
         })(Utils = Tsdb.Utils || (Tsdb.Utils = {}));
         function bind(localName, targetName, live) {
             if (live === void 0) { live = true; }

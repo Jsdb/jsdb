@@ -54,6 +54,7 @@ class Tsdb {
 		//Tsdb.Internal.clearLastStack();
 		
 		return function(param? :any) {
+			/*
 			var e = Tsdb.Internal.getLastEntity();
 			if (!e) {
 				if (!param) throw new Error("A parameter is needed to find the database");	
@@ -63,7 +64,9 @@ class Tsdb {
 			var evt = Tsdb.entEvent.get(e);
 			if (!evt) return null;
 			var db = evt.db;
-			return db.apply(db, arguments); 
+			return db.apply(db, arguments);
+			*/
+			return Tsdb.Utils.findDbFor(param); 
 		};
 	}
 }
@@ -5065,7 +5068,22 @@ module Tsdb {
 			}
 		}
 		
-		
+		export function findDbFor(param :any) {
+			var use = null;
+			if (lastExpect === lastCantBe) {
+				if (param) use = param;
+			} else if (param !== lastExpect) {
+				use = param;
+			}
+			if (!use) {
+				use = Tsdb.Internal.getLastEntity(); 
+			}
+			if (!use) throw new Error("A parameter is needed to find the database");	
+			var evt = Tsdb.entEvent.get(use);
+			if (!evt) return null;
+			var db = evt.db;
+			return db.apply(db, arguments);
+		}
 
 	}
 	
