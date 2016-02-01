@@ -11,7 +11,7 @@ var __extends = (this && this.__extends) || function (d, b) {
         define(deps, factory);
     } else {
         var glb = typeof window !== 'undefined' ? window : global;
-        glb['Tsdb'] = factory(null, {});
+        glb['Db3Mock'] = factory(null, {});
     }
 
 })(["require", "exports"], function (require, exports) {

@@ -297,6 +297,13 @@ var UMDGlobal = ''+
 '        var glb = typeof window !== \'undefined\' ? window : global;\n'+
 '        glb[\'Tsdb\'] = factory(null, {});\n'+
 '    }\n';
+var UMDGlobalMock = ''+
+'    else if (typeof define === \'function\' && define.amd) {\n'+
+'        define(deps, factory);\n'+
+'    } else {\n'+
+'        var glb = typeof window !== \'undefined\' ? window : global;\n'+
+'        glb[\'Db3Mock\'] = factory(null, {});\n'+
+'    }\n';
 
 
 /**
@@ -337,8 +344,11 @@ gulp.task("ts", ["ts:src"], function () {
 		}))
 		.pipe(gulp.dest(paths.tsout))
 		.on('finish', function() {
-			gulp.src(paths.tsout + '/main/*.js', {base: './'})
+			gulp.src(paths.tsout + '/main/Tsdb.js', {base: './'})
 				.pipe(replace(UMDDef,UMDGlobal))
+				.pipe(gulp.dest('./'))
+			gulp.src(paths.tsout + '/main/Db3Mock.js', {base: './'})
+				.pipe(replace(UMDDef,UMDGlobalMock))
 				.pipe(gulp.dest('./'))
 		})
 	,
