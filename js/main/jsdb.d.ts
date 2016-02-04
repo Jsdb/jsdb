@@ -1867,6 +1867,10 @@ declare module 'jsdb' {
                             named(name: string): MetaDescriptor;
                             setLocalName(name: string): void;
                             createEvent(allMetadata: Metadata): GenericEvent;
+                            /**
+                                * Some elements (namely, thos annotated with @Ignore) does not has a value.
+                                */
+                            hasValue(): boolean;
                     }
                     class ClassMetadata extends MetaDescriptor {
                             descriptors: {
@@ -1923,6 +1927,7 @@ declare module 'jsdb' {
                     }
                     class IgnoreMetaDescriptor extends MetaDescriptor {
                             createEvent(allMetadata: Metadata): GenericEvent;
+                            hasValue(): boolean;
                     }
                     class Metadata {
                             classes: Internal.ClassMetadata[];

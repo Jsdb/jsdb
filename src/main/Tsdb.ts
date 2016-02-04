@@ -2046,6 +2046,7 @@ module Tsdb {
 				if (this.entity) {
 					for (var k in this.classMeta.descriptors) {
 						var subdes = this.classMeta.descriptors[k];
+						if (!subdes.hasValue()) continue;
 						if (subdes.localName && typeof this.getFromEntity(subdes.localName) !== 'undefined') {
 							this.findCreateChildFor(k,true);
 						}
@@ -4472,6 +4473,14 @@ module Tsdb {
 				return ret;
 				*/
 			}
+			
+			/**
+			 * Some elements (namely, thos annotated with @Ignore) does not has a value.
+			 */
+			hasValue() {
+				return true;
+			}
+			
 		}
 		
 		export class ClassMetadata extends MetaDescriptor {
@@ -4676,6 +4685,10 @@ module Tsdb {
 				ret.url = this.getRemoteName();
 				ret.nameOnParent = this.localName;
 				return ret;
+			}
+			
+			hasValue() {
+				return false;
 			}
 			
 		}

@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160202_004106_master_1.0.0_8eb64ee
+     * TSDB version : 20160204_143523_master_1.0.0_a0faed8
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160202_004106_master_1.0.0_8eb64ee';
+    var Version = '20160204_143523_master_1.0.0_a0faed8';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -962,6 +962,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (this.entity) {
                         for (var k in this.classMeta.descriptors) {
                             var subdes = this.classMeta.descriptors[k];
+                            if (!subdes.hasValue())
+                                continue;
                             if (subdes.localName && typeof this.getFromEntity(subdes.localName) !== 'undefined') {
                                 this.findCreateChildFor(k, true);
                             }
@@ -3398,6 +3400,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     return ret;
                     */
                 };
+                /**
+                 * Some elements (namely, thos annotated with @Ignore) does not has a value.
+                 */
+                MetaDescriptor.prototype.hasValue = function () {
+                    return true;
+                };
                 return MetaDescriptor;
             })();
             Internal.MetaDescriptor = MetaDescriptor;
@@ -3625,6 +3633,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     ret.url = this.getRemoteName();
                     ret.nameOnParent = this.localName;
                     return ret;
+                };
+                IgnoreMetaDescriptor.prototype.hasValue = function () {
+                    return false;
                 };
                 return IgnoreMetaDescriptor;
             })(MetaDescriptor);
