@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160204_143523_master_1.0.0_a0faed8
+     * TSDB version : 20160204_145150_master_1.0.0_3338cd0
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160204_143523_master_1.0.0_a0faed8';
+    var Version = '20160204_145150_master_1.0.0_3338cd0';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1055,6 +1055,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                  */
                 GenericEvent.prototype.findCreateChildFor = function (metaOrkey, force) {
                     if (force === void 0) { force = false; }
+                    if (metaOrkey === 'constructor')
+                        return null;
                     var meta = null;
                     if (metaOrkey instanceof MetaDescriptor) {
                         meta = metaOrkey;
@@ -1068,7 +1070,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (ret && !force)
                         return ret;
                     if (ret && this.entity) {
-                        ret.setEntity(this.getFromEntity(meta.localName));
+                        if (meta.hasValue()) {
+                            ret.setEntity(this.getFromEntity(meta.localName));
+                        }
                         return ret;
                     }
                     ret = meta.createEvent(this.state.myMeta);
@@ -1584,11 +1588,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     for (var k in this.entity) {
                         if (fields && fields.indexOf(k) < 0)
                             continue;
-                        var val = this.getFromEntity(k);
-                        if (typeof val === 'function')
-                            continue;
-                        if (typeof val === 'undefined')
-                            continue;
+                        var val;
                         // Look if the property is annotated
                         var evt = this.findCreateChildFor(k);
                         if (evt) {
@@ -1604,6 +1604,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                             }
                         }
                         else {
+                            val = this.getFromEntity(k);
+                            if (typeof val === 'function')
+                                continue;
+                            if (typeof val === 'undefined')
+                                continue;
                             // Skip every property starting with "_"
                             if (isPrivate(k))
                                 continue;
