@@ -2162,7 +2162,7 @@ module Tsdb {
 				ret = meta.createEvent(this.state.myMeta);
 				ret.state = this.state;
 				ret.parent = this;
-				if (this.entity) {
+				if (this.entity && meta.hasValue()) {
 					ret.setEntity(this.getFromEntity(meta.localName));
 				}
 				this.children[meta.localName] = ret;
@@ -2515,11 +2515,12 @@ module Tsdb {
 					// Respect ignored fields
 					if (isPrivate(k)) continue;
 					if (set[k]) continue; 
+					// If there is a child, delegate to it
+					var descr = this.classMeta.descriptors[k];
+					if (descr && !descr.hasValue()) continue;
 					var val = this.getFromEntity(k);
 					if (!val) continue;
 					if (typeof val === 'function') continue;
-					// If there is a child, delegate to it
-					var descr = this.classMeta.descriptors[k];
 					if (descr) {
 						var subev = this.findCreateChildFor(descr);
 						subev.parseValue(null);

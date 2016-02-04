@@ -56,6 +56,11 @@ class WithProps implements Db3.Api.IEntityHooks {
 	static statRemoteCall(p1 :string, p2 :number):Promise<string> {
 		return null;
 	}
+	
+	@Db3.ignore()
+	get noCall() {
+		throw new Error("Should never call an ignored getter");
+	}
 }
 
 @Db3.override()
@@ -3436,6 +3441,7 @@ describe('Db3 >', () => {
 				assert("Reference still there").when(val['cross']).is(M.aTruthy);
 			});
 		});
+		
 	});
 
 });

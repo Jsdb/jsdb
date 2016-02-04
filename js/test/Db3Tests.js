@@ -63,6 +63,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
         WithProps.statRemoteCall = function (p1, p2) {
             return null;
         };
+        Object.defineProperty(WithProps.prototype, "noCall", {
+            get: function () {
+                throw new Error("Should never call an ignored getter");
+            },
+            enumerable: true,
+            configurable: true
+        });
         __decorate([
             Db3.observable()
         ], WithProps.prototype, "num");
@@ -73,6 +80,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             __decorate([
                 Db3.remote()
             ], WithProps.prototype, "remoteCall", Object.getOwnPropertyDescriptor(WithProps.prototype, "remoteCall")));
+        Object.defineProperty(WithProps.prototype, "noCall",
+            __decorate([
+                Db3.ignore()
+            ], WithProps.prototype, "noCall", Object.getOwnPropertyDescriptor(WithProps.prototype, "noCall")));
         Object.defineProperty(WithProps, "statRemoteCall",
             __decorate([
                 Db3.remote()

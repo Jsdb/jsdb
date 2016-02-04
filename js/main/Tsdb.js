@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160204_145150_master_1.0.0_3338cd0
+     * TSDB version : 20160204_151404_master_1.0.0_48fbba9
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160204_145150_master_1.0.0_3338cd0';
+    var Version = '20160204_151404_master_1.0.0_48fbba9';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1078,7 +1078,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     ret = meta.createEvent(this.state.myMeta);
                     ret.state = this.state;
                     ret.parent = this;
-                    if (this.entity) {
+                    if (this.entity && meta.hasValue()) {
                         ret.setEntity(this.getFromEntity(meta.localName));
                     }
                     this.children[meta.localName] = ret;
@@ -1422,13 +1422,15 @@ var __extends = (this && this.__extends) || function (d, b) {
                             continue;
                         if (set[k])
                             continue;
+                        // If there is a child, delegate to it
+                        var descr = this.classMeta.descriptors[k];
+                        if (descr && !descr.hasValue())
+                            continue;
                         var val = this.getFromEntity(k);
                         if (!val)
                             continue;
                         if (typeof val === 'function')
                             continue;
-                        // If there is a child, delegate to it
-                        var descr = this.classMeta.descriptors[k];
                         if (descr) {
                             var subev = this.findCreateChildFor(descr);
                             subev.parseValue(null);
