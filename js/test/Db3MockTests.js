@@ -287,12 +287,13 @@
                 it('Should send a value event and off it', function () {
                     var ref = mock.getUrl('/node/data');
                     var snap;
-                    var fn = ref.on('value', function (data) { return snap = data; });
+                    var ctx = "ciao";
+                    var fn = ref.on('value', function (data) { return snap = data; }, null, ctx);
                     mock.setData('/node/data', 'ciao');
                     assert("Received event").when(snap).is(M.aTruthy);
                     assert("Recevied event data").when(snap.val()).is('ciao');
                     snap = null;
-                    ref.off('value', fn);
+                    ref.off('value', fn, ctx);
                     mock.setData('/node/data', 'ciao2');
                     assert("Should not receive another event").when(snap).is(M.aFalsey);
                 });

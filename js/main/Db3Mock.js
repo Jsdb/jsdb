@@ -328,10 +328,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 this.tree.getListener().add(this.cb);
             };
             CbHandler.prototype.decommission = function () {
-                if (this.cb) {
-                    this.tree.getListener().remove(this.cb);
-                }
-                this.cb = null;
+                this.tree.getListener().remove(this.cb);
             };
             return CbHandler;
         })();

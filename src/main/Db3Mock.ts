@@ -337,10 +337,7 @@ module Db3MockRoot {
 		}
 		
 		decommission() {
-			if (this.cb) {
-				this.tree.getListener().remove(this.cb);
-			}
-			this.cb = null;
+			this.tree.getListener().remove(this.cb);
 		}
 		
 		abstract trigger(oldVal, newVal);
