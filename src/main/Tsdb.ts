@@ -3212,8 +3212,14 @@ module Tsdb {
 				return super.findCreateChildFor(meta, force);
 			}
 
+			// Reentry flag to avoid firebase induced loops (read below comment)
+			private reentry = false;
 			
 			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :Spi.DbTreeSnap, prevKey :string) {
+				if (this.reentry) {
+					console.warn("Got reentry on " + handler.ref + " event " + event);
+					return;
+				}
 				var det = new EventDetails<E>();
 				det.originalEvent = event;
 				det.originalKey = ds.key();
@@ -3221,7 +3227,19 @@ module Tsdb {
 				det.precedingKey = prevKey;
 				det.populating = handler.ispopulating; 
 				if (event == 'value') {
-					handler.unhook('value');
+					// There is a strange loop happening here form time to time and
+					// reported in production. Loos like calling Firebase .off will 
+					// trigger another "value" event synchronously, which ends up here
+					// again until the stack goes overflow.
+					
+					// This is a temporary workaround using a reentry flag. Probably 
+					// one day the reentry flag should be placed on the handler itself.
+					this.reentry = true;
+					try {
+						handler.unhook('value');
+					} finally {
+						this.reentry = false;
+					}
 					if (handler.ispopulating) {
 						this.collectionLoaded = true;
 						// Incrementally clean not found elements

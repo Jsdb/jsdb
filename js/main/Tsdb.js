@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160204_153551_master_1.0.0_1aa9887
+     * TSDB version : 20160603_152724_master_1.0.0_95d0a4c
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160204_153551_master_1.0.0_1aa9887';
+    var Version = '20160603_152724_master_1.0.0_95d0a4c';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2052,6 +2052,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.sorting = null;
                     this.realField = null;
                     this.collectionLoaded = false;
+                    // Reentry flag to avoid firebase induced loops (read below comment)
+                    this.reentry = false;
                 }
                 MapEvent.prototype.setEntity = function (entity) {
                     var preEntity = this.entity || {};
@@ -2149,6 +2151,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                     return _super.prototype.findCreateChildFor.call(this, meta, force);
                 };
                 MapEvent.prototype.handleDbEvent = function (handler, event, ds, prevKey) {
+                    if (this.reentry) {
+                        console.warn("Got reentry on " + handler.ref + " event " + event);
+                        return;
+                    }
                     var det = new EventDetails();
                     det.originalEvent = event;
                     det.originalKey = ds.key();
@@ -2156,7 +2162,19 @@ var __extends = (this && this.__extends) || function (d, b) {
                     det.precedingKey = prevKey;
                     det.populating = handler.ispopulating;
                     if (event == 'value') {
-                        handler.unhook('value');
+                        // There is a strange loop happening here form time to time and
+                        // reported in production. Loos like calling Firebase .off will 
+                        // trigger another "value" event synchronously, which ends up here
+                        // again until the stack goes overflow.
+                        // This is a temporary workaround using a reentry flag. Probably 
+                        // one day the reentry flag should be placed on the handler itself.
+                        this.reentry = true;
+                        try {
+                            handler.unhook('value');
+                        }
+                        finally {
+                            this.reentry = false;
+                        }
                         if (handler.ispopulating) {
                             this.collectionLoaded = true;
                             // Incrementally clean not found elements

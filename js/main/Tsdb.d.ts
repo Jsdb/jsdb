@@ -1706,6 +1706,7 @@ declare module Tsdb {
             dereference(ctx: Object): Promise<any>;
             init(h: EventHandler): void;
             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
+            private reentry;
             handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: Spi.DbTreeSnap, prevKey: string): void;
             add(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
             createKeyFor(value: Api.Entity): string;
