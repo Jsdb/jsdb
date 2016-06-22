@@ -1275,6 +1275,18 @@ declare module 'jsdb' {
                                 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
                                 */
                             nameOnParent: string;
+                            /**
+                                * Latest data from the database, if any, used in {@link clone} and {@link willParseValue}.
+                                */
+                            protected lastDs: Spi.DbTreeSnap;
+                            /**
+                                * true when the lastDs was parsed, false until the value has not been lazily parsed
+                                */
+                            protected lastDsParsed: boolean;
+                            /**
+                                * Latest event detail to be used for hooks
+                                */
+                            protected lastEd: EventDetails<any>;
                             /** The children of this event */
                             private children;
                             /** Dependant events */
@@ -1285,6 +1297,11 @@ declare module 'jsdb' {
                             private _originalClassMeta;
                             /** Array of current registered handlers. */
                             protected handlers: EventHandler[];
+                            /**
+                                * Called after the event has been created to reset the state which
+                                * could have been modified by calls to {@link setEntity} and the like.
+                                */
+                            setPristine(): void;
                             /**
                                 * Set the entity this event works on.
                                 *
@@ -1416,11 +1433,22 @@ declare module 'jsdb' {
                                 */
                             addDependant(dep: GenericEvent): void;
                             /**
-                                * Parse a value arriving from the Db.
+                                * Sets the value that will later be parsed, if and when required
+                                * calling {@link ensureParsedValue}, or parse it immediately if
+                                * it was already parsed before.
+                                */
+                            willParseValue(ds: Spi.DbTreeSnap): void;
+                            /**
+                                * Makes sure that the value set using {@link willParseValue} is parsed,
+                                * if it was not already.
+                                */
+                            ensureParsedValue(): void;
+                            /**
+                                * Parse the value arriving from the Db.
                                 *
                                 * This method must be overridden by subclasses.
                                 *
-                                * The noral behaviour is to parse the given database data and apply it to
+                                * The normal behaviour is to parse the given database data and apply it to
                                 * the {@link entity} this event is working on.
                                 */
                             parseValue(ds: Spi.DbTreeSnap): void;
@@ -1534,10 +1562,6 @@ declare module 'jsdb' {
                                 * If we are loading this entity, this promise is loading the bound entities if eny.
                                 */
                             bindingPromise: Promise<BindingState>;
-                            /**
-                                * Latest data from the database, if any, used in {@link clone}.
-                                */
-                            lastDs: Spi.DbTreeSnap;
                             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                             progDiscriminator: number;
                             setEntity(entity: Api.Entity): void;
@@ -1560,6 +1584,7 @@ declare module 'jsdb' {
                                     [index: string]: boolean;
                             }): void;
                             parseValue(ds: Spi.DbTreeSnap): void;
+                            ensureParsedValue(): void;
                             internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
                             exists(ctx: Object): Promise<boolean>;
@@ -1754,7 +1779,7 @@ declare module 'jsdb' {
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
                             live(ctx: Object): void;
                             parseValue(ds: Spi.DbTreeSnap): void;
-                            serialize(): Api.Entity;
+                            serialize(): any;
                             isLocal(): boolean;
                             internalSave(): any;
                     }

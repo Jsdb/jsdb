@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160603_152724_master_1.0.0_95d0a4c
+     * TSDB version : 20160622_060451_master_1.0.0_f6e9816
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160603_152724_master_1.0.0_95d0a4c';
+    var Version = '20160622_060451_master_1.0.0_f6e9816';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -800,6 +800,18 @@ var __extends = (this && this.__extends) || function (d, b) {
                      * Local (ram, javascript) name of the entity represented by this event on the parent entity.
                      */
                     this.nameOnParent = null;
+                    /**
+                     * Latest data from the database, if any, used in {@link clone} and {@link willParseValue}.
+                     */
+                    this.lastDs = null;
+                    /**
+                     * true when the lastDs was parsed, false until the value has not been lazily parsed
+                     */
+                    this.lastDsParsed = false;
+                    /**
+                     * Latest event detail to be used for hooks
+                     */
+                    this.lastEd = null;
                     /** The children of this event */
                     this.children = {};
                     /** Dependant events */
@@ -815,6 +827,13 @@ var __extends = (this && this.__extends) || function (d, b) {
                     };
                 }
                 /**
+                 * Called after the event has been created to reset the state which
+                 * could have been modified by calls to {@link setEntity} and the like.
+                 */
+                GenericEvent.prototype.setPristine = function () {
+                    this.lastDsParsed = false;
+                };
+                /**
                  * Set the entity this event works on.
                  *
                  * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
@@ -825,6 +844,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     // TODO maybe to this only if the entity has actually changed!
                     this.eachChildren(function (name, child) { child.destroy(); });
                     this.children = {};
+                    // LazyParse : clear the lastDs and all the related state, cause the entity has been manually set
+                    //this.lastDs = null; // Cannot set it at null, it's needed for .exists
+                    this.lastDsParsed = true;
                 };
                 /**
                  * Destroy this event, disconnecting it from the parent
@@ -837,6 +859,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                         this.dependants[i].destroy();
                     }
                     this.parent = null;
+                    // Free some ram
+                    this.lastDs = null;
+                    this.lastEd = null;
                 };
                 /**
                  * Get a value from the entity, triggering the {@link nextInternal}
@@ -1081,10 +1106,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (this.entity && meta.hasValue()) {
                         ret.setEntity(this.getFromEntity(meta.localName));
                     }
+                    ret.setPristine();
                     this.children[meta.localName] = ret;
                     // TODO should we give then urlInited if the url is already present?
-                    this.saveChildrenInCache();
-                    Internal.clearLastStack();
+                    this.saveChildrenInCache(meta.localName);
+                    // TODO Why should we clear this here? Commented for LazyLoad
+                    //Internal.clearLastStack();
                     return ret;
                 };
                 /**
@@ -1137,17 +1164,44 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                 };
                 /**
-                 * Parse a value arriving from the Db.
+                 * Sets the value that will later be parsed, if and when required
+                 * calling {@link ensureParsedValue}, or parse it immediately if
+                 * it was already parsed before.
+                 */
+                GenericEvent.prototype.willParseValue = function (ds) {
+                    this.lastDs = ds;
+                    if (this.lastDsParsed) {
+                        this.parseValue(ds);
+                    }
+                };
+                /**
+                 * Makes sure that the value set using {@link willParseValue} is parsed,
+                 * if it was not already.
+                 */
+                GenericEvent.prototype.ensureParsedValue = function () {
+                    if (!this.lastDsParsed) {
+                        this.lastDsParsed = true;
+                        if (this.lastDs) {
+                            this.parseValue(this.lastDs);
+                        }
+                        if (this.lastEd) {
+                            this.applyHooks(this.lastEd);
+                        }
+                    }
+                };
+                /**
+                 * Parse the value arriving from the Db.
                  *
                  * This method must be overridden by subclasses.
                  *
-                 * The noral behaviour is to parse the given database data and apply it to
+                 * The normal behaviour is to parse the given database data and apply it to
                  * the {@link entity} this event is working on.
                  */
                 GenericEvent.prototype.parseValue = function (ds) {
                     throw new Error("Please override parseValue in subclasses of GenericEvent");
                 };
                 GenericEvent.prototype.applyHooks = function (ed) {
+                    this.lastEd = ed;
                     for (var k in this.children) {
                         this.children[k].applyHooks(ed);
                     }
@@ -1337,10 +1391,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                      * If we are loading this entity, this promise is loading the bound entities if eny.
                      */
                     this.bindingPromise = null;
-                    /**
-                     * Latest data from the database, if any, used in {@link clone}.
-                     */
-                    this.lastDs = null;
                     /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                     this.progDiscriminator = 1;
                 }
@@ -1444,6 +1494,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.loaded = true;
                     // Save last data for use in clone later
                     this.lastDs = ds;
+                    this.lastDsParsed = true;
                     var val = ds && ds.val();
                     if (val) {
                         // Avoid messing with the entity if we are processing a reference
@@ -1461,7 +1512,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                                 // resetting it is important because this could be an update
                                 this.classMeta = this.originalClassMeta;
                             }
-                            // TODO?? disciminator : change here then this.classMeta
+                            // TODO?? discriminator : change here then this.classMeta
                             // If we haven't yet created the entity instance, or the entity we have is not the right
                             // type (which could happen if this is an updated and the discriminator changed,
                             // create an instance of the right type.
@@ -1480,9 +1531,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                             // property has been annotated somehow (embedded, reference, observable etc..)
                             var descr = this.classMeta.descriptors[k];
                             if (descr) {
-                                // if we have a descriptor, find/create the event and delegate to it 
+                                // if we have a descriptor, find/create the event and delegate to it
                                 var subev = this.findCreateChildFor(descr);
-                                subev.parseValue(ds.child(k));
+                                // LazyParse: we do not propagate the parse here, only setup what's needed
+                                subev.willParseValue(ds.child(k));
+                                //subev.parseValue(ds.child(k));
                                 set[k] = true;
                             }
                             else {
@@ -1501,6 +1554,13 @@ var __extends = (this && this.__extends) || function (d, b) {
                     // if it's embedded should set the value on the parent entity
                     this.setEntityOnParent();
                 };
+                // Overridden to compensate for later propagation of internalApplyBinding
+                EntityEvent.prototype.ensureParsedValue = function () {
+                    var wasParsed = this.lastDsParsed;
+                    _super.prototype.ensureParsedValue.call(this);
+                    if (!wasParsed)
+                        this.internalApplyBinding();
+                };
                 EntityEvent.prototype.internalApplyBinding = function (skipMe) {
                     if (skipMe === void 0) { skipMe = false; }
                     if (!skipMe && this.binding && this.entity && this.parent) {
@@ -1516,6 +1576,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                             }
                             else {
                                 evt = this.parent.findCreateChildFor(k);
+                                // LazyParse: We need the entity here, so make sure it is parsed
+                                evt.ensureParsedValue();
                             }
                             mockState.evts[i] = evt;
                             mockState.vals[i] = evt.entity;
@@ -1579,6 +1641,25 @@ var __extends = (this && this.__extends) || function (d, b) {
                  */
                 EntityEvent.prototype.serialize = function (localsOnly, fields) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    // LazyParse : if we haven't parsed the entity, return the last data
+                    if (this.lastDs && !this.lastDsParsed) {
+                        if (!localsOnly) {
+                            var ldsv = this.lastDs.val();
+                            // Easy serialization if everything is needed, just send back again the last snapshot
+                            if (!fields)
+                                return ldsv;
+                            // Otherwise if only some fields are needed, we can filter them without parsing everything
+                            var ret = {};
+                            for (var k in ldsv) {
+                                if (fields.indexOf(k) < 0)
+                                    continue;
+                                ret[k] = ldsv[k];
+                            }
+                            return ret;
+                        }
+                        // otherwise we need to create children, so ensure we are parsed
+                        this.ensureParsedValue();
+                    }
                     // No entity : serialize a null
                     if (!this.entity)
                         return null;
@@ -1916,6 +1997,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 ReferenceEvent.prototype.serialize = function (localsOnly) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    if (this.lastDs && !this.lastDsParsed) {
+                        return this.lastDs.val();
+                    }
                     // Not loaded, don't serialize.
                     if (!this.isLoaded())
                         return undefined;
@@ -2356,6 +2440,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 MapEvent.prototype.serialize = function (localsOnly, fields) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    // LazyParse : handle the case this has not been loaded
+                    if (this.lastDs && !this.lastDsParsed) {
+                        return this.lastDs.val();
+                    }
                     var obj = {};
                     var preEntity = this.entity;
                     this.entity = this.realField;
@@ -2587,6 +2675,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 ListEvent.prototype.serialize = function (localsOnly, fields) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    // LazyParse : the case this has not been loaded at all is handled by super.serialize
                     this.evarray.prepareSerializeList();
                     return _super.prototype.serialize.call(this, localsOnly, fields);
                 };
@@ -2671,6 +2760,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 SetEvent.prototype.serialize = function (localsOnly, fields) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    // LazyParse : the case this has not been loaded at all is handled by super.serialize
                     this.evarray.prepareSerializeSet();
                     return _super.prototype.serialize.call(this, localsOnly, fields);
                 };
@@ -2683,12 +2773,15 @@ var __extends = (this && this.__extends) || function (d, b) {
                     _super.apply(this, arguments);
                 }
                 IgnoreEvent.prototype.setEntity = function () {
-                    // can't set entity, will refuse it, it's unmutable
+                    // can't set entity, will refuse it, it's immutable
                 };
                 IgnoreEvent.prototype.parseValue = function (ds) {
                     this.val = ds && ds.val();
                 };
                 IgnoreEvent.prototype.serialize = function () {
+                    if (this.lastDs && !this.lastDsParsed) {
+                        return this.lastDs.val();
+                    }
                     return this.val;
                 };
                 IgnoreEvent.prototype.isLocal = function () {
@@ -2718,6 +2811,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.setEntityOnParent();
                 };
                 ObservableEvent.prototype.serialize = function () {
+                    if (this.lastDs && !this.lastDsParsed) {
+                        return this.lastDs.val();
+                    }
                     return this.entity;
                 };
                 ObservableEvent.prototype.isLocal = function () {
@@ -4254,6 +4350,14 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (nextInternal) {
                         nextInternal = false;
                         return getProp(this, propertyKey);
+                    }
+                    //LazyParse : ensure the value gets parsed
+                    var mye = Tsdb.entEvent.get(this);
+                    if (mye) {
+                        mye = mye.findCreateChildFor(propertyKey);
+                    }
+                    if (mye) {
+                        mye.ensureParsedValue();
                     }
                     if (lastExpect && this !== lastExpect) {
                         Internal.clearLastStack();

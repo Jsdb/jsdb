@@ -399,6 +399,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
         var wlt1Fb;
         var wlt2Fb;
         var wlt3Fb;
+        var wlt4Fb;
         var complexFb;
         var cp1Fb;
         var cp2Fb;
@@ -728,6 +729,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     '0PMg765te9nNvKoP08Ndpb': { _ref: baseUrl + 'withProps/wp2' },
                     '0PMg765te9nNvKoP08Ndpc': { _ref: baseUrl + 'withProps/more*wp3' }
                 },
+                str: 'dummy'
+            }, opCnter);
+            wlt3Fb = wltFb.child('wl3');
+            opcnt++;
+            wlt3Fb.set({
+                embedList: null,
+                str: 'dummy'
+            }, opCnter);
+            wlt4Fb = wltFb.child('wl4');
+            opcnt++;
+            wlt4Fb.set({
+                embedList: [],
                 str: 'dummy'
             }, opCnter);
             complexFb = new Firebase(baseUrl + '/complex');
@@ -2162,7 +2175,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 });
                 it('should load all the collection with load', function () {
                     var wm1 = Db(WithMap).get('wm1');
-                    var recvs = [];
                     return Db(wm1.embedMap).load(_this).then(function () {
                         assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
                             a: { str: 'aChild' },
@@ -2173,9 +2185,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                 });
                 it('should load all the collection with the parent entity', function () {
                     var wm1 = Db(WithMap).get('wm1');
-                    var recvs = [];
                     return Db(wm1).load(_this).then(function () {
                         assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
+                            a: { str: 'aChild' },
+                            b: { str: 'bChild' },
+                            c: { str: 'cChild' }
+                        }));
+                    });
+                });
+                it('should load the collection with the parent entity and preserve it on save', function () {
+                    var wm1 = Db(WithMap).get('wm1');
+                    return Db(wm1).load(_this).then(function () {
+                        wm1.anyOtherProp = 'ciao';
+                        return Db(wm1).save();
+                    }).then(function () {
+                        return new Promise(function (ok) {
+                            wm1Fb.child('embedMap').once('value', ok);
+                        });
+                    }).then(function (ds) {
+                        assert("collection was preserved").when(ds.val()).is(M.objectMatchingStrictly({
                             a: { str: 'aChild' },
                             b: { str: 'bChild' },
                             c: { str: 'cChild' }
@@ -2478,6 +2506,23 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         }));
                     });
                 });
+                it('should load embed set with parent entity and preserve it on save', function () {
+                    var ws1 = Db(WithSet).get('ws1');
+                    return Db(ws1).load(_this).then(function () {
+                        ws1.anyOtherProp = 'ciao';
+                        return Db(ws1).save();
+                    }).then(function () {
+                        return new Promise(function (ok) {
+                            wst1Fb.child('embedSet').once('value', ok);
+                        });
+                    }).then(function (ds) {
+                        assert("set was preserved").when(ds.val()).is(M.objectMatchingStrictly({
+                            '00a': M.anObject,
+                            '00b': M.anObject,
+                            '00c': M.anObject
+                        }));
+                    });
+                });
                 it('should load ref set in array when loading parent entity', function () {
                     var ws1 = Db(WithSet).get('ws2');
                     return Db(ws1).load(_this).then(function () {
@@ -2675,6 +2720,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert("Set is empty").when(ws1.embedSet).is(M.withLength(0));
                     });
                 });
+                it('should not return an empty object when set is not there', function () {
+                    var ws2 = Db(WithSet).get('ws2');
+                    return Db(ws2.embedSet).load(_this).then(function () {
+                        assert("Set is not an object").when(ws2.embedSet).is(M.withLength(0));
+                    });
+                });
+                it('should not return an empty object when set is not there loading parent', function () {
+                    var ws2 = Db(WithSet).get('ws2');
+                    return Db(ws2).load(_this).then(function () {
+                        assert("Set is not an object").when(ws2.embedSet).is(M.withLength(0));
+                    });
+                });
             });
             describe('List >', function () {
                 it('should permit same reference more than once', function () {
@@ -2829,6 +2886,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     }).then(function () {
                         assert("List is an array").when(wl1.embedList).is(M.anArray);
                         assert("List is empty").when(wl1.embedList).is(M.withLength(0));
+                    });
+                });
+                it('should not return an empty object when list is not there', function () {
+                    var wl2 = Db(WithList).get('wl2');
+                    return Db(wl2.embedList).load(_this).then(function () {
+                        assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
+                    });
+                });
+                it('should not return an empty object when list is not there loading parent', function () {
+                    var wl2 = Db(WithList).get('wl2');
+                    return Db(wl2).load(_this).then(function () {
+                        assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
                     });
                 });
             });

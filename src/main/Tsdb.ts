@@ -1895,6 +1895,21 @@ module Tsdb {
 			 * Local (ram, javascript) name of the entity represented by this event on the parent entity.
 			 */
 			nameOnParent :string = null;
+			
+			/**
+			 * Latest data from the database, if any, used in {@link clone} and {@link willParseValue}.
+			 */
+			protected lastDs :Spi.DbTreeSnap = null;
+			
+			/**
+			 * true when the lastDs was parsed, false until the value has not been lazily parsed
+			 */
+			protected lastDsParsed = false;
+			
+			/**
+			 * Latest event detail to be used for hooks
+			 */
+			protected lastEd :EventDetails<any> = null;
 						
 			/** The children of this event */
 			private children :{[index:string]:GenericEvent} = {};
@@ -1912,16 +1927,29 @@ module Tsdb {
 			protected handlers :EventHandler[] = [];
 			
 			/**
+			 * Called after the event has been created to reset the state which
+			 * could have been modified by calls to {@link setEntity} and the like.
+			 */
+			setPristine() {
+				this.lastDsParsed = false;
+			}
+			
+			/**
 			 * Set the entity this event works on.
 			 * 
 			 * The event is registered as pertaining to the given entity using the {@link DbState.entEvent} {@link WeakWrap}.
 			 */
 			setEntity(entity :Api.Entity) {
 				this.entity = entity;
+				
 				// clean the children if entity changed? they could be pointing to old instance data
 				// TODO maybe to this only if the entity has actually changed!
 				this.eachChildren((name,child)=>{ child.destroy() });
 				this.children = {};
+				
+				// LazyParse : clear the lastDs and all the related state, cause the entity has been manually set
+				//this.lastDs = null; // Cannot set it at null, it's needed for .exists
+				this.lastDsParsed = true;
 			}
 			
 			/**
@@ -1935,6 +1963,9 @@ module Tsdb {
 					this.dependants[i].destroy();
 				}
 				this.parent = null;
+				// Free some ram
+				this.lastDs = null;
+				this.lastEd = null;
 			}
 			
 			/**
@@ -2165,10 +2196,12 @@ module Tsdb {
 				if (this.entity && meta.hasValue()) {
 					ret.setEntity(this.getFromEntity(meta.localName));
 				}
+				ret.setPristine();
 				this.children[meta.localName] = ret;
 				// TODO should we give then urlInited if the url is already present?
-				this.saveChildrenInCache();
-				Internal.clearLastStack();
+				this.saveChildrenInCache(meta.localName);
+				// TODO Why should we clear this here? Commented for LazyLoad
+				//Internal.clearLastStack();
 				return ret;
 			}
 			
@@ -2222,11 +2255,39 @@ module Tsdb {
 			}
 			
 			/**
-			 * Parse a value arriving from the Db.
+			 * Sets the value that will later be parsed, if and when required
+			 * calling {@link ensureParsedValue}, or parse it immediately if 
+			 * it was already parsed before.
+			 */
+			willParseValue(ds :Spi.DbTreeSnap) {
+				this.lastDs = ds;
+				if (this.lastDsParsed) {
+					this.parseValue(ds);
+				}
+			}
+			
+			/**
+			 * Makes sure that the value set using {@link willParseValue} is parsed,
+			 * if it was not already.
+			 */
+			ensureParsedValue() {
+				if (!this.lastDsParsed) {
+					this.lastDsParsed = true;
+					if (this.lastDs) {
+						this.parseValue(this.lastDs);
+					}
+					if (this.lastEd) {
+						this.applyHooks(this.lastEd);
+					}
+				}
+			}
+			
+			/**
+			 * Parse the value arriving from the Db.
 			 * 
 			 * This method must be overridden by subclasses.
 			 * 
-			 * The noral behaviour is to parse the given database data and apply it to
+			 * The normal behaviour is to parse the given database data and apply it to
 			 * the {@link entity} this event is working on. 
 			 */
 			parseValue(ds :Spi.DbTreeSnap) {
@@ -2234,6 +2295,7 @@ module Tsdb {
 			}
 			
 			applyHooks(ed :EventDetails<any>) {
+				this.lastEd = ed;
 				for (var k in this.children) {
 					this.children[k].applyHooks(ed);
 				}
@@ -2430,12 +2492,7 @@ module Tsdb {
 			 * If we are loading this entity, this promise is loading the bound entities if eny.
 			 */
 			bindingPromise :Promise<BindingState> = null;
-			
-			/**
-			 * Latest data from the database, if any, used in {@link clone}.
-			 */
-			lastDs :Spi.DbTreeSnap = null;
-			
+						
 			/** a progressive counter used as a discriminator when registering the same callbacks more than once */
 			progDiscriminator = 1;
 			
@@ -2535,6 +2592,7 @@ module Tsdb {
 				this.loaded = true;
 				// Save last data for use in clone later
 				this.lastDs = ds;
+				this.lastDsParsed = true;
 				var val = ds && ds.val();
 				if (val) {
 					// Avoid messing with the entity if we are processing a reference
@@ -2550,7 +2608,7 @@ module Tsdb {
 							// resetting it is important because this could be an update
 							this.classMeta = this.originalClassMeta;
 						}
-						// TODO?? disciminator : change here then this.classMeta
+						// TODO?? discriminator : change here then this.classMeta
 						// If we haven't yet created the entity instance, or the entity we have is not the right
 						// type (which could happen if this is an updated and the discriminator changed,
 						// create an instance of the right type.
@@ -2567,9 +2625,11 @@ module Tsdb {
 						// property has been annotated somehow (embedded, reference, observable etc..)
 						var descr = this.classMeta.descriptors[k];
 						if (descr) {
-							// if we have a descriptor, find/create the event and delegate to it 
+							// if we have a descriptor, find/create the event and delegate to it
 							var subev = this.findCreateChildFor(descr);
-							subev.parseValue(ds.child(k));
+							// LazyParse: we do not propagate the parse here, only setup what's needed
+							subev.willParseValue(ds.child(k)); 
+							//subev.parseValue(ds.child(k));
 							set[k] = true;
 						} else {
 							// otherwise, simply copy the value in the proper field
@@ -2587,6 +2647,13 @@ module Tsdb {
 				this.setEntityOnParent();
 			}
 			
+			// Overridden to compensate for later propagation of internalApplyBinding
+			ensureParsedValue() {
+				var wasParsed = this.lastDsParsed;
+				super.ensureParsedValue();
+				if (!wasParsed) this.internalApplyBinding();
+			}
+			
 			internalApplyBinding(skipMe = false) {
 				if (!skipMe && this.binding && this.entity && this.parent) {
 					var mockState :BindingState = {
@@ -2601,6 +2668,8 @@ module Tsdb {
 							evt = this.parent;
 						} else {
 							evt = this.parent.findCreateChildFor(k);
+							// LazyParse: We need the entity here, so make sure it is parsed
+							evt.ensureParsedValue();
 						}
 						mockState.evts[i] = evt;
 						mockState.vals[i] = evt.entity;
@@ -2667,6 +2736,23 @@ module Tsdb {
 			 * 		to leave the eventually existing value completely untouched. 
 			 */
 			serialize(localsOnly :boolean = false, fields? :string[]):Object {
+				// LazyParse : if we haven't parsed the entity, return the last data
+				if (this.lastDs && !this.lastDsParsed) {
+					if (!localsOnly) {
+						var ldsv = this.lastDs.val();
+						// Easy serialization if everything is needed, just send back again the last snapshot
+						if (!fields) return ldsv;
+						// Otherwise if only some fields are needed, we can filter them without parsing everything
+						var ret = {};
+						for (var k in ldsv) {
+							if (fields.indexOf(k) < 0) continue;
+							ret[k] = ldsv[k];
+						}
+						return ret;
+					}
+					// otherwise we need to create children, so ensure we are parsed
+					this.ensureParsedValue();
+				} 
 				// No entity : serialize a null
 				if (!this.entity) return null;
 				// Honour the "serialize" method, if present
@@ -2983,6 +3069,9 @@ module Tsdb {
 			}
 			
 			serialize(localsOnly :boolean = false):Object {
+				if (this.lastDs && !this.lastDsParsed) {
+					return this.lastDs.val();
+				}
 				// Not loaded, don't serialize.
 				if (!this.isLoaded()) return undefined;
 				// No event, serialize null
@@ -3422,6 +3511,10 @@ module Tsdb {
 			}
 			
 			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				// LazyParse : handle the case this has not been loaded
+				if (this.lastDs && !this.lastDsParsed) {
+					return this.lastDs.val();
+				}
 				var obj = {};
 				var preEntity = this.entity;
 				this.entity = this.realField;
@@ -3650,6 +3743,7 @@ module Tsdb {
 			}
 			
 			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				// LazyParse : the case this has not been loaded at all is handled by super.serialize
 				this.evarray.prepareSerializeList();
 				return super.serialize(localsOnly, fields);
 			}
@@ -3731,6 +3825,7 @@ module Tsdb {
 			}
 			
 			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				// LazyParse : the case this has not been loaded at all is handled by super.serialize
 				this.evarray.prepareSerializeSet();
 				return super.serialize(localsOnly, fields);
 			}
@@ -3741,7 +3836,7 @@ module Tsdb {
 			val :any;
 			
 			setEntity() {
-				// can't set entity, will refuse it, it's unmutable
+				// can't set entity, will refuse it, it's immutable
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
@@ -3749,6 +3844,9 @@ module Tsdb {
 			}
 			
 			serialize() {
+				if (this.lastDs && !this.lastDsParsed) {
+					return this.lastDs.val();
+				}
 				return this.val;
 			}
 			
@@ -3778,6 +3876,9 @@ module Tsdb {
 			}
 			
 			serialize() {
+				if (this.lastDs && !this.lastDsParsed) {
+					return this.lastDs.val();
+				}
 				return this.entity;
 			}
 
@@ -5294,6 +5395,16 @@ module Tsdb {
 					return getProp(this, propertyKey);
 					//return this[nkey];
 				}
+				
+				//LazyParse : ensure the value gets parsed
+				var mye :Internal.GenericEvent = entEvent.get(this);
+				if (mye) {
+					mye = mye.findCreateChildFor(propertyKey);
+				}
+				if (mye) {
+					mye.ensureParsedValue();
+				}
+				
 				if (lastExpect && this !== lastExpect) {
 					Internal.clearLastStack();
 				}
@@ -5411,6 +5522,7 @@ module Tsdb {
 	*/
 	var props = new Tsdb.Utils.WeakWrap<{[index:string]:any}>();
 
+	
 }
 
 

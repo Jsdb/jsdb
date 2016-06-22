@@ -190,6 +190,8 @@ class WithMap {
 	
 	@Db3.map(WithProps, true)
 	refMap :{[index:string]:WithProps} = {};
+	
+	anyOtherProp :string;
 }
 
 @Db3.root('withSet')
@@ -203,6 +205,7 @@ class WithSet {
 	@Db3.set({type:SubEntity, sorting: Db3.sortBy('str')})
 	sortedSet :SubEntity[] = [];
 	
+	anyOtherProp :string;
 }
 
 @Db3.root('withList')
@@ -311,6 +314,7 @@ describe('Db3 >', () => {
 	var wlt1Fb :Firebase;
 	var wlt2Fb :Firebase;
 	var wlt3Fb :Firebase;
+	var wlt4Fb :Firebase;
 	
 	var complexFb :Firebase;
 	var cp1Fb :Firebase;
@@ -676,7 +680,20 @@ describe('Db3 >', () => {
 			},
 			str: 'dummy'
 		}, opCnter);
+
+		wlt3Fb = wltFb.child('wl3');
+		opcnt++;
+		wlt3Fb.set({
+			embedList: null,
+			str: 'dummy'
+		}, opCnter);
 		
+		wlt4Fb = wltFb.child('wl4');
+		opcnt++;
+		wlt4Fb.set({
+			embedList: [],
+			str: 'dummy'
+		}, opCnter);
 		
 		complexFb = new Firebase(baseUrl + '/complex');
 		cp1Fb = complexFb.child('cp1');
@@ -2266,7 +2283,6 @@ describe('Db3 >', () => {
 			
 			it('should load all the collection with load',()=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.embedMap).load(this).then(() => {
 					assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
 						a: { str: 'aChild' },
@@ -2278,7 +2294,6 @@ describe('Db3 >', () => {
 			
 			it('should load all the collection with the parent entity',()=>{
 				var wm1 = Db(WithMap).get('wm1');
-				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1).load(this).then(() => {
 					assert("field is synched").when(wm1.embedMap).is(M.objectMatchingStrictly({
 						a: { str: 'aChild' },
@@ -2287,6 +2302,25 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
+			
+			it('should load the collection with the parent entity and preserve it on save',()=>{
+				var wm1 = Db(WithMap).get('wm1');
+				return Db(wm1).load(this).then(() => {
+					wm1.anyOtherProp = 'ciao';
+					return Db(wm1).save();
+				}).then(()=>{
+					return new Promise((ok) => {
+						wm1Fb.child('embedMap').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert("collection was preserved").when(ds.val()).is(M.objectMatchingStrictly({
+						a: { str: 'aChild' },
+						b: { str: 'bChild' },
+						c: { str: 'cChild' }
+					}));
+				});
+			});
+			
 			
 			it('should load all the collection resolving references with load',()=>{
 				var wm1 = Db(WithMap).get('wm2');
@@ -2598,6 +2632,24 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
+			
+			it('should load embed set with parent entity and preserve it on save', () => {
+				var ws1 = Db(WithSet).get('ws1');
+				return Db(ws1).load(this).then(() => {
+					ws1.anyOtherProp = 'ciao';
+					return Db(ws1).save();
+				}).then(()=>{
+					return new Promise((ok) => {
+						wst1Fb.child('embedSet').once('value',ok);
+					});
+				}).then((ds :FirebaseDataSnapshot) => {
+					assert("set was preserved").when(ds.val()).is(M.objectMatchingStrictly({
+						'00a': M.anObject,
+						'00b': M.anObject,
+						'00c': M.anObject
+					}));
+				});
+			});
 
 			it('should load ref set in array when loading parent entity', () => {
 				var ws1 = Db(WithSet).get('ws2');
@@ -2811,6 +2863,20 @@ describe('Db3 >', () => {
 					assert("Set is empty").when(ws1.embedSet).is(M.withLength(0));
 				});
 			});
+			
+			it('should not return an empty object when set is not there', ()=> {
+				var ws2 = Db(WithSet).get('ws2');
+				return Db(ws2.embedSet).load(this).then(()=>{
+					assert("Set is not an object").when(ws2.embedSet).is(M.withLength(0));
+				});
+			});
+			
+			it('should not return an empty object when set is not there loading parent', ()=> {
+				var ws2 = Db(WithSet).get('ws2');
+				return Db(ws2).load(this).then(()=>{
+					assert("Set is not an object").when(ws2.embedSet).is(M.withLength(0));
+				});
+			});
 		});
 		
 		describe('List >', ()=> {
@@ -2979,6 +3045,20 @@ describe('Db3 >', () => {
 				}).then(()=>{
 					assert("List is an array").when(wl1.embedList).is(M.anArray);
 					assert("List is empty").when(wl1.embedList).is(M.withLength(0));
+				});
+			});
+			
+			it('should not return an empty object when list is not there', ()=> {
+				var wl2 = Db(WithList).get('wl2');
+				return Db(wl2.embedList).load(this).then(()=>{
+					assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
+				});
+			});
+			
+			it('should not return an empty object when list is not there loading parent', ()=> {
+				var wl2 = Db(WithList).get('wl2');
+				return Db(wl2).load(this).then(()=>{
+					assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
 				});
 			});
 			
