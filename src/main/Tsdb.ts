@@ -5392,7 +5392,7 @@ module Tsdb {
 	
 	function installMetaGetter(target: Object, propertyKey: string, descr :Internal.MetaDescriptor) {
 		//var nkey = '__' + propertyKey;
-
+		var cname = Utils.findName(target);
 		Object.defineProperty(target,propertyKey, {
 			enumerable: true,
 			set: function(v) {
@@ -5407,7 +5407,10 @@ module Tsdb {
 				//this[nkey] = v;
 				var mye = entEvent.get(this);
 				if (mye) {
+					Xlog(cname,propertyKey,"Called setter, updating event");
 					mye.findCreateChildFor(propertyKey, true);
+				} else {
+					Xlog(cname,propertyKey,"Called setter, no connected event");
 				}
 			},
 			get: function() {
@@ -5417,13 +5420,17 @@ module Tsdb {
 					//return this[nkey];
 				}
 				
+				
 				//LazyParse : ensure the value gets parsed
 				var mye :Internal.GenericEvent = entEvent.get(this);
 				if (mye) {
 					mye = mye.findCreateChildFor(propertyKey);
 				}
 				if (mye) {
+					Xlog(cname,propertyKey,"Called getter, forcing parse");
 					mye.ensureParsedValue();
+				} else {
+					Xlog(cname,propertyKey,"Called getter, no connected event");
 				}
 				
 				if (lastExpect && this !== lastExpect) {

@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160623_124221_master_1.0.0_5bef74c
+     * TSDB version : 20160623_130042_master_1.0.0_b77e8cd
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160623_124221_master_1.0.0_5bef74c';
+    var Version = '20160623_130042_master_1.0.0_b77e8cd';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -71,7 +71,10 @@ var __extends = (this && this.__extends) || function (d, b) {
      */
     var Tsdb;
     (function (Tsdb) {
+        Tsdb.logging = false;
         function int_mylog() {
+            if (!Tsdb.logging)
+                return;
             var prefix = [];
             prefix.push('[' + new Date().toISOString() + ']');
             var nargs = Array.prototype.slice.call(arguments);
@@ -4342,6 +4345,7 @@ var __extends = (this && this.__extends) || function (d, b) {
         }
         function installMetaGetter(target, propertyKey, descr) {
             //var nkey = '__' + propertyKey;
+            var cname = Utils.findName(target);
             Object.defineProperty(target, propertyKey, {
                 enumerable: true,
                 set: function (v) {
@@ -4356,7 +4360,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                     //this[nkey] = v;
                     var mye = Tsdb.entEvent.get(this);
                     if (mye) {
+                        Xlog(cname, propertyKey, "Called setter, updating event");
                         mye.findCreateChildFor(propertyKey, true);
+                    }
+                    else {
+                        Xlog(cname, propertyKey, "Called setter, no connected event");
                     }
                 },
                 get: function () {
@@ -4370,7 +4378,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                         mye = mye.findCreateChildFor(propertyKey);
                     }
                     if (mye) {
+                        Xlog(cname, propertyKey, "Called getter, forcing parse");
                         mye.ensureParsedValue();
+                    }
+                    else {
+                        Xlog(cname, propertyKey, "Called getter, no connected event");
                     }
                     if (lastExpect && this !== lastExpect) {
                         Internal.clearLastStack();

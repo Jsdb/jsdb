@@ -20,6 +20,7 @@ declare module 'jsdb' {
         * The main Db module.
         */
     module Tsdb {
+            var logging: boolean;
             /**
                 * Create a database instance using given configuration. The first call to this function
                 * will also initialize the {@link defaultDb}.

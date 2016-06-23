@@ -17,6 +17,7 @@ declare class Tsdb {
  * The main Db module.
  */
 declare module Tsdb {
+    var logging: boolean;
     /**
      * Create a database instance using given configuration. The first call to this function
      * will also initialize the {@link defaultDb}.
