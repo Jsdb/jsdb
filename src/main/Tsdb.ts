@@ -76,6 +76,26 @@ class Tsdb {
  */
 module Tsdb {
 	
+	export var logging = false;
+	
+	function int_mylog() {
+		if (!logging) return;
+		var prefix = [];
+		prefix.push('['+new Date().toISOString()+']');
+		var nargs :any[] = Array.prototype.slice.call(arguments);
+		if (nargs && nargs[0] && nargs[0]['getUrl']) {
+			prefix.push(Utils.findName(nargs[0]));
+			prefix.push(nargs[0].getUrl());
+			nargs.shift();
+		}
+		return console.log.apply(
+			console,
+			prefix.concat(nargs)
+		);
+	}
+	
+	var Xlog = int_mylog.bind(console);
+	
 	/**
 	 * Create a database instance using given configuration. The first call to this function
 	 * will also initialize the {@link defaultDb}.
@@ -2589,6 +2609,7 @@ module Tsdb {
 
 			
 			parseValue(ds :Spi.DbTreeSnap) {
+				Xlog(this,'Parsing value');
 				this.loaded = true;
 				// Save last data for use in clone later
 				this.lastDs = ds;

@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160622_060451_master_1.0.0_f6e9816
+     * TSDB version : 20160623_124221_master_1.0.0_5bef74c
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160622_060451_master_1.0.0_f6e9816';
+    var Version = '20160623_124221_master_1.0.0_5bef74c';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -71,6 +71,18 @@ var __extends = (this && this.__extends) || function (d, b) {
      */
     var Tsdb;
     (function (Tsdb) {
+        function int_mylog() {
+            var prefix = [];
+            prefix.push('[' + new Date().toISOString() + ']');
+            var nargs = Array.prototype.slice.call(arguments);
+            if (nargs && nargs[0] && nargs[0]['getUrl']) {
+                prefix.push(Utils.findName(nargs[0]));
+                prefix.push(nargs[0].getUrl());
+                nargs.shift();
+            }
+            return console.log.apply(console, prefix.concat(nargs));
+        }
+        var Xlog = int_mylog.bind(console);
         /**
          * Create a database instance using given configuration. The first call to this function
          * will also initialize the {@link defaultDb}.
@@ -1491,6 +1503,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                 };
                 EntityEvent.prototype.parseValue = function (ds) {
+                    Xlog(this, 'Parsing value');
                     this.loaded = true;
                     // Save last data for use in clone later
                     this.lastDs = ds;
