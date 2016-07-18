@@ -17,12 +17,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160623_130042_master_1.0.0_b77e8cd
+     * TSDB version : 20160718_233654_master_1.0.0_e4e8781
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160623_130042_master_1.0.0_b77e8cd';
+    var Version = '20160718_233654_master_1.0.0_e4e8781';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1574,7 +1574,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                 EntityEvent.prototype.ensureParsedValue = function () {
                     var wasParsed = this.lastDsParsed;
                     _super.prototype.ensureParsedValue.call(this);
-                    if (!wasParsed)
+                    // TODO should it apply it every time? really?
+                    if (this.lastDs && !wasParsed)
                         this.internalApplyBinding();
                 };
                 EntityEvent.prototype.internalApplyBinding = function (skipMe) {

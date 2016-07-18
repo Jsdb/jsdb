@@ -1551,6 +1551,15 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			it('should not trigger useless binding that clears set values', ()=>{
+				var wpl1 = new WithPreloads();
+				Db(wpl1).assignUrl();
+				wpl1.oth = new DifferentSubEntity();
+				wpl1.ref = new WithProps();
+				wpl1.oth._ref = wpl1.ref;
+				M.assert("Has not incorrectly loaded the binding").when(wpl1.oth._ref).is(M.aTruthy);
+			});
+			
 		});
 	});
 	describe('Entity writing >', ()=>{

@@ -2672,7 +2672,8 @@ module Tsdb {
 			ensureParsedValue() {
 				var wasParsed = this.lastDsParsed;
 				super.ensureParsedValue();
-				if (!wasParsed) this.internalApplyBinding();
+				// TODO should it apply it every time? really?
+				if (this.lastDs && !wasParsed) this.internalApplyBinding();
 			}
 			
 			internalApplyBinding(skipMe = false) {

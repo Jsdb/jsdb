@@ -1511,6 +1511,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         M.assert("Updated the subentity").when(wpl1.oth._sub.str).is('cde');
                     });
                 });
+                it('should not trigger useless binding that clears set values', function () {
+                    var wpl1 = new WithPreloads();
+                    Db(wpl1).assignUrl();
+                    wpl1.oth = new DifferentSubEntity();
+                    wpl1.ref = new WithProps();
+                    wpl1.oth._ref = wpl1.ref;
+                    M.assert("Has not incorrectly loaded the binding").when(wpl1.oth._ref).is(M.aTruthy);
+                });
             });
         });
         describe('Entity writing >', function () {
