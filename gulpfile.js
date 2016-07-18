@@ -292,10 +292,10 @@ var UMDDef = '' +
 var UMDDef = /else if \(typeof define[^}]*}/;
 var UMDGlobal = ''+
 '    else if (typeof define === \'function\' && define.amd) {\n'+
-'        define(deps, factory);\n'+
-'    } else {\n'+
-'        var glb = typeof window !== \'undefined\' ? window : global;\n'+
-'        glb[\'Tsdb\'] = factory(null, {});\n'+
+'        define(deps, factory);'+
+'    } else {'+
+'        var glb = typeof window !== \'undefined\' ? window : global;'+
+'        glb[\'Tsdb\'] = factory(null, {});'+
 '    }\n';
 var UMDGlobalMock = ''+
 '    else if (typeof define === \'function\' && define.amd) {\n'+
