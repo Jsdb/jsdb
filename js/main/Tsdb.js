@@ -9,20 +9,16 @@ var __extends = (this && this.__extends) || function (d, b) {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
     }
         else if (typeof define === 'function' && define.amd) {
-        define(deps, factory);
-    } else {
-        var glb = typeof window !== 'undefined' ? window : global;
-        glb['Tsdb'] = factory(null, {});
-    }
+        define(deps, factory);    } else {        var glb = typeof window !== 'undefined' ? window : global;        glb['Tsdb'] = factory(null, {});    }
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160718_233654_master_1.0.0_e4e8781
+     * TSDB version : 20160719_000447_master_1.0.0_5f52cec
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160718_233654_master_1.0.0_e4e8781';
+    var Version = '20160719_000447_master_1.0.0_5f52cec';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1102,7 +1098,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         meta = metaOrkey;
                     }
                     else {
-                        meta = this.classMeta.descriptors[metaOrkey];
+                        meta = this.classMeta.descriptors.hasOwnProperty(metaOrkey) && this.classMeta.descriptors[metaOrkey];
                     }
                     if (!meta)
                         return null;
@@ -1488,7 +1484,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         if (set[k])
                             continue;
                         // If there is a child, delegate to it
-                        var descr = this.classMeta.descriptors[k];
+                        var descr = this.classMeta.descriptors.hasOwnProperty(k) && this.classMeta.descriptors[k];
                         if (descr && !descr.hasValue())
                             continue;
                         var val = this.getFromEntity(k);

@@ -2199,7 +2199,7 @@ module Tsdb {
 				if (metaOrkey instanceof MetaDescriptor) {
 					meta = <MetaDescriptor>metaOrkey;
 				} else {
-					meta = this.classMeta.descriptors[<string>metaOrkey];
+					meta = this.classMeta.descriptors.hasOwnProperty(<string>metaOrkey) && this.classMeta.descriptors[<string>metaOrkey];
 				}
 				if (!meta) return null;
 				var ret = this.children[meta.localName];
@@ -2593,7 +2593,7 @@ module Tsdb {
 					if (isPrivate(k)) continue;
 					if (set[k]) continue; 
 					// If there is a child, delegate to it
-					var descr = this.classMeta.descriptors[k];
+					var descr = this.classMeta.descriptors.hasOwnProperty(k) && this.classMeta.descriptors[k];
 					if (descr && !descr.hasValue()) continue;
 					var val = this.getFromEntity(k);
 					if (!val) continue;
