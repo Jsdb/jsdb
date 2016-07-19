@@ -2374,24 +2374,21 @@ describe('Db3 >', () => {
 				var state = evt.state;
 				var recvs :Db3.Internal.EventDetails<any>[] = [];
 				return Db(wm1.refMap).dereference(this).then(() => {
-					assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
+					assert("field is synched").when(wm1.refMap).is(M.objectMatching({
 						a : {
 							ignored: 'ignored',
 							_local: 1,
-							$moreLocal: 1,
-							str: M.undefinedValue,
+							$moreLocal: 1
 						},
 						b: {
 							ignored: 'ignored',
 							_local: 1,
-							$moreLocal: 1,
-							str: M.undefinedValue,
+							$moreLocal: 1
 						},
 						c:{
 							ignored: 'ignored',
 							_local: 1,
-							$moreLocal: 1,
-							str: M.undefinedValue,
+							$moreLocal: 1
 						}
 					}));
 					

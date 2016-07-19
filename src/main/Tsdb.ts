@@ -2270,10 +2270,10 @@ module Tsdb {
 			 * calling {@link ensureParsedValue}, or parse it immediately if 
 			 * it was already parsed before.
 			 */
-			willParseValue(ds :Spi.DbTreeSnap) {
+			willParseValue(ds :Spi.DbTreeSnap, complete :boolean) {
 				this.lastDs = ds;
 				if (this.lastDsParsed) {
-					this.parseValue(ds);
+					this.parseValue(ds, complete);
 				}
 			}
 			
@@ -2285,7 +2285,7 @@ module Tsdb {
 				if (!this.lastDsParsed) {
 					this.lastDsParsed = true;
 					if (this.lastDs) {
-						this.parseValue(this.lastDs);
+						this.parseValue(this.lastDs, true);
 					}
 					if (this.lastEd) {
 						this.applyHooks(this.lastEd);
@@ -2301,7 +2301,7 @@ module Tsdb {
 			 * The normal behaviour is to parse the given database data and apply it to
 			 * the {@link entity} this event is working on. 
 			 */
-			parseValue(ds :Spi.DbTreeSnap) {
+			parseValue(ds :Spi.DbTreeSnap, complete :boolean) {
 				throw new Error("Please override parseValue in subclasses of GenericEvent");
 			}
 			
@@ -2458,7 +2458,7 @@ module Tsdb {
 				if (!this.loaded) {
 					evd.type = Api.EventType.LOAD;
 				}
-				this.parseValue(ds);
+				this.parseValue(ds, !projected);
 				if (this.entity == null) {
 					evd.type = Api.EventType.REMOVED;
 				} 
@@ -2596,7 +2596,7 @@ module Tsdb {
 					if (typeof val === 'function') continue;
 					if (descr) {
 						var subev = this.findCreateChildFor(descr);
-						subev.parseValue(null);
+						subev.parseValue(null, true);
 					} else {
 						this.setOnEntity(k,undefined);
 					}
@@ -2604,7 +2604,7 @@ module Tsdb {
 			}
 
 			
-			parseValue(ds :Spi.DbTreeSnap) {
+			parseValue(ds :Spi.DbTreeSnap, complete :boolean) {
 				Xlog(this,'Parsing value');
 				this.loaded = true;
 				// Save last data for use in clone later
@@ -2646,7 +2646,7 @@ module Tsdb {
 							// if we have a descriptor, find/create the event and delegate to it
 							var subev = this.findCreateChildFor(descr);
 							// LazyParse: we do not propagate the parse here, only setup what's needed
-							subev.willParseValue(ds.child(k)); 
+							subev.willParseValue(ds.child(k), complete); 
 							//subev.parseValue(ds.child(k));
 							set[k] = true;
 						} else {
@@ -2655,11 +2655,15 @@ module Tsdb {
 							set[k] = true;
 						}
 					}
-					this.nullify(set);
+					if (complete) {
+						this.nullify(set);
+					}
 				} else {
 					// if value is null, then nullify and set the entity null
-					this.nullify();
-					this.setEntity(null);
+					if (complete) {
+						this.nullify();
+						this.setEntity(null);
+					}
 				}
 				// if it's embedded should set the value on the parent entity
 				this.setEntityOnParent();
@@ -2956,7 +2960,7 @@ module Tsdb {
 				if (!this.loaded) throw new Error('Cannot clone an instance that has not been loaded');
 				var nent = this.classMeta.createInstance();
 				var evt = <EntityEvent<E>><any>this.state.db(nent);
-				evt.parseValue(this.lastDs);
+				evt.parseValue(this.lastDs, true);
 				return <E>evt.entity;
 			}
 			
@@ -3400,7 +3404,7 @@ module Tsdb {
 				
 				var subev = this.findCreateChildFor(ds.key());
 				var val :E = null;
-				subev.parseValue(ds);
+				subev.parseValue(ds, true);
 				val = <E>subev.entity;
 				if (event == 'child_removed') {
 					det.type = Api.EventType.REMOVED;
@@ -3579,7 +3583,7 @@ module Tsdb {
 				}
 			}
 			
-			parseValue(allds :Spi.DbTreeSnap) {
+			parseValue(allds :Spi.DbTreeSnap, complete :boolean) {
 				var prevKey = null;
 				var det = new EventDetails<E>();
 				det.originalEvent = "child_added";
@@ -3591,7 +3595,7 @@ module Tsdb {
 					allds.forEach((ds)=>{
 						var subev = this.findCreateChildFor(ds.key());
 						var val :E = null;
-						subev.parseValue(ds);
+						subev.parseValue(ds, complete);
 						val = <E>subev.entity;
 						det.originalKey = ds.key();
 						det.originalUrl = ds.ref().toString();

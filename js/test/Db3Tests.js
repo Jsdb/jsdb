@@ -2260,24 +2260,21 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     var state = evt.state;
                     var recvs = [];
                     return Db(wm1.refMap).dereference(_this).then(function () {
-                        assert("field is synched").when(wm1.refMap).is(M.objectMatchingStrictly({
+                        assert("field is synched").when(wm1.refMap).is(M.objectMatching({
                             a: {
                                 ignored: 'ignored',
                                 _local: 1,
-                                $moreLocal: 1,
-                                str: M.undefinedValue,
+                                $moreLocal: 1
                             },
                             b: {
                                 ignored: 'ignored',
                                 _local: 1,
-                                $moreLocal: 1,
-                                str: M.undefinedValue,
+                                $moreLocal: 1
                             },
                             c: {
                                 ignored: 'ignored',
                                 _local: 1,
-                                $moreLocal: 1,
-                                str: M.undefinedValue,
+                                $moreLocal: 1
                             }
                         }));
                         /*

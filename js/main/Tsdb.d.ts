@@ -1459,7 +1459,7 @@ declare module Tsdb {
              * calling {@link ensureParsedValue}, or parse it immediately if
              * it was already parsed before.
              */
-            willParseValue(ds: Spi.DbTreeSnap): void;
+            willParseValue(ds: Spi.DbTreeSnap, complete: boolean): void;
             /**
              * Makes sure that the value set using {@link willParseValue} is parsed,
              * if it was not already.
@@ -1473,7 +1473,7 @@ declare module Tsdb {
              * The normal behaviour is to parse the given database data and apply it to
              * the {@link entity} this event is working on.
              */
-            parseValue(ds: Spi.DbTreeSnap): void;
+            parseValue(ds: Spi.DbTreeSnap, complete: boolean): void;
             applyHooks(ed: EventDetails<any>): void;
             /**
              * If this event creates a logica "traversal" on the normal tree structure
@@ -1608,7 +1608,7 @@ declare module Tsdb {
             protected nullify(set?: {
                 [index: string]: boolean;
             }): void;
-            parseValue(ds: Spi.DbTreeSnap): void;
+            parseValue(ds: Spi.DbTreeSnap, complete: boolean): void;
             ensureParsedValue(): void;
             internalApplyBinding(skipMe?: boolean): void;
             load(ctx: Object): Promise<EventDetails<E>>;
@@ -1757,7 +1757,7 @@ declare module Tsdb {
             internalSave(): Promise<any>;
             clear(): Promise<any>;
             serialize(localsOnly?: boolean, fields?: string[]): Object;
-            parseValue(allds: Spi.DbTreeSnap): void;
+            parseValue(allds: Spi.DbTreeSnap, complete: boolean): void;
             query(): Api.IQuery<E>;
         }
         class EventedArray<E> {

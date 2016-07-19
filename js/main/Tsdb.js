@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160719_191515_master_1.0.0_fed5552
+     * TSDB version : 20160720_002348_master_1.0.0_e207378
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160719_191515_master_1.0.0_fed5552';
+    var Version = '20160720_002348_master_1.0.0_e207378';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1157,10 +1157,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                  * calling {@link ensureParsedValue}, or parse it immediately if
                  * it was already parsed before.
                  */
-                GenericEvent.prototype.willParseValue = function (ds) {
+                GenericEvent.prototype.willParseValue = function (ds, complete) {
                     this.lastDs = ds;
                     if (this.lastDsParsed) {
-                        this.parseValue(ds);
+                        this.parseValue(ds, complete);
                     }
                 };
                 /**
@@ -1171,7 +1171,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (!this.lastDsParsed) {
                         this.lastDsParsed = true;
                         if (this.lastDs) {
-                            this.parseValue(this.lastDs);
+                            this.parseValue(this.lastDs, true);
                         }
                         if (this.lastEd) {
                             this.applyHooks(this.lastEd);
@@ -1186,7 +1186,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                  * The normal behaviour is to parse the given database data and apply it to
                  * the {@link entity} this event is working on.
                  */
-                GenericEvent.prototype.parseValue = function (ds) {
+                GenericEvent.prototype.parseValue = function (ds, complete) {
                     throw new Error("Please override parseValue in subclasses of GenericEvent");
                 };
                 GenericEvent.prototype.applyHooks = function (ed) {
@@ -1333,7 +1333,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (!this.loaded) {
                         evd.type = Api.EventType.LOAD;
                     }
-                    this.parseValue(ds);
+                    this.parseValue(ds, !projected);
                     if (this.entity == null) {
                         evd.type = Api.EventType.REMOVED;
                     }
@@ -1477,14 +1477,14 @@ var __extends = (this && this.__extends) || function (d, b) {
                             continue;
                         if (descr) {
                             var subev = this.findCreateChildFor(descr);
-                            subev.parseValue(null);
+                            subev.parseValue(null, true);
                         }
                         else {
                             this.setOnEntity(k, undefined);
                         }
                     }
                 };
-                EntityEvent.prototype.parseValue = function (ds) {
+                EntityEvent.prototype.parseValue = function (ds, complete) {
                     Xlog(this, 'Parsing value');
                     this.loaded = true;
                     // Save last data for use in clone later
@@ -1530,7 +1530,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                                 // if we have a descriptor, find/create the event and delegate to it
                                 var subev = this.findCreateChildFor(descr);
                                 // LazyParse: we do not propagate the parse here, only setup what's needed
-                                subev.willParseValue(ds.child(k));
+                                subev.willParseValue(ds.child(k), complete);
                                 //subev.parseValue(ds.child(k));
                                 set[k] = true;
                             }
@@ -1540,12 +1540,16 @@ var __extends = (this && this.__extends) || function (d, b) {
                                 set[k] = true;
                             }
                         }
-                        this.nullify(set);
+                        if (complete) {
+                            this.nullify(set);
+                        }
                     }
                     else {
                         // if value is null, then nullify and set the entity null
-                        this.nullify();
-                        this.setEntity(null);
+                        if (complete) {
+                            this.nullify();
+                            this.setEntity(null);
+                        }
                     }
                     // if it's embedded should set the value on the parent entity
                     this.setEntityOnParent();
@@ -1852,7 +1856,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         throw new Error('Cannot clone an instance that has not been loaded');
                     var nent = this.classMeta.createInstance();
                     var evt = this.state.db(nent);
-                    evt.parseValue(this.lastDs);
+                    evt.parseValue(this.lastDs, true);
                     return evt.entity;
                 };
                 EntityEvent.prototype.getId = function () {
@@ -2306,7 +2310,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                     var subev = this.findCreateChildFor(ds.key());
                     var val = null;
-                    subev.parseValue(ds);
+                    subev.parseValue(ds, true);
                     val = subev.entity;
                     if (event == 'child_removed') {
                         det.type = Api.EventType.REMOVED;
@@ -2484,7 +2488,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         this.entity = preEntity;
                     }
                 };
-                MapEvent.prototype.parseValue = function (allds) {
+                MapEvent.prototype.parseValue = function (allds, complete) {
                     var _this = this;
                     var prevKey = null;
                     var det = new EventDetails();
@@ -2497,7 +2501,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         allds.forEach(function (ds) {
                             var subev = _this.findCreateChildFor(ds.key());
                             var val = null;
-                            subev.parseValue(ds);
+                            subev.parseValue(ds, complete);
                             val = subev.entity;
                             det.originalKey = ds.key();
                             det.originalUrl = ds.ref().toString();
