@@ -441,7 +441,7 @@ module Tsdb {
 			// Entity methods
 			
 			/**
-			 * Load the entity completely. 
+			 * Load the entity completely if not already in cache.
 			 * 
 			 * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
 			 * 
@@ -450,6 +450,12 @@ module Tsdb {
 			 * @param ctx the context object, to use with {@link off}
 			 */
 			load(ctx:Object) :Promise<IEventDetails<E>>;
+			
+			/**
+			 * Forces a cache invalidation and reload of this entity, as if {@link load} was called 
+			 * for the first time.
+			 */
+			reload(ctx:Object) :Promise<IEventDetails<E>>;
 			
 			/**
 			 * Check if the entity, or the reference, or the referenced entity, exists on the database.
@@ -653,8 +659,9 @@ module Tsdb {
 		export interface IObservableEvent<E extends Entity> extends IUrled, IEvent {
 			updated(ctx:Object,callback :(ed:IEventDetails<E>)=>void) :void;
 			live(ctx:Object) :void;
+			load(ctx:Object) :Promise<IEventDetails<E>>;
 			
-			// Handling methods
+				// Handling methods
 			off(ctx:Object) :void;
 			isLoaded():boolean;
 			assertLoaded():void;
@@ -1013,6 +1020,11 @@ module Tsdb {
 			 * Binding to the embedded entity.
 			 */
 			binding? :Api.IBinding;
+			
+			/**
+			 * Milliseconds before this embedded expires after a {@link IEntityOrReferenceEvent.load}.
+			 */
+			expires? :number;
 		}
 
 		/**
@@ -1977,7 +1989,6 @@ module Tsdb {
 			 * and from the entity.
 			 */
 			destroy() {
-				this.state.evictFromCache(this);
 				this.setEntity(null);
 				for (var i = 0; i < this.dependants.length; i++) {
 					this.dependants[i].destroy();
@@ -2109,8 +2120,6 @@ module Tsdb {
 				}
 				// Dependants are not needed after the url init has been propagated
 				this.dependants = [];
-				this.state.storeInCache(this);
-				this.saveChildrenInCache();
 			}
 			
 			/**
@@ -2218,27 +2227,9 @@ module Tsdb {
 				}
 				ret.setPristine();
 				this.children[meta.localName] = ret;
-				// TODO should we give then urlInited if the url is already present?
-				this.saveChildrenInCache(meta.localName);
 				// TODO Why should we clear this here? Commented for LazyLoad
 				//Internal.clearLastStack();
 				return ret;
-			}
-			
-			/**
-			 * Save the children of this event to the {@link DbState} cache.
-			 * 
-			 * @param key if a specific key is given, only that children will be saven in the cache.
-			 */
-			saveChildrenInCache(key? :string) {
-				if (!this.getUrl()) return;
-				if (key) {
-					this.state.storeInCache(this.children[key]);
-				} else {
-					for (var k in this.children) {
-						this.state.storeInCache(this.children[k]);
-					}
-				}
 			}
 			
 			/**
@@ -2516,6 +2507,9 @@ module Tsdb {
 			/** a progressive counter used as a discriminator when registering the same callbacks more than once */
 			progDiscriminator = 1;
 			
+			protected lastParseTs = 0;
+			expiresAfter = 1000;
+			
 			setEntity(entity :Api.Entity) {
 				if (this.entity) {
 					this.state.bindEntity(this.entity, null);
@@ -2614,6 +2608,7 @@ module Tsdb {
 				// Save last data for use in clone later
 				this.lastDs = ds;
 				this.lastDsParsed = true;
+				this.lastParseTs = Date.now();
 				var val = ds && ds.val();
 				if (val) {
 					// Avoid messing with the entity if we are processing a reference
@@ -2706,13 +2701,26 @@ module Tsdb {
 			}
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {
-				return new Promise<EventDetails<E>>((resolve,error) => {
-					this.updated(ctx, (ed) => {
-						if (ed.projected) return;
-						ed.offMe();
-						resolve(ed);
-					}, this.progDiscriminator++);
-				});
+				if (this.loaded && !this.expired()) {
+					return Promise.resolve(this.lastDetail);
+				} else {
+					return new Promise<EventDetails<E>>((resolve,error) => {
+						this.updated(ctx, (ed) => {
+							if (ed.projected) return;
+							ed.offMe();
+							resolve(ed);
+						}, this.progDiscriminator++);
+					});
+				}
+			}
+			
+			expired() :boolean {
+				return this.lastParseTs < Date.now() - this.expiresAfter;
+			}
+			
+			reload(ctx:Object) :Promise<EventDetails<E>> {
+				this.lastParseTs = 0;
+				return this.load(ctx);
 			}
 			
 			exists(ctx:Object) :Promise<boolean> {
@@ -2830,7 +2838,7 @@ module Tsdb {
 				if (disc) disc+= '*';
 				this.url = url + disc + nid + '/';
 				if (id) {
-					var oth = this.state.fetchFromCache(this.url);
+					var oth = er.fetchFromCache(disc + nid);
 					if (oth && oth !== this) {
 						var ent = this.entity;
 						this.setEntity(null);
@@ -3004,6 +3012,14 @@ module Tsdb {
 				return this.dereference(ctx).then((ed) => {
 					ed.offMe();
 					if (this.pointedEvent) return this.pointedEvent.load(ctx).then((ed)=>ed);
+					return ed;
+				});
+			}
+			
+			reload(ctx:Object) :Promise<EventDetails<E>> {
+				return this.dereference(ctx).then((ed) => {
+					ed.offMe();
+					if (this.pointedEvent) return this.pointedEvent.reload(ctx).then((ed)=>ed);
 					return ed;
 				});
 			}
@@ -3482,7 +3498,7 @@ module Tsdb {
 			fetch(ctx:Object, key :string|number|Api.Entity) :Promise<EventDetails<E>> {
 				var k = this.normalizeKey(key);
 				var evt = this.findCreateChildFor(k);
-				return (<Api.IEntityOrReferenceEvent<E>><any>evt).load(ctx);
+				return (<Api.IEntityOrReferenceEvent<E>><any>evt).reload(ctx);
 			}
 			
 			with(key :string|number|Api.Entity) :Api.IEntityOrReferenceEvent<E> {
@@ -3883,9 +3899,26 @@ module Tsdb {
 		
 		export class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
 			
+			private progDiscriminator = 0;
+			private lastParseTs = 0;
+			
 			updated(ctx:Object,callback :(ed:EventDetails<E>)=>void, discriminator :any = null) :void {
 				var h = new EventHandler(ctx, callback, discriminator);
 				super.on(h);
+			}
+			
+			load(ctx:Object) :Promise<EventDetails<E>> {
+				if (this.loaded && !this.expired()) {
+					return Promise.resolve(this.lastDetail);
+				} else {
+					return new Promise<EventDetails<E>>((resolve,error) => {
+						this.updated(ctx, (ed) => {
+							if (ed.projected) return;
+							ed.offMe();
+							resolve(ed);
+						}, this.progDiscriminator++);
+					});
+				}
 			}
 			
 			live(ctx:Object) {
@@ -3893,8 +3926,18 @@ module Tsdb {
 			}
 			
 			parseValue(ds :Spi.DbTreeSnap) {
+				this.loaded = true;
+				this.lastParseTs = Date.now();
 				this.setEntity(ds && ds.val());
 				this.setEntityOnParent();
+			}
+			
+			expired() :boolean {
+				if (this.parent instanceof EntityEvent) {
+					return this.lastParseTs < Date.now() - (<EntityEvent<any>>this.parent).expiresAfter;
+				} else {
+					return true;
+				}
 			}
 			
 			serialize() {
@@ -3913,8 +3956,21 @@ module Tsdb {
 			}
 		}
 
+		export interface EntityRootLruEntry<E extends Api.Entity> {
+			id :string;
+			event :EntityEvent<E>;
+			next? :EntityRootLruEntry<E>;
+			prev? :EntityRootLruEntry<E>;
+		}
 		
 		export class EntityRoot<E extends Api.Entity> extends GenericEvent implements Api.IEntityRoot<E> {
+			
+			cache:{[index:string]:EntityRootLruEntry<E>} = {};
+			cacheHead:EntityRootLruEntry<E> = null;
+			cacheElements :number = 0;
+			
+			lastCacheClean :number = Date.now(); 
+			
 			constructor(
 				state :DbState,
 				meta :ClassMetadata
@@ -3934,9 +3990,12 @@ module Tsdb {
 			}
 			
 			getEvent(id:string) :EntityEvent<E> {
-				var url = this.getUrl() + id + "/";
-				var event = <EntityEvent<E>>this.state.fetchFromCache(url);
-				if (event) return event;
+				// use an internal cache that gets cleaned based on meta.cacheMax
+				var entry = this.cache[id];
+				if (entry) {
+					this.newHead(entry);
+					return entry.event;
+				}
 				
 				var dis = null;
 				var colonpos = id.indexOf('*');
@@ -3952,21 +4011,120 @@ module Tsdb {
 					// TODO issue a warning if the discriminator can't be resolved, maybe?
 					if (nmeta) meta = nmeta;
 				}
-				event = <EntityEvent<E>>meta.createEvent(this.state.myMeta);
+				
+				var url = this.getUrl() + id + "/";
+				var event = <EntityEvent<E>>meta.createEvent(this.state.myMeta);
 				event.url = url;
 				event.state = this.state;
 				
 				var inst = meta.createInstance();
 				event.setEntity(inst);
-				
-				this.state.storeInCache(event);
+
+				entry = {
+					id: id,
+					event: event
+				};
+				this.cache[id] = entry;
+				this.cacheElements++;
+				this.newHead(entry);
 				this.state.bindEntity(inst, event);
 
 				if (inst['dbInit']) {
 					(<Api.IDb3Initable>inst).dbInit(url, this.state.db);
 				}
 				return event;
-			} 
+			}
+			
+			fetchFromCache(id :string) :EntityEvent<E> {
+				var entry = this.cache[id];
+				if (entry) {
+					this.newHead(entry);
+					return entry.event;
+				}
+				return null;
+			}
+			
+			recurseAllEvents(cb :(GenericEvent)=>any) {
+				for (var k in this.cache) {
+					var ev = this.cache[k].event;
+					cb(ev);
+					this.recurseChildren(ev, cb);
+				}
+			}
+			
+			private recurseChildren(ev :GenericEvent, cb :(GenericEvent)=>any) {
+				ev.eachChildren((name,child) => {
+					cb(child);
+					this.recurseChildren(child, cb);
+				})
+			}
+			
+			
+			/*
+			HEAD
+			 --next-> --next-> --next->
+			A        B        C        D
+			 <-prev-- <-prev-- <-prev--
+			*/
+			newHead(entry :EntityRootLruEntry<E>) {
+				if (entry !== this.cacheHead) {
+					// hook prev and next to remove entry in the middle
+					if (entry.prev) {
+						entry.prev.next = entry.next;
+					}
+					if (entry.next) {
+						entry.next.prev = entry.prev;
+					}
+					// readd entry ad the new head
+					entry.next = this.cacheHead;
+					if (this.cacheHead) this.cacheHead.prev = entry;
+					entry.prev = null;
+					this.cacheHead = entry;
+				}
+				var meta = this.classMeta;
+				if (this.cacheElements > meta.cacheMax) {
+					// find first entry to expunge
+					var i = 0;
+					var acentry = this.cacheHead;
+					while (i < meta.cacheMax && acentry) {
+						acentry = acentry.next;
+						i++;
+					}
+					
+					// Expunge all of them  
+					while (acentry) {
+						delete this.cache[acentry.id];
+						this.cacheElements--;
+						var nentry = acentry.next;
+						acentry.next = null;
+						if (acentry.prev) {
+							acentry.prev.next = null;
+							acentry.prev = null;
+						}
+						acentry.event = null;
+						acentry = nentry;
+					}
+				}
+			}
+			
+			expunge(id :string) {
+				var entry = this.cache[id];
+				if (!entry) return;
+				if (entry.prev) {
+					entry.prev.next = entry.next;
+				}
+				if (entry.next) {
+					entry.next.prev = entry.prev;
+				}
+				if (entry === this.cacheHead) {
+					this.cacheHead = entry.next;
+				}
+			}
+			
+			expungeAll() {
+				this.cache = {};
+				this.cacheHead = null;
+			}
 			
 			get(id:string) :E {
 				var evt = this.getEvent(id);
@@ -4156,12 +4314,12 @@ module Tsdb {
 		
 		
 		export class DbState implements Api.IDbOperations {
-			cache :{[index:string]:GenericEvent} = {};
 			conf :Api.DatabaseConf;
 			myMeta = allMetadata;
 			serverIo :Api.Socket;
 			db :Api.IDb3Static;
 			treeRoot :Spi.DbTreeRoot;
+			roots :{[index:string]:EntityRoot<any>} = {};
 			
 			constructor() {
 				var me = this;
@@ -4232,14 +4390,13 @@ module Tsdb {
 			
 			reset() {
 				// Automatic off for all handlers
-				for (var k in this.cache) {
-					var val = this.cache[k];
-					if (val instanceof GenericEvent) {
-						(<GenericEvent>val).offAll();
-					}
+				for (var k in this.roots) {
+					var root = this.roots[k];
+					root.recurseAllEvents((ev)=>{
+						ev.offAll();
+					});
 				}
-				// Clean the cache
-				this.cache = {};
+				this.roots = {};
 			}
 			
 			entityRoot(ctor :Api.EntityType<any>) :EntityRoot<any>;
@@ -4253,7 +4410,12 @@ module Tsdb {
 				}
 				// change the meta based on current overrides
 				meta = meta.findOverridden(this.conf.override);
-				return new EntityRoot<any>(this, meta);
+				var ret = this.roots[meta.serial];
+				if (!ret) {
+					ret = new EntityRoot<any>(this, meta);
+					this.roots[meta.serial] = ret;
+				}
+				return ret; 
 			}
 			
 			makeRelativeUrl(url :string) :string {
@@ -4315,8 +4477,10 @@ module Tsdb {
 			loadEvent(url :string) :GenericEvent {
 				
 				if (url.charAt(url.length - 1) != '/') url += '/';
-				var ret = this.cache[url];
-				if (ret) return ret;
+				
+				// Was loading from the centralized cache
+				//var ret = this.cache[url];
+				//if (ret) return ret;
 				
 				// Find the entity root
 				var entroot = this.entityRootFromUrl(url);
@@ -4338,32 +4502,6 @@ module Tsdb {
 				} else {
 					return roote;
 				}
-			}
-			
-			/**
-			 * Adds an event to the cache.
-			 */
-			storeInCache(evt :GenericEvent) {
-				var url = evt.getUrl();
-				if (!url) return;
-				var pre = this.cache[url];
-				if (pre && pre !== evt) {
-					throw new Error('Storing in cache two different events for the same key ' + url);
-				}
-				this.cache[url] = evt;
-			}
-			
-			/**
-			 * Removes an event from the cache.
-			 */
-			evictFromCache(evt :GenericEvent) {
-				var url = evt.getUrl();
-				if (!url) return;
-				delete this.cache[url];
-			}
-			
-			fetchFromCache(url :string) {
-				return this.cache[url];
 			}
 			
 			loadEventWithInstance(url :string) :GenericEvent {
@@ -4630,10 +4768,13 @@ module Tsdb {
 		}
 		
 		export class ClassMetadata extends MetaDescriptor {
+			serial :string = Utils.IdGenerator.next();
 			descriptors :{[index:string]:MetaDescriptor} = {};
 			root :string = null;
 			discriminator :string = null;
 			override :string = null;
+			expires :number = 5000;
+			cacheMax :number = 1000;
 			superMeta :ClassMetadata = null;
 			subMeta :ClassMetadata[] = [];
 			
@@ -4707,6 +4848,7 @@ module Tsdb {
 				var ret = new EntityEvent();
 				ret.url = this.getRemoteName();
 				ret.classMeta = this;
+				ret.expiresAfter = this.expires;
 				return ret;
 			}
 		}
@@ -4715,6 +4857,7 @@ module Tsdb {
 		
 		export class EmbeddedMetaDescriptor extends MetaDescriptor {
 			binding: Api.IBinding = null;
+			expires :number = 5000;
 			
 			named(name :string) :EmbeddedMetaDescriptor {
 				super.named(name);
@@ -4726,9 +4869,15 @@ module Tsdb {
 				ret.url = this.getRemoteName();
 				// TODO i need this search? can't i cache this?
 				// TODO maybe we should assert here that there is a metadata for this type
-				ret.classMeta = allMetadata.findMeta(this.ctor);
+				var meta =  allMetadata.findMeta(this.ctor);
+				ret.classMeta = meta;
 				ret.nameOnParent = this.localName;
 				ret.binding = <BindingImpl>this.binding;
+				if (this.expires || this.expires == 0) {
+					ret.expiresAfter = this.expires;
+				} else {
+					ret.expiresAfter = meta.expires; 
+				}
 				return ret;
 			}
 			
@@ -5328,6 +5477,24 @@ module Tsdb {
 			meta.define(<Api.EntityType<any>><any>target, null, null, override);
 		}
 	}
+
+	export function cache(ms? :number, max? :number) :ClassDecorator {
+		return function(target :Function) {
+			meta.define(<Api.EntityType<any>><any>target, null, null, null, ms, max);
+		}
+	}
+	
+	export function cacheFor(ms :number) :ClassDecorator {
+		return function(target :Function) {
+			meta.define(<Api.EntityType<any>><any>target, null, null, null, ms);
+		}
+	}
+	
+	export function cacheMax(max :number) :ClassDecorator {
+		return function(target :Function) {
+			meta.define(<Api.EntityType<any>><any>target, null, null, null, null, max);
+		}
+	}
 	
 	export function observable() :PropertyDecorator {
 		return function(target: Object, propertyKey: string | symbol) {
@@ -5455,14 +5622,19 @@ module Tsdb {
 	
 	export module meta {
 		export function embedded(def :Api.EntityType<any>|Api.EntityTypeProducer<any>|Api.EmbeddedParams, binding? :Api.IBinding) :Tsdb.Internal.EmbeddedMetaDescriptor {
+			var expires :number;
 			if ((<Api.EmbeddedParams>def).type) {
 				binding = binding || (<Api.EmbeddedParams>def).binding;
+				expires = (<Api.EmbeddedParams>def).expires;
 				def = (<Api.EmbeddedParams>def).type;
 			}
 			if (!def) throw new Error("Cannot find embedded class");
 			var ret = new Tsdb.Internal.EmbeddedMetaDescriptor();
 			ret.setType(def);
 			ret.setBinding(binding);
+			if (expires || expires == 0) {
+				ret.expires = expires;
+			}
 			return ret;
 		}
 		
@@ -5520,7 +5692,7 @@ module Tsdb {
 			return ret;
 		}
 		
-		export function define(ctor :Api.EntityType<any>, root? :string, discriminator? :string, override? :string) {
+		export function define(ctor :Api.EntityType<any>, root? :string, discriminator? :string, override? :string, cacheExpires? :number, cacheMax? :number) {
 			var meta = allMetadata.findMeta(ctor);
 			if (root) {
 				meta.root = root;
@@ -5530,6 +5702,12 @@ module Tsdb {
 			}
 			if (override) {
 				meta.override = override;
+			}
+			if (cacheExpires || cacheExpires == 0) {
+				meta.expires = cacheExpires;
+			}
+			if (cacheMax || cacheMax == 0) {
+				meta.cacheMax = cacheMax;
 			}
 		}
 	}

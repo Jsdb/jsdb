@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160719_000447_master_1.0.0_5f52cec
+     * TSDB version : 20160719_065347_master_1.0.0_f2961c3
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160719_000447_master_1.0.0_5f52cec';
+    var Version = '20160719_065347_master_1.0.0_f2961c3';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -864,7 +864,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                  * and from the entity.
                  */
                 GenericEvent.prototype.destroy = function () {
-                    this.state.evictFromCache(this);
                     this.setEntity(null);
                     for (var i = 0; i < this.dependants.length; i++) {
                         this.dependants[i].destroy();
@@ -1011,8 +1010,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                     // Dependants are not needed after the url init has been propagated
                     this.dependants = [];
-                    this.state.storeInCache(this);
-                    this.saveChildrenInCache();
                 };
                 /**
                  * Registers an event handler on this event.
@@ -1119,28 +1116,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                     ret.setPristine();
                     this.children[meta.localName] = ret;
-                    // TODO should we give then urlInited if the url is already present?
-                    this.saveChildrenInCache(meta.localName);
                     // TODO Why should we clear this here? Commented for LazyLoad
                     //Internal.clearLastStack();
                     return ret;
-                };
-                /**
-                 * Save the children of this event to the {@link DbState} cache.
-                 *
-                 * @param key if a specific key is given, only that children will be saven in the cache.
-                 */
-                GenericEvent.prototype.saveChildrenInCache = function (key) {
-                    if (!this.getUrl())
-                        return;
-                    if (key) {
-                        this.state.storeInCache(this.children[key]);
-                    }
-                    else {
-                        for (var k in this.children) {
-                            this.state.storeInCache(this.children[k]);
-                        }
-                    }
                 };
                 /**
                  * Executes the given function for each already existing children of this event.
@@ -1404,6 +1382,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.bindingPromise = null;
                     /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                     this.progDiscriminator = 1;
+                    this.lastParseTs = 0;
+                    this.expiresAfter = 1000;
                 }
                 EntityEvent.prototype.setEntity = function (entity) {
                     if (this.entity) {
@@ -1507,6 +1487,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     // Save last data for use in clone later
                     this.lastDs = ds;
                     this.lastDsParsed = true;
+                    this.lastParseTs = Date.now();
                     var val = ds && ds.val();
                     if (val) {
                         // Avoid messing with the entity if we are processing a reference
@@ -1605,14 +1586,26 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 EntityEvent.prototype.load = function (ctx) {
                     var _this = this;
-                    return new Promise(function (resolve, error) {
-                        _this.updated(ctx, function (ed) {
-                            if (ed.projected)
-                                return;
-                            ed.offMe();
-                            resolve(ed);
-                        }, _this.progDiscriminator++);
-                    });
+                    if (this.loaded && !this.expired()) {
+                        return Promise.resolve(this.lastDetail);
+                    }
+                    else {
+                        return new Promise(function (resolve, error) {
+                            _this.updated(ctx, function (ed) {
+                                if (ed.projected)
+                                    return;
+                                ed.offMe();
+                                resolve(ed);
+                            }, _this.progDiscriminator++);
+                        });
+                    }
+                };
+                EntityEvent.prototype.expired = function () {
+                    return this.lastParseTs < Date.now() - this.expiresAfter;
+                };
+                EntityEvent.prototype.reload = function (ctx) {
+                    this.lastParseTs = 0;
+                    return this.load(ctx);
                 };
                 EntityEvent.prototype.exists = function (ctx) {
                     var _this = this;
@@ -1736,7 +1729,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                         disc += '*';
                     this.url = url + disc + nid + '/';
                     if (id) {
-                        var oth = this.state.fetchFromCache(this.url);
+                        var oth = er.fetchFromCache(disc + nid);
                         if (oth && oth !== this) {
                             var ent = this.entity;
                             this.setEntity(null);
@@ -1921,6 +1914,15 @@ var __extends = (this && this.__extends) || function (d, b) {
                         ed.offMe();
                         if (_this.pointedEvent)
                             return _this.pointedEvent.load(ctx).then(function (ed) { return ed; });
+                        return ed;
+                    });
+                };
+                ReferenceEvent.prototype.reload = function (ctx) {
+                    var _this = this;
+                    return this.dereference(ctx).then(function (ed) {
+                        ed.offMe();
+                        if (_this.pointedEvent)
+                            return _this.pointedEvent.reload(ctx).then(function (ed) { return ed; });
                         return ed;
                     });
                 };
@@ -2402,7 +2404,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MapEvent.prototype.fetch = function (ctx, key) {
                     var k = this.normalizeKey(key);
                     var evt = this.findCreateChildFor(k);
-                    return evt.load(ctx);
+                    return evt.reload(ctx);
                 };
                 MapEvent.prototype.with = function (key) {
                     var k = this.normalizeKey(key);
@@ -2810,18 +2812,46 @@ var __extends = (this && this.__extends) || function (d, b) {
                 __extends(ObservableEvent, _super);
                 function ObservableEvent() {
                     _super.apply(this, arguments);
+                    this.progDiscriminator = 0;
+                    this.lastParseTs = 0;
                 }
                 ObservableEvent.prototype.updated = function (ctx, callback, discriminator) {
                     if (discriminator === void 0) { discriminator = null; }
                     var h = new EventHandler(ctx, callback, discriminator);
                     _super.prototype.on.call(this, h);
                 };
+                ObservableEvent.prototype.load = function (ctx) {
+                    var _this = this;
+                    if (this.loaded && !this.expired()) {
+                        return Promise.resolve(this.lastDetail);
+                    }
+                    else {
+                        return new Promise(function (resolve, error) {
+                            _this.updated(ctx, function (ed) {
+                                if (ed.projected)
+                                    return;
+                                ed.offMe();
+                                resolve(ed);
+                            }, _this.progDiscriminator++);
+                        });
+                    }
+                };
                 ObservableEvent.prototype.live = function (ctx) {
                     this.updated(ctx, function () { });
                 };
                 ObservableEvent.prototype.parseValue = function (ds) {
+                    this.loaded = true;
+                    this.lastParseTs = Date.now();
                     this.setEntity(ds && ds.val());
                     this.setEntityOnParent();
+                };
+                ObservableEvent.prototype.expired = function () {
+                    if (this.parent instanceof EntityEvent) {
+                        return this.lastParseTs < Date.now() - this.parent.expiresAfter;
+                    }
+                    else {
+                        return true;
+                    }
                 };
                 ObservableEvent.prototype.serialize = function () {
                     if (this.lastDs && !this.lastDsParsed) {
@@ -2842,6 +2872,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                 __extends(EntityRoot, _super);
                 function EntityRoot(state, meta) {
                     _super.call(this);
+                    this.cache = {};
+                    this.cacheHead = null;
+                    this.cacheElements = 0;
+                    this.lastCacheClean = Date.now();
                     if (!meta.root)
                         throw new Error("The entity " + meta.getName() + " is not a root entity");
                     this.state = state;
@@ -2856,10 +2890,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     return this.getEvent(metaOrkey);
                 };
                 EntityRoot.prototype.getEvent = function (id) {
-                    var url = this.getUrl() + id + "/";
-                    var event = this.state.fetchFromCache(url);
-                    if (event)
-                        return event;
+                    // use an internal cache that gets cleaned based on meta.cacheMax
+                    var entry = this.cache[id];
+                    if (entry) {
+                        this.newHead(entry);
+                        return entry.event;
+                    }
                     var dis = null;
                     var colonpos = id.indexOf('*');
                     if (colonpos == 0) {
@@ -2875,17 +2911,110 @@ var __extends = (this && this.__extends) || function (d, b) {
                         if (nmeta)
                             meta = nmeta;
                     }
-                    event = meta.createEvent(this.state.myMeta);
+                    var url = this.getUrl() + id + "/";
+                    var event = meta.createEvent(this.state.myMeta);
                     event.url = url;
                     event.state = this.state;
                     var inst = meta.createInstance();
                     event.setEntity(inst);
-                    this.state.storeInCache(event);
+                    entry = {
+                        id: id,
+                        event: event
+                    };
+                    this.cache[id] = entry;
+                    this.cacheElements++;
+                    this.newHead(entry);
                     this.state.bindEntity(inst, event);
                     if (inst['dbInit']) {
                         inst.dbInit(url, this.state.db);
                     }
                     return event;
+                };
+                EntityRoot.prototype.fetchFromCache = function (id) {
+                    var entry = this.cache[id];
+                    if (entry) {
+                        this.newHead(entry);
+                        return entry.event;
+                    }
+                    return null;
+                };
+                EntityRoot.prototype.recurseAllEvents = function (cb) {
+                    for (var k in this.cache) {
+                        var ev = this.cache[k].event;
+                        cb(ev);
+                        this.recurseChildren(ev, cb);
+                    }
+                };
+                EntityRoot.prototype.recurseChildren = function (ev, cb) {
+                    var _this = this;
+                    ev.eachChildren(function (name, child) {
+                        cb(child);
+                        _this.recurseChildren(child, cb);
+                    });
+                };
+                /*
+                HEAD
+                 --next-> --next-> --next->
+                A        B        C        D
+                 <-prev-- <-prev-- <-prev--
+                */
+                EntityRoot.prototype.newHead = function (entry) {
+                    if (entry !== this.cacheHead) {
+                        // hook prev and next to remove entry in the middle
+                        if (entry.prev) {
+                            entry.prev.next = entry.next;
+                        }
+                        if (entry.next) {
+                            entry.next.prev = entry.prev;
+                        }
+                        // readd entry ad the new head
+                        entry.next = this.cacheHead;
+                        if (this.cacheHead)
+                            this.cacheHead.prev = entry;
+                        entry.prev = null;
+                        this.cacheHead = entry;
+                    }
+                    var meta = this.classMeta;
+                    if (this.cacheElements > meta.cacheMax) {
+                        // find first entry to expunge
+                        var i = 0;
+                        var acentry = this.cacheHead;
+                        while (i < meta.cacheMax && acentry) {
+                            acentry = acentry.next;
+                            i++;
+                        }
+                        // Expunge all of them  
+                        while (acentry) {
+                            delete this.cache[acentry.id];
+                            this.cacheElements--;
+                            var nentry = acentry.next;
+                            acentry.next = null;
+                            if (acentry.prev) {
+                                acentry.prev.next = null;
+                                acentry.prev = null;
+                            }
+                            acentry.event = null;
+                            acentry = nentry;
+                        }
+                    }
+                };
+                EntityRoot.prototype.expunge = function (id) {
+                    var entry = this.cache[id];
+                    if (!entry)
+                        return;
+                    if (entry.prev) {
+                        entry.prev.next = entry.next;
+                    }
+                    if (entry.next) {
+                        entry.next.prev = entry.prev;
+                    }
+                    if (entry === this.cacheHead) {
+                        this.cacheHead = entry.next;
+                    }
+                };
+                EntityRoot.prototype.expungeAll = function () {
+                    this.cache = {};
+                    this.cacheHead = null;
                 };
                 EntityRoot.prototype.get = function (id) {
                     var evt = this.getEvent(id);
@@ -3073,8 +3202,8 @@ var __extends = (this && this.__extends) || function (d, b) {
             Internal.ChainedEvent = ChainedEvent;
             var DbState = (function () {
                 function DbState() {
-                    this.cache = {};
                     this.myMeta = allMetadata;
+                    this.roots = {};
                     var me = this;
                     this.db = function () { return me.internalDb.apply(me, arguments); };
                 }
@@ -3139,14 +3268,13 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 DbState.prototype.reset = function () {
                     // Automatic off for all handlers
-                    for (var k in this.cache) {
-                        var val = this.cache[k];
-                        if (val instanceof GenericEvent) {
-                            val.offAll();
-                        }
+                    for (var k in this.roots) {
+                        var root = this.roots[k];
+                        root.recurseAllEvents(function (ev) {
+                            ev.offAll();
+                        });
                     }
-                    // Clean the cache
-                    this.cache = {};
+                    this.roots = {};
                 };
                 DbState.prototype.entityRoot = function (param) {
                     var meta = null;
@@ -3158,7 +3286,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                     // change the meta based on current overrides
                     meta = meta.findOverridden(this.conf.override);
-                    return new EntityRoot(this, meta);
+                    var ret = this.roots[meta.serial];
+                    if (!ret) {
+                        ret = new EntityRoot(this, meta);
+                        this.roots[meta.serial] = ret;
+                    }
+                    return ret;
                 };
                 DbState.prototype.makeRelativeUrl = function (url) {
                     if (url.indexOf(this.getUrl()) != 0) {
@@ -3222,9 +3355,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 DbState.prototype.loadEvent = function (url) {
                     if (url.charAt(url.length - 1) != '/')
                         url += '/';
-                    var ret = this.cache[url];
-                    if (ret)
-                        return ret;
+                    // Was loading from the centralized cache
+                    //var ret = this.cache[url];
+                    //if (ret) return ret;
                     // Find the entity root
                     var entroot = this.entityRootFromUrl(url);
                     if (!entroot) {
@@ -3245,31 +3378,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                     else {
                         return roote;
                     }
-                };
-                /**
-                 * Adds an event to the cache.
-                 */
-                DbState.prototype.storeInCache = function (evt) {
-                    var url = evt.getUrl();
-                    if (!url)
-                        return;
-                    var pre = this.cache[url];
-                    if (pre && pre !== evt) {
-                        throw new Error('Storing in cache two different events for the same key ' + url);
-                    }
-                    this.cache[url] = evt;
-                };
-                /**
-                 * Removes an event from the cache.
-                 */
-                DbState.prototype.evictFromCache = function (evt) {
-                    var url = evt.getUrl();
-                    if (!url)
-                        return;
-                    delete this.cache[url];
-                };
-                DbState.prototype.fetchFromCache = function (url) {
-                    return this.cache[url];
                 };
                 DbState.prototype.loadEventWithInstance = function (url) {
                     var dis = null;
@@ -3547,10 +3655,13 @@ var __extends = (this && this.__extends) || function (d, b) {
                 __extends(ClassMetadata, _super);
                 function ClassMetadata() {
                     _super.apply(this, arguments);
+                    this.serial = Utils.IdGenerator.next();
                     this.descriptors = {};
                     this.root = null;
                     this.discriminator = null;
                     this.override = null;
+                    this.expires = 5000;
+                    this.cacheMax = 1000;
                     this.superMeta = null;
                     this.subMeta = [];
                 }
@@ -3621,6 +3732,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     var ret = new EntityEvent();
                     ret.url = this.getRemoteName();
                     ret.classMeta = this;
+                    ret.expiresAfter = this.expires;
                     return ret;
                 };
                 return ClassMetadata;
@@ -3631,6 +3743,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 function EmbeddedMetaDescriptor() {
                     _super.apply(this, arguments);
                     this.binding = null;
+                    this.expires = 5000;
                 }
                 EmbeddedMetaDescriptor.prototype.named = function (name) {
                     _super.prototype.named.call(this, name);
@@ -3641,9 +3754,16 @@ var __extends = (this && this.__extends) || function (d, b) {
                     ret.url = this.getRemoteName();
                     // TODO i need this search? can't i cache this?
                     // TODO maybe we should assert here that there is a metadata for this type
-                    ret.classMeta = allMetadata.findMeta(this.ctor);
+                    var meta = allMetadata.findMeta(this.ctor);
+                    ret.classMeta = meta;
                     ret.nameOnParent = this.localName;
                     ret.binding = this.binding;
+                    if (this.expires || this.expires == 0) {
+                        ret.expiresAfter = this.expires;
+                    }
+                    else {
+                        ret.expiresAfter = meta.expires;
+                    }
                     return ret;
                 };
                 EmbeddedMetaDescriptor.prototype.setBinding = function (binding) {
@@ -4283,6 +4403,24 @@ var __extends = (this && this.__extends) || function (d, b) {
             };
         }
         Tsdb.override = override;
+        function cache(ms, max) {
+            return function (target) {
+                meta.define(target, null, null, null, ms, max);
+            };
+        }
+        Tsdb.cache = cache;
+        function cacheFor(ms) {
+            return function (target) {
+                meta.define(target, null, null, null, ms);
+            };
+        }
+        Tsdb.cacheFor = cacheFor;
+        function cacheMax(max) {
+            return function (target) {
+                meta.define(target, null, null, null, null, max);
+            };
+        }
+        Tsdb.cacheMax = cacheMax;
         function observable() {
             return function (target, propertyKey) {
                 var ret = meta.observable();
@@ -4402,8 +4540,10 @@ var __extends = (this && this.__extends) || function (d, b) {
         var meta;
         (function (meta_1) {
             function embedded(def, binding) {
+                var expires;
                 if (def.type) {
                     binding = binding || def.binding;
+                    expires = def.expires;
                     def = def.type;
                 }
                 if (!def)
@@ -4411,6 +4551,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 var ret = new Tsdb.Internal.EmbeddedMetaDescriptor();
                 ret.setType(def);
                 ret.setBinding(binding);
+                if (expires || expires == 0) {
+                    ret.expires = expires;
+                }
                 return ret;
             }
             meta_1.embedded = embedded;
@@ -4468,7 +4611,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return ret;
             }
             meta_1.ignore = ignore;
-            function define(ctor, root, discriminator, override) {
+            function define(ctor, root, discriminator, override, cacheExpires, cacheMax) {
                 var meta = allMetadata.findMeta(ctor);
                 if (root) {
                     meta.root = root;
@@ -4478,6 +4621,12 @@ var __extends = (this && this.__extends) || function (d, b) {
                 }
                 if (override) {
                     meta.override = override;
+                }
+                if (cacheExpires || cacheExpires == 0) {
+                    meta.expires = cacheExpires;
+                }
+                if (cacheMax || cacheMax == 0) {
+                    meta.cacheMax = cacheMax;
                 }
             }
             meta_1.define = define;

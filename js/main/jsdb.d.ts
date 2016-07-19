@@ -285,7 +285,7 @@ declare module 'jsdb' {
                         */
                     interface IEntityOrReferenceEvent<E extends Entity> extends IUrled, IEvent {
                             /**
-                                * Load the entity completely.
+                                * Load the entity completely if not already in cache.
                                 *
                                 * If it's a reference, the reference will be dereferenced AND the target data will be loaded.
                                 *
@@ -294,6 +294,11 @@ declare module 'jsdb' {
                                 * @param ctx the context object, to use with {@link off}
                                 */
                             load(ctx: Object): Promise<IEventDetails<E>>;
+                            /**
+                                * Forces a cache invalidation and reload of this entity, as if {@link load} was called
+                                * for the first time.
+                                */
+                            reload(ctx: Object): Promise<IEventDetails<E>>;
                             /**
                                 * Check if the entity, or the reference, or the referenced entity, exists on the database.
                                 *
@@ -472,6 +477,7 @@ declare module 'jsdb' {
                     interface IObservableEvent<E extends Entity> extends IUrled, IEvent {
                             updated(ctx: Object, callback: (ed: IEventDetails<E>) => void): void;
                             live(ctx: Object): void;
+                            load(ctx: Object): Promise<IEventDetails<E>>;
                             off(ctx: Object): void;
                             isLoaded(): boolean;
                             assertLoaded(): void;
@@ -776,6 +782,10 @@ declare module 'jsdb' {
                                 * Binding to the embedded entity.
                                 */
                             binding?: Api.IBinding;
+                            /**
+                                * Milliseconds before this embedded expires after a {@link IEntityOrReferenceEvent.load}.
+                                */
+                            expires?: number;
                     }
                     /**
                         * Parameters for referenced entity declaration.
@@ -1410,12 +1420,6 @@ declare module 'jsdb' {
                                 */
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             /**
-                                * Save the children of this event to the {@link DbState} cache.
-                                *
-                                * @param key if a specific key is given, only that children will be saven in the cache.
-                                */
-                            saveChildrenInCache(key?: string): void;
-                            /**
                                 * Executes the given function for each already existing children of this event.
                                 */
                             eachChildren(f: (name: string, child: GenericEvent) => void): void;
@@ -1565,6 +1569,8 @@ declare module 'jsdb' {
                             bindingPromise: Promise<BindingState>;
                             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                             progDiscriminator: number;
+                            protected lastParseTs: number;
+                            expiresAfter: number;
                             setEntity(entity: Api.Entity): void;
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
                             /**
@@ -1588,6 +1594,8 @@ declare module 'jsdb' {
                             ensureParsedValue(): void;
                             internalApplyBinding(skipMe?: boolean): void;
                             load(ctx: Object): Promise<EventDetails<E>>;
+                            expired(): boolean;
+                            reload(ctx: Object): Promise<EventDetails<E>>;
                             exists(ctx: Object): Promise<boolean>;
                             live(ctx: Object): void;
                             dereference(ctx: Object): Promise<EventDetails<E>>;
@@ -1655,6 +1663,7 @@ declare module 'jsdb' {
                                 * Load this reference AND the pointed entity.
                                 */
                             load(ctx: Object): Promise<EventDetails<E>>;
+                            reload(ctx: Object): Promise<EventDetails<E>>;
                             exists(ctx: Object): Promise<boolean>;
                             /**
                                 * Notifies of modifications on the reference AND on the pointed entity.
@@ -1778,16 +1787,35 @@ declare module 'jsdb' {
                     }
                     class ObservableEvent<E extends Api.Entity> extends SingleDbHandlerEvent<E> implements Api.IObservableEvent<E> {
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
+                            load(ctx: Object): Promise<EventDetails<E>>;
                             live(ctx: Object): void;
                             parseValue(ds: Spi.DbTreeSnap): void;
+                            expired(): boolean;
                             serialize(): any;
                             isLocal(): boolean;
                             internalSave(): any;
                     }
+                    interface EntityRootLruEntry<E extends Api.Entity> {
+                            id: string;
+                            event: EntityEvent<E>;
+                            next?: EntityRootLruEntry<E>;
+                            prev?: EntityRootLruEntry<E>;
+                    }
                     class EntityRoot<E extends Api.Entity> extends GenericEvent implements Api.IEntityRoot<E> {
+                            cache: {
+                                    [index: string]: EntityRootLruEntry<E>;
+                            };
+                            cacheHead: EntityRootLruEntry<E>;
+                            cacheElements: number;
+                            lastCacheClean: number;
                             constructor(state: DbState, meta: ClassMetadata);
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             getEvent(id: string): EntityEvent<E>;
+                            fetchFromCache(id: string): EntityEvent<E>;
+                            recurseAllEvents(cb: (GenericEvent) => any): void;
+                            newHead(entry: EntityRootLruEntry<E>): void;
+                            expunge(id: string): void;
+                            expungeAll(): void;
                             get(id: string): E;
                             idOf(entity: E): string;
                             query(): Api.IQuery<E>;
@@ -1814,14 +1842,14 @@ declare module 'jsdb' {
                             addOther(evt: Api.IEvent): void;
                     }
                     class DbState implements Api.IDbOperations {
-                            cache: {
-                                    [index: string]: GenericEvent;
-                            };
                             conf: Api.DatabaseConf;
                             myMeta: Metadata;
                             serverIo: Api.Socket;
                             db: Api.IDb3Static;
                             treeRoot: Spi.DbTreeRoot;
+                            roots: {
+                                    [index: string]: EntityRoot<any>;
+                            };
                             constructor();
                             configure(conf: Api.DatabaseConf): void;
                             getTree(url: string): Spi.DbTree;
@@ -1837,15 +1865,6 @@ declare module 'jsdb' {
                             bindEntity(e: Api.Entity, ev: EntityEvent<any>): void;
                             createEvent(e: Api.Entity, stack?: MetaDescriptor[] | string[]): GenericEvent;
                             loadEvent(url: string): GenericEvent;
-                            /**
-                                * Adds an event to the cache.
-                                */
-                            storeInCache(evt: GenericEvent): void;
-                            /**
-                                * Removes an event from the cache.
-                                */
-                            evictFromCache(evt: GenericEvent): void;
-                            fetchFromCache(url: string): GenericEvent;
                             loadEventWithInstance(url: string): GenericEvent;
                             load(ctx: Object, url: string): Promise<Api.IEventDetails<any>>;
                             tree(): Spi.DbTreeRoot;
@@ -1899,12 +1918,15 @@ declare module 'jsdb' {
                             hasValue(): boolean;
                     }
                     class ClassMetadata extends MetaDescriptor {
+                            serial: string;
                             descriptors: {
                                     [index: string]: MetaDescriptor;
                             };
                             root: string;
                             discriminator: string;
                             override: string;
+                            expires: number;
+                            cacheMax: number;
                             superMeta: ClassMetadata;
                             subMeta: ClassMetadata[];
                             add(descr: MetaDescriptor): void;
@@ -1920,6 +1942,7 @@ declare module 'jsdb' {
                     }
                     class EmbeddedMetaDescriptor extends MetaDescriptor {
                             binding: Api.IBinding;
+                            expires: number;
                             named(name: string): EmbeddedMetaDescriptor;
                             createEvent(allMetadata: Metadata): EntityEvent<any>;
                             setBinding(binding: Api.IBinding): void;
@@ -2008,6 +2031,9 @@ declare module 'jsdb' {
             function root(name?: string, override?: string): ClassDecorator;
             function discriminator(disc: string): ClassDecorator;
             function override(override?: string): ClassDecorator;
+            function cache(ms?: number, max?: number): ClassDecorator;
+            function cacheFor(ms: number): ClassDecorator;
+            function cacheMax(max: number): ClassDecorator;
             function observable(): PropertyDecorator;
             function ignore(): PropertyDecorator;
             interface TypedMethodDecorator<T> {
@@ -2022,7 +2048,7 @@ declare module 'jsdb' {
                     function list(def: Api.EntityType<any> | Api.EntityTypeProducer<any> | Api.CollectionParams, reference?: boolean): Tsdb.Internal.ListMetaDescriptor;
                     function observable(): Tsdb.Internal.ObservableMetaDescriptor;
                     function ignore(): Tsdb.Internal.IgnoreMetaDescriptor;
-                    function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string): void;
+                    function define(ctor: Api.EntityType<any>, root?: string, discriminator?: string, override?: string, cacheExpires?: number, cacheMax?: number): void;
             }
             /**
              * Weak association between entities and their database events. Each entity instance can be

@@ -26,6 +26,7 @@ var lastRemoteCallArgs :IArguments = null;
 var lastLocalStubArgs :IArguments = null;
 
 @Db3.root()
+@Db3.cacheMax(5)
 class WithProps implements Db3.Api.IEntityHooks {
 	_local :number = 1;
 	$moreLocal :number = 1;
@@ -911,8 +912,8 @@ describe('Db3 >', () => {
 			var ws1 = Db(WithSubentity).get('ws1');
 			var ge = <Db3.Internal.GenericEvent><any>Db(ws1.sub);
 			assert("returned a generic event").when(ge).is(M.aTruthy);
-			var state = ge.state;
-			var ws1event = ge.state.cache['/withSubs/ws1/'];
+			var er = <Db3.Internal.EntityRoot<WithSubentity>>Db(WithSubentity);
+			var ws1event = er.fetchFromCache('ws1');
 			assert("found state for main entity").when(ws1event).is(M.aTruthy);
 			assert("it's parent is the right one").when(ge.parent).is(M.exactly(ws1event));
 			assert("it has the right url").when(ge.getUrl()).is('/withSubs/ws1/sub/');
@@ -1127,7 +1128,7 @@ describe('Db3 >', () => {
 					},
 					ignored: 'never seen'
 				});
-				return Db(wp1).load(this);
+				return Db(wp1).reload(this);
 			}).then(()=>{
 				assert("the modified field is now null").when(wp1.arr).is(M.aFalsey);
 			});
@@ -2502,7 +2503,7 @@ describe('Db3 >', () => {
 					for (var k in wm1.embedMap) ks++;
 					assert("Map is filled").when(ks).is(3);
 					wm1Fb.update({embedMap:null});
-					return Db(wm1).load(this);
+					return Db(wm1).reload(this);
 				}).then(()=>{
 					var ks = 0;
 					for (var k in wm1.embedMap) ks++;
@@ -2854,7 +2855,7 @@ describe('Db3 >', () => {
 				return Db(ws1).load(this).then(()=>{
 					assert("Set is filled").when(ws1.embedSet).is(M.withLength(3));
 					wst1Fb.update({embedSet:null});
-					return Db(ws1).load(this);
+					return Db(ws1).reload(this);
 				}).then(()=>{
 					assert("Set is an array").when(ws1.embedSet).is(M.anArray);
 					assert("Set is empty").when(ws1.embedSet).is(M.withLength(0));
@@ -3038,7 +3039,7 @@ describe('Db3 >', () => {
 				return Db(wl1).load(this).then(()=>{
 					assert("List is filled").when(wl1.embedList).is(M.withLength(3));
 					wlt1Fb.update({embedList:null, mockValue:1});
-					return Db(wl1).load(this);
+					return Db(wl1).reload(this);
 				}).then(()=>{
 					assert("List is an array").when(wl1.embedList).is(M.anArray);
 					assert("List is empty").when(wl1.embedList).is(M.withLength(0));
@@ -3489,6 +3490,141 @@ describe('Db3 >', () => {
 				return Db(wp2).load(this);
 			}).then(()=>{
 				assert("Chains with true").when(Db(wp1).and(wp2).isLoaded()).is(true);
+			});
+		});
+	});
+	
+	describe('Cache >', ()=>{
+		describe('EntityRoot cache >', ()=>{
+			
+			function extractMru(er :Db3.Internal.EntityRoot<any>) {
+				var ret :Db3.Internal.EntityRootLruEntry<any>[] = [];
+				var acentry = er.cacheHead;
+				while (acentry) {
+					ret.push(acentry);
+					acentry = acentry.next;
+				}
+				return ret;
+			}
+			function extractMruKeys(er :Db3.Internal.EntityRoot<any>) :string {
+				var entries = extractMru(er);
+				var ret = '';
+				for (var i = 0; i < entries.length; i++) {
+					ret+=entries[i].id + ",";
+				}
+				if (ret) ret = ret.substr(0, ret.length - 1);
+				return ret;
+			}
+			
+			it('should properly populate and update the mru', ()=>{
+				var er = <Db3.Internal.EntityRoot<WithProps>>Db(WithProps);
+				assert("Initial cacheHead is null").when(er.cacheHead).is(M.aFalsey);
+				assert("Initial cache is empty").when(er.cache).is(M.objectMatchingStrictly({}));
+				er.get('C');
+				er.get('B');
+				er.get('A');
+				assert("cacheHead is set").when(er.cacheHead).is(M.aTruthy);
+				assert("cacheHead is on A").when(er.cacheHead.id).is('A');
+				
+				assert("cacheHead next is set").when(er.cacheHead.next).is(M.aTruthy);
+				assert("cacheHead next on B").when(er.cacheHead.next.id).is('B');
+				assert("cacheHead next.prev is set").when(er.cacheHead.next.prev).is(M.aTruthy);
+				assert("cacheHead next.prev on A").when(er.cacheHead.next.prev.id).is('A');
+				
+				assert("cacheHead next.next is set").when(er.cacheHead.next.next).is(M.aTruthy);
+				assert("cacheHead next.next on C").when(er.cacheHead.next.next.id).is('C');
+				assert("cacheHead next.next.prev is set").when(er.cacheHead.next.next.prev).is(M.aTruthy);
+				assert("cacheHead next.next.prev on B").when(er.cacheHead.next.next.prev.id).is('B');
+
+				er.get('B');
+				
+				assert("after update cacheHead is on B").when(er.cacheHead.id).is('B');
+				
+				assert("after update cacheHead next is set").when(er.cacheHead.next).is(M.aTruthy);
+				assert("after update cacheHead next on A").when(er.cacheHead.next.id).is('A');
+				assert("after update cacheHead next.prev is set").when(er.cacheHead.next.prev).is(M.aTruthy);
+				assert("after update cacheHead next.prev on B").when(er.cacheHead.next.prev.id).is('B');
+				
+				assert("after update cacheHead next.next is set").when(er.cacheHead.next.next).is(M.aTruthy);
+				assert("after update cacheHead next.next on C").when(er.cacheHead.next.next.id).is('C');
+				assert("after update cacheHead next.next.prev is set").when(er.cacheHead.next.next.prev).is(M.aTruthy);
+				assert("after update cacheHead next.next.prev on A").when(er.cacheHead.next.next.prev.id).is('A');
+				
+				assert("right keys").when(extractMruKeys(er)).is('B,A,C');
+			});
+			
+			it('should properly expunge exceeding elements form the mru', ()=>{
+				var er = <Db3.Internal.EntityRoot<WithProps>>Db(WithProps);
+				assert("Initial cacheHead is null").when(er.cacheHead).is(M.aFalsey);
+				assert("Initial cache is empty").when(er.cache).is(M.objectMatchingStrictly({}));
+				
+				er.get('E');
+				er.get('D');
+				er.get('C');
+				er.get('B');
+				er.get('A');
+				
+				assert("right keys").when(extractMruKeys(er)).is('A,B,C,D,E');
+				
+				er.get('2');
+				assert("expunged one").when(extractMruKeys(er)).is('2,A,B,C,D');
+
+				er.get('C');
+				assert("raised one").when(extractMruKeys(er)).is('C,2,A,B,D');
+
+				er.get('1');
+				er.get('0');
+
+				assert("expunged two").when(extractMruKeys(er)).is('0,1,C,2,A');
+			});
+		});
+		
+		describe('Loaded data cache >', ()=>{
+			it('should not load again a root entity in cache', function () {
+				this.timeout(6000); 
+				var wp1 = Db(WithProps).get('wp1');
+				(<Db3.Internal.EntityEvent<any>>Db(wp1)).expiresAfter = 1000;
+				return Db(wp1).load(this).then(()=>{
+					assert('Loaded correctly').when(wp1.str).is('String 1');
+					wp1Fb.update({str:'str'});
+					return Db(wp1).load(this);
+				}).then(()=>{
+					assert('Kept the old data').when(wp1.str).is('String 1');
+					return new Promise<any>((res,rej)=>setTimeout(res, 2000));
+				}).then(()=>{
+					return Db(wp1).load(this);
+				}).then(()=>{
+					assert('Updated the data').when(wp1.str).is('str');
+				});
+			});
+			
+			it('should load again a root entity with reload', ()=>{
+				var wp1 = Db(WithProps).get('wp1');
+				return Db(wp1).load(this).then(()=>{
+					assert('Loaded correctly').when(wp1.str).is('String 1');
+					wp1Fb.update({str:'str'});
+					return Db(wp1).reload(this);
+				}).then(()=>{
+					assert('Updated the data').when(wp1.str).is('str');
+				});
+			});
+			
+			it('should not load again an observable in cache', function () {
+				this.timeout(6000); 
+				var wp1 = Db(WithProps).get('wp1');
+				(<Db3.Internal.EntityEvent<any>>Db(wp1)).expiresAfter = 1000;
+				return Db(wp1.num).load(this).then(()=>{
+					assert('Loaded correctly').when(wp1.num).is(200);
+					wp1Fb.update({num:54321});
+					return Db(wp1.num).load(this);
+				}).then(()=>{
+					assert('Kept the old data').when(wp1.num).is(200);
+					return new Promise<any>((res,rej)=>setTimeout(res, 2000));
+				}).then(()=>{
+					return Db(wp1.num).load(this);
+				}).then(()=>{
+					assert('Updated the data').when(wp1.num).is(54321);
+				});
 			});
 		});
 	});

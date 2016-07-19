@@ -10,7 +10,7 @@
 			"address": "localhost",
 			// Port to attach to.
 			"port": 5858,
-			"sourceMaps": false,
+			"sourceMaps": true,
 			"outDir": "js"
 		}
 	]
