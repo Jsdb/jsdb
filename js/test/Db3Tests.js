@@ -3393,6 +3393,23 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         });
                     });
                 });
+                it('should send proper event and payload even when was indirectly loaded', function (done) {
+                    var ws1 = Db(WithSubentity).get('ws1');
+                    Db(ws1).updated(_this, function (ed) {
+                        assert('Loaded correctly').when(ws1.sub).is(M.aTruthy);
+                        assert('Has event detail').when(ed).is(M.objectMatching({
+                            payload: M.exactly(ws1)
+                        }));
+                        Db(ws1.sub).load(_this).then(function (ed2) {
+                            assert('Has event detail').when(ed2).is(M.objectMatching({
+                                payload: M.exactly(ws1.sub)
+                            }));
+                            done();
+                        }).catch(function (err) {
+                            console.log(err);
+                        });
+                    });
+                });
                 it('should load again a root entity with reload', function () {
                     var wp1 = Db(WithProps).get('wp1');
                     return Db(wp1).load(_this).then(function () {

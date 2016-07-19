@@ -2706,7 +2706,13 @@ module Tsdb {
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				if (this.loaded && !this.expired()) {
-					return Promise.resolve(this.lastLoadDetail);
+					var ev = this.lastLoadDetail;
+					if (!ev) {
+						// Create a mock event, better than nothing
+						ev = new EventDetails<E>();
+						ev.payload = <E>this.entity;
+					}
+					return Promise.resolve(ev);
 				} else {
 					return new Promise<EventDetails<E>>((resolve,error) => {
 						this.updated(ctx, (ed) => {

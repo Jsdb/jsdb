@@ -3626,6 +3626,24 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			it('should send proper event and payload even when was indirectly loaded', (done)=>{
+				var ws1 = Db(WithSubentity).get('ws1');
+				Db(ws1).updated(this, (ed) => {
+					assert('Loaded correctly').when(ws1.sub).is(M.aTruthy);
+					assert('Has event detail').when(ed).is(M.objectMatching({
+						payload: M.exactly(ws1)
+					}));
+					Db(ws1.sub).load(this).then((ed2)=>{
+						assert('Has event detail').when(ed2).is(M.objectMatching({
+							payload: M.exactly(ws1.sub)
+						}));
+						done();
+					}).catch((err)=>{
+						console.log(err);
+					});
+				});
+			});
+			
 			it('should load again a root entity with reload', ()=>{
 				var wp1 = Db(WithProps).get('wp1');
 				return Db(wp1).load(this).then(()=>{

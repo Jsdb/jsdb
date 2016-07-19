@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160719_190623_master_1.0.0_5908f35
+     * TSDB version : 20160719_191515_master_1.0.0_fed5552
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160719_190623_master_1.0.0_5908f35';
+    var Version = '20160719_191515_master_1.0.0_fed5552';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1590,7 +1590,13 @@ var __extends = (this && this.__extends) || function (d, b) {
                 EntityEvent.prototype.load = function (ctx) {
                     var _this = this;
                     if (this.loaded && !this.expired()) {
-                        return Promise.resolve(this.lastLoadDetail);
+                        var ev = this.lastLoadDetail;
+                        if (!ev) {
+                            // Create a mock event, better than nothing
+                            ev = new EventDetails();
+                            ev.payload = this.entity;
+                        }
+                        return Promise.resolve(ev);
                     }
                     else {
                         return new Promise(function (resolve, error) {
