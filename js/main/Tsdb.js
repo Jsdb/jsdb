@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160719_155250_master_1.0.0_b117aed
+     * TSDB version : 20160719_170137_master_1.0.0_f380ff8
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160719_155250_master_1.0.0_b117aed';
+    var Version = '20160719_170137_master_1.0.0_f380ff8';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1402,7 +1402,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     _super.prototype.on.call(this, h);
                 };
                 /**
-                 * Used to receive the projections when {@link ReferenceEvent} is loading the arget
+                 * Used to receive the projections when {@link ReferenceEvent} is loading the target
                  * event and has found some projections.
                  */
                 EntityEvent.prototype.handleProjection = function (ds) {
@@ -1913,7 +1913,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     return this.dereference(ctx).then(function (ed) {
                         ed.offMe();
                         if (_this.pointedEvent)
-                            return _this.pointedEvent.load(ctx).then(function (ed) { return ed; });
+                            return _this.pointedEvent.load(ctx).then(function (ed2) { return ed2; });
                         return ed;
                     });
                 };
@@ -1922,7 +1922,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     return this.dereference(ctx).then(function (ed) {
                         ed.offMe();
                         if (_this.pointedEvent)
-                            return _this.pointedEvent.reload(ctx).then(function (ed) { return ed; });
+                            return _this.pointedEvent.reload(ctx).then(function (ed2) { return ed2; });
                         return ed;
                     });
                 };

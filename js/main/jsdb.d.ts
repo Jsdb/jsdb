@@ -1574,7 +1574,7 @@ declare module 'jsdb' {
                             setEntity(entity: Api.Entity): void;
                             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
                             /**
-                                * Used to receive the projections when {@link ReferenceEvent} is loading the arget
+                                * Used to receive the projections when {@link ReferenceEvent} is loading the target
                                 * event and has found some projections.
                                 */
                             handleProjection(ds: Spi.DbTreeSnap): void;

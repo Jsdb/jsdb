@@ -2528,7 +2528,7 @@ module Tsdb {
 			}
 			
 			/**
-			 * Used to receive the projections when {@link ReferenceEvent} is loading the arget 
+			 * Used to receive the projections when {@link ReferenceEvent} is loading the target 
 			 * event and has found some projections.
 			 */
 			handleProjection(ds :Spi.DbTreeSnap) {
@@ -3011,7 +3011,7 @@ module Tsdb {
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				return this.dereference(ctx).then((ed) => {
 					ed.offMe();
-					if (this.pointedEvent) return this.pointedEvent.load(ctx).then((ed)=>ed);
+					if (this.pointedEvent) return this.pointedEvent.load(ctx).then((ed2)=>ed2);
 					return ed;
 				});
 			}
@@ -3019,7 +3019,7 @@ module Tsdb {
 			reload(ctx:Object) :Promise<EventDetails<E>> {
 				return this.dereference(ctx).then((ed) => {
 					ed.offMe();
-					if (this.pointedEvent) return this.pointedEvent.reload(ctx).then((ed)=>ed);
+					if (this.pointedEvent) return this.pointedEvent.reload(ctx).then((ed2)=>ed2);
 					return ed;
 				});
 			}
