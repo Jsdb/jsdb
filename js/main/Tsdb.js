@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160719_170137_master_1.0.0_f380ff8
+     * TSDB version : 20160719_173930_master_1.0.0_819a860
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160719_170137_master_1.0.0_f380ff8';
+    var Version = '20160719_173930_master_1.0.0_819a860';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1383,6 +1383,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                     /** a progressive counter used as a discriminator when registering the same callbacks more than once */
                     this.progDiscriminator = 1;
                     this.lastParseTs = 0;
+                    this.lastLoadDetail = null;
                     this.expiresAfter = 1000;
                 }
                 EntityEvent.prototype.setEntity = function (entity) {
@@ -1587,7 +1588,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 EntityEvent.prototype.load = function (ctx) {
                     var _this = this;
                     if (this.loaded && !this.expired()) {
-                        return Promise.resolve(this.lastDetail);
+                        return Promise.resolve(this.lastLoadDetail);
                     }
                     else {
                         return new Promise(function (resolve, error) {
@@ -1595,6 +1596,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                                 if (ed.projected)
                                     return;
                                 ed.offMe();
+                                _this.lastLoadDetail = ed;
                                 resolve(ed);
                             }, _this.progDiscriminator++);
                         });

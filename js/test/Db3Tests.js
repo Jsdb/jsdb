@@ -3353,16 +3353,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     this.timeout(6000);
                     var wp1 = Db(WithProps).get('wp1');
                     Db(wp1).expiresAfter = 1000;
-                    return Db(wp1).load(this).then(function () {
+                    return Db(wp1).load(this).then(function (ed) {
                         assert('Loaded correctly').when(wp1.str).is('String 1');
+                        assert('Has event detail').when(ed).is(M.objectMatching({
+                            payload: M.exactly(wp1)
+                        }));
                         wp1Fb.update({ str: 'str' });
                         return Db(wp1).load(_this);
-                    }).then(function () {
+                    }).then(function (ed) {
                         assert('Kept the old data').when(wp1.str).is('String 1');
+                        assert('Has event detail').when(ed).is(M.objectMatching({
+                            payload: M.exactly(wp1)
+                        }));
                         return new Promise(function (res, rej) { return setTimeout(res, 2000); });
                     }).then(function () {
                         return Db(wp1).load(_this);
-                    }).then(function () {
+                    }).then(function (ed) {
+                        assert('Has event detail').when(ed).is(M.objectMatching({
+                            payload: M.exactly(wp1)
+                        }));
                         assert('Updated the data').when(wp1.str).is('str');
                     });
                 });

@@ -1587,6 +1587,7 @@ declare module Tsdb {
             /** a progressive counter used as a discriminator when registering the same callbacks more than once */
             progDiscriminator: number;
             protected lastParseTs: number;
+            protected lastLoadDetail: EventDetails<E>;
             expiresAfter: number;
             setEntity(entity: Api.Entity): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;

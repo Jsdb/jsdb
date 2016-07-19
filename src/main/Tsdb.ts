@@ -2508,6 +2508,7 @@ module Tsdb {
 			progDiscriminator = 1;
 			
 			protected lastParseTs = 0;
+			protected lastLoadDetail :EventDetails<E> = null;
 			expiresAfter = 1000;
 			
 			setEntity(entity :Api.Entity) {
@@ -2700,14 +2701,17 @@ module Tsdb {
 				})				
 			}
 			
+			
+			
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				if (this.loaded && !this.expired()) {
-					return Promise.resolve(this.lastDetail);
+					return Promise.resolve(this.lastLoadDetail);
 				} else {
 					return new Promise<EventDetails<E>>((resolve,error) => {
 						this.updated(ctx, (ed) => {
 							if (ed.projected) return;
 							ed.offMe();
+							this.lastLoadDetail = ed;
 							resolve(ed);
 						}, this.progDiscriminator++);
 					});
