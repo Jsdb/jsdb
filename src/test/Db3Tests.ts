@@ -3613,11 +3613,11 @@ describe('Db3 >', () => {
 				this.timeout(6000); 
 				var wp1 = Db(WithProps).get('wp1');
 				(<Db3.Internal.EntityEvent<any>>Db(wp1)).expiresAfter = 1000;
-				return Db(wp1.num).load(this).then(()=>{
+				return Db(wp1.num).load(this).then((ed)=>{
 					assert('Loaded correctly').when(wp1.num).is(200);
 					wp1Fb.update({num:54321});
 					return Db(wp1.num).load(this);
-				}).then(()=>{
+				}).then((ed)=>{
 					assert('Kept the old data').when(wp1.num).is(200);
 					return new Promise<any>((res,rej)=>setTimeout(res, 2000));
 				}).then(()=>{

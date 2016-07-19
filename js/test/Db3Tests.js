@@ -3376,16 +3376,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert('Updated the data').when(wp1.str).is('str');
                     });
                 });
-                it('should not load again an observable in cache', function () {
+                it.only('should not load again an observable in cache', function () {
                     var _this = this;
                     this.timeout(6000);
                     var wp1 = Db(WithProps).get('wp1');
                     Db(wp1).expiresAfter = 1000;
-                    return Db(wp1.num).load(this).then(function () {
+                    return Db(wp1.num).load(this).then(function (ed) {
                         assert('Loaded correctly').when(wp1.num).is(200);
                         wp1Fb.update({ num: 54321 });
                         return Db(wp1.num).load(_this);
-                    }).then(function () {
+                    }).then(function (ed) {
+                        console.log(ed);
                         assert('Kept the old data').when(wp1.num).is(200);
                         return new Promise(function (res, rej) { return setTimeout(res, 2000); });
                     }).then(function () {

@@ -3909,7 +3909,12 @@ module Tsdb {
 			
 			load(ctx:Object) :Promise<EventDetails<E>> {
 				if (this.loaded && !this.expired()) {
-					return Promise.resolve(this.lastDetail);
+					var det = this.lastDetail;
+					if (!det) {
+						det = new EventDetails<E>();
+						det.payload = <E>this.parent.entity;
+					}
+					return Promise.resolve(det);
 				} else {
 					return new Promise<EventDetails<E>>((resolve,error) => {
 						this.updated(ctx, (ed) => {
