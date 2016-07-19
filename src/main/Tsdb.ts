@@ -2559,6 +2559,7 @@ module Tsdb {
 			}
 			
 			protected broadcast(ed :EventDetails<E>) {
+				if (!this.lastLoadDetail) this.lastLoadDetail = ed;
 				if (!this.bindingPromise) {
 					this.internalApplyBinding(true);
 					this.applyHooks(ed);

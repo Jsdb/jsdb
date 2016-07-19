@@ -3375,6 +3375,24 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert('Updated the data').when(wp1.str).is('str');
                     });
                 });
+                it('should send proper event and payload even when no previous load', function (done) {
+                    var wp1 = Db(WithProps).get('wp1');
+                    Db(wp1).expiresAfter = 1000;
+                    Db(wp1).updated(_this, function (ed) {
+                        assert('Loaded correctly').when(wp1.str).is('String 1');
+                        assert('Has event detail').when(ed).is(M.objectMatching({
+                            payload: M.exactly(wp1)
+                        }));
+                        Db(wp1).load(_this).then(function (ed2) {
+                            assert('Has event detail').when(ed2).is(M.objectMatching({
+                                payload: M.exactly(wp1)
+                            }));
+                            done();
+                        }).catch(function (err) {
+                            console.log(err);
+                        });
+                    });
+                });
                 it('should load again a root entity with reload', function () {
                     var wp1 = Db(WithProps).get('wp1');
                     return Db(wp1).load(_this).then(function () {
