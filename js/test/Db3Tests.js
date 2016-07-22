@@ -3473,6 +3473,21 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     assert("Reference still there").when(val['cross']).is(M.aTruthy);
                 });
             });
+            it('should handle urls with empty components', function (done) {
+                wr7Fb.set({
+                    str: 'String 7',
+                    cross: {
+                        _ref: '/withRefs//'
+                    }
+                }, function () {
+                    var wr7 = Db(WithRef).get('wr7');
+                    // Accepting both a null or an error for now
+                    return Db(wr7).load(_this).then(function () {
+                        assert("Ignored wrong url").when(wr7.cross).is(M.aFalsey);
+                        done();
+                    }).catch(function () { return done(); });
+                });
+            });
         });
     });
 });

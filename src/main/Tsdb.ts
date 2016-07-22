@@ -4511,7 +4511,9 @@ module Tsdb {
 				
 				// Tokenize the url
 				var toks = remurl.split("/");
-				while (!toks[toks.length - 1]) toks.pop();
+				while (toks.length && !toks[toks.length - 1].length) toks.pop();
+				
+				if (toks.length == 0) return null;
 				
 				// Get the root event
 				var roote = entroot.getEvent(toks[0]);

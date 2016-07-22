@@ -3710,6 +3710,22 @@ describe('Db3 >', () => {
 			});
 		});
 		
+		it('should handle urls with empty components', (done)=>{
+			wr7Fb.set({
+				str: 'String 7',
+				cross: {
+					_ref: '/withRefs//'
+				}
+			}, ()=>{
+				var wr7 = Db(WithRef).get('wr7');
+				// Accepting both a null or an error for now
+				return Db(wr7).load(this).then(()=>{
+					assert("Ignored wrong url").when(wr7.cross).is(M.aFalsey);
+					done();
+				}).catch(()=>done());
+			});
+		});
+		
 	});
 
 });

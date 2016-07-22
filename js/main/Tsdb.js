@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160720_002348_master_1.0.0_e207378
+     * TSDB version : 20160722_145504_master_1.0.0_13a3286
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160720_002348_master_1.0.0_e207378';
+    var Version = '20160722_145504_master_1.0.0_13a3286';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -3385,8 +3385,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                     var remurl = entroot.getRemainingUrl(url);
                     // Tokenize the url
                     var toks = remurl.split("/");
-                    while (!toks[toks.length - 1])
+                    while (toks.length && !toks[toks.length - 1].length)
                         toks.pop();
+                    if (toks.length == 0)
+                        return null;
                     // Get the root event
                     var roote = entroot.getEvent(toks[0]);
                     if (toks.length > 1) {
