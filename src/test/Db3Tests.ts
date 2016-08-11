@@ -241,6 +241,12 @@ class Complex {
 	str :string;	
 }
 
+class WithConstructor {
+	constructor() {
+		console.log("Called constructor");
+	}
+}
+
 /*
 class WithCollections extends Db.Entity {
 	list = Db.list(SubEntity);
@@ -789,6 +795,11 @@ describe('Db3 >', () => {
 					b:M.arrayEquals([1,2,3])
 				})
 			}));
+		});
+
+		it.only('should find names correctly', ()=>{
+			assert("name of class").when(Db3.Utils.findName(WithProps)).is('WithProps');
+			assert("name of class with constructor").when(Db3.Utils.findName(WithConstructor)).is('WithConstructor');
 		});
 	});
 	
@@ -3067,6 +3078,13 @@ describe('Db3 >', () => {
 				return Db(wl2).load(this).then(()=>{
 					assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
 				});
+			});
+			
+			it('should work on a ram only list', ()=>{
+				var wl = new WithList();
+				var se = new SubEntity();
+				Db(wl.embedList).add(se);
+				assert("Added the new element").when(wl.embedList).is(M.withLength(1));
 			});
 			
 		});

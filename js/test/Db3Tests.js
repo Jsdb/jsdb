@@ -336,6 +336,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
         ], Complex);
         return Complex;
     })();
+    var WithConstructor = (function () {
+        function WithConstructor() {
+            console.log("Called constructor");
+        }
+        return WithConstructor;
+    })();
     /*
     class WithCollections extends Db.Entity {
         list = Db.list(SubEntity);
@@ -828,6 +834,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         b: M.arrayEquals([1, 2, 3])
                     })
                 }));
+            });
+            it.only('should find names correctly', function () {
+                assert("name of class").when(Db3.Utils.findName(WithProps)).is('WithProps');
+                assert("name of class with constructor").when(Db3.Utils.findName(WithConstructor)).is('WithConstructor');
             });
         });
         describe('Metadata >', function () {
@@ -2905,6 +2915,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     return Db(wl2).load(_this).then(function () {
                         assert("List is not an object").when(wl2.embedList).is(M.withLength(0));
                     });
+                });
+                it('should work on a ram only list', function () {
+                    var wl = new WithList();
+                    var se = new SubEntity();
+                    Db(wl.embedList).add(se);
+                    assert("Added the new element").when(wl.embedList).is(M.withLength(1));
                 });
             });
             describe('Query >', function () {

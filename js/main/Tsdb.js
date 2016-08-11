@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160722_145504_master_1.0.0_13a3286
+     * TSDB version : 20160811_145622_master_1.0.0_ee13f8f
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160722_145504_master_1.0.0_13a3286';
+    var Version = '20160811_145622_master_1.0.0_ee13f8f';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -3995,7 +3995,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 }
                 if (!firstCtor)
                     return null;
-                var funcNameRegex = /function (.{1,})\(/;
+                var funcNameRegex = /function ([^\(]{1,})\(/;
                 var results = (funcNameRegex).exec(firstCtor.toString());
                 return (results && results.length > 1) ? results[1] : null;
             }

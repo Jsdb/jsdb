@@ -5086,7 +5086,7 @@ module Tsdb {
 				firstCtor = o.constructor;
 			}
 			if (!firstCtor) return null;
-			var funcNameRegex = /function (.{1,})\(/;
+			var funcNameRegex = /function ([^\(]{1,})\(/;
 			var results  = (funcNameRegex).exec(firstCtor.toString());
 			return (results && results.length > 1) ? results[1] : null;
 		}
