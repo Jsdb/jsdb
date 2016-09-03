@@ -91,6 +91,7 @@ declare module Db3MockRoot {
         * Generates a new Query object limited to the last certain number of children.
         */
         limitToLast(limit: number): Tsdb.Spi.DbTreeQuery;
+        child(path: string): Db3MockTree;
     }
     class QueryListener extends Listener {
         orderChild: string;

@@ -922,6 +922,10 @@ declare module 'jsdb' {
                              * Removes the data at this DbTree location.
                              */
                             remove(onComplete?: (error: any) => void): void;
+                            /**
+                                * Return child DbTree location.
+                                */
+                            child(path: string): DbTree;
                     }
                     type DbTreeFactory = (conf: Api.DatabaseConf) => DbTreeRoot;
                     var registry: {
@@ -1016,6 +1020,7 @@ declare module 'jsdb' {
                             emit(url: string, type: string, name: string, val: any, others: any[]): void;
                     }
                     class MonitoringDbTreeQuery implements DbTreeQuery {
+                            protected root: MonitoringDbTreeRoot;
                             constructor(root: MonitoringDbTreeRoot, delegate: DbTreeQuery);
                             emit(type: string, name: string, val?: any, ...others: any[]): void;
                             emitAckWrap(fn: (error: any) => void, name: string): (error: any) => void;
@@ -1038,6 +1043,7 @@ declare module 'jsdb' {
                             set(value: any, onComplete?: (error: any) => void): void;
                             update(value: Object, onComplete?: (error: any) => void): void;
                             remove(onComplete?: (error: any) => void): void;
+                            child(path: string): MonitoringDbTree;
                     }
             }
             /**

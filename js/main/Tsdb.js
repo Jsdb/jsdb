@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160811_145622_master_1.0.0_ee13f8f
+     * TSDB version : 20160903_165026_master_1.0.0_f392a64
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160811_145622_master_1.0.0_ee13f8f';
+    var Version = '20160903_165026_master_1.0.0_f392a64';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -442,6 +442,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MonitoringDbTree.prototype.remove = function (onComplete) {
                     this.emit('WRT', 'remove');
                     this.tdelegate.remove(this.emitAckWrap(onComplete, 'remove'));
+                };
+                MonitoringDbTree.prototype.child = function (path) {
+                    return new MonitoringDbTree(this.root, this.tdelegate.child(path));
                 };
                 return MonitoringDbTree;
             })(MonitoringDbTreeQuery);
@@ -3744,7 +3747,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                         var subc = this.subMeta[i];
                         if (subc.override == override) {
                             return subc;
-                            break;
                         }
                     }
                     return this;

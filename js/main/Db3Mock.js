@@ -551,6 +551,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 ret.qlistener.limitFromLast = true;
                 return ret;
             };
+            Db3MockTree.prototype.child = function (path) {
+                return new Db3MockTree(this.root, this.url + '/' + normalizeUrl(path));
+            };
             return Db3MockTree;
         })();
         Db3MockRoot.Db3MockTree = Db3MockTree;

@@ -922,6 +922,10 @@ declare module Tsdb {
             * Removes the data at this DbTree location.
             */
             remove(onComplete?: (error: any) => void): void;
+            /**
+             * Return child DbTree location.
+             */
+            child(path: string): DbTree;
         }
         type DbTreeFactory = (conf: Api.DatabaseConf) => DbTreeRoot;
         var registry: {
@@ -1018,7 +1022,7 @@ declare module Tsdb {
             emit(url: string, type: string, name: string, val: any, others: any[]): void;
         }
         class MonitoringDbTreeQuery implements DbTreeQuery {
-            private root;
+            protected root: MonitoringDbTreeRoot;
             private delegate;
             private myurl;
             constructor(root: MonitoringDbTreeRoot, delegate: DbTreeQuery);
@@ -1044,6 +1048,7 @@ declare module Tsdb {
             set(value: any, onComplete?: (error: any) => void): void;
             update(value: Object, onComplete?: (error: any) => void): void;
             remove(onComplete?: (error: any) => void): void;
+            child(path: string): MonitoringDbTree;
         }
     }
     /**

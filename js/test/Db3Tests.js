@@ -835,7 +835,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     })
                 }));
             });
-            it.only('should find names correctly', function () {
+            it('should find names correctly', function () {
                 assert("name of class").when(Db3.Utils.findName(WithProps)).is('WithProps');
                 assert("name of class with constructor").when(Db3.Utils.findName(WithConstructor)).is('WithConstructor');
             });
