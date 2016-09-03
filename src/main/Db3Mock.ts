@@ -563,6 +563,10 @@ module Db3MockRoot {
 			ret.qlistener.limitFromLast = true;
 			return ret;
 		}
+
+		child(path :string) {
+			return new Db3MockTree(this.root, this.url + '/' + normalizeUrl(path));
+		}
 		
 	}
 	

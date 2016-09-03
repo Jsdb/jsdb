@@ -1177,6 +1177,10 @@ module Tsdb {
 			* Removes the data at this DbTree location.
 			*/
 			remove(onComplete?: (error: any) => void): void;
+			/**
+			 * Return child DbTree location.
+			 */
+			child(path :string) :DbTree;
 		}
 		
 		export type DbTreeFactory = (conf:Api.DatabaseConf)=>DbTreeRoot;
@@ -1382,7 +1386,7 @@ module Tsdb {
 		
 		export class MonitoringDbTreeQuery implements DbTreeQuery {
 			private myurl :string;
-			constructor(private root :MonitoringDbTreeRoot, private delegate :DbTreeQuery) {
+			constructor(protected root :MonitoringDbTreeRoot, private delegate :DbTreeQuery) {
 				this.myurl = delegate.toString();
 			}
 			
@@ -1493,6 +1497,10 @@ module Tsdb {
 			remove(onComplete?: (error: any) => void): void {
 				this.emit('WRT','remove');
 				this.tdelegate.remove(this.emitAckWrap(onComplete,'remove'));
+			}
+
+			child(path :string) {
+				return new MonitoringDbTree(this.root, this.tdelegate.child(path));
 			}
 		}
 		
@@ -4860,7 +4868,6 @@ module Tsdb {
 					var subc = this.subMeta[i];
 					if (subc.override == override) {
 						return subc;
-						break;
 					}
 				}
 				return this;

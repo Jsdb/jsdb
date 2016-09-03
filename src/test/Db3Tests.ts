@@ -797,7 +797,7 @@ describe('Db3 >', () => {
 			}));
 		});
 
-		it.only('should find names correctly', ()=>{
+		it('should find names correctly', ()=>{
 			assert("name of class").when(Db3.Utils.findName(WithProps)).is('WithProps');
 			assert("name of class with constructor").when(Db3.Utils.findName(WithConstructor)).is('WithConstructor');
 		});
