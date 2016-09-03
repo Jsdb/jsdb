@@ -55,6 +55,7 @@
       ]
     }
   },
+  "typings": "js/main/Tsdb.d.ts",
   "typescript": {
     "definitions": [
       "js/main/jsdb.d.ts",
