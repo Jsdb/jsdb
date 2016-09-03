@@ -172,7 +172,7 @@ function versionTag() {
  * and then lints and builds the TypeScript source code.
  */
 gulp.task("default", function (cb) {
-	runSequence("tsd", "ts", cb);
+	runSequence("ts", "test", cb);
 });
 
 /**
