@@ -4072,7 +4072,7 @@ module Tsdb {
 				return null;
 			}
 			
-			recurseAllEvents(cb :(GenericEvent)=>any) {
+			recurseAllEvents(cb :(ev:GenericEvent)=>any) {
 				for (var k in this.cache) {
 					var ev = this.cache[k].event;
 					cb(ev);

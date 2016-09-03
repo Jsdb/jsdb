@@ -1819,7 +1819,7 @@ declare module 'jsdb' {
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             getEvent(id: string): EntityEvent<E>;
                             fetchFromCache(id: string): EntityEvent<E>;
-                            recurseAllEvents(cb: (GenericEvent) => any): void;
+                            recurseAllEvents(cb: (ev: GenericEvent) => any): void;
                             newHead(entry: EntityRootLruEntry<E>): void;
                             expunge(id: string): void;
                             expungeAll(): void;
