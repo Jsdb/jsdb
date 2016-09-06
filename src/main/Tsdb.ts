@@ -2978,7 +2978,7 @@ module Tsdb {
 				var er = this.state.entityRootFromUrl(url);
 				url = er.getRemainingUrl(url);
 				if (url.split('/').length > 2) return null;
-				return url.replace('/','');;
+				return url.replace('/','');
 			}
 		}
 		
@@ -4703,7 +4703,8 @@ module Tsdb {
 			return new Promise<any>((res,err) => {
 				io.emit('method', msg, function(resp) {
 					if (resp && resp.error) {
-						err(resp);
+						var nerr = new Error(resp.error);
+						err(nerr);
 					} else {
 						// If the return value is an entity, it will be serialized as a _ref
 						Utils.deserializeRefs(state.db, inst, resp).then((val)=>{
@@ -5194,9 +5195,11 @@ module Tsdb {
 					arrto[i] = (copyVal(arrfrom[i], arrto[i]));
 				}
 			} else if (typeof val === 'object') {
-				var valto = to || {};
-				copyObj(val, valto);
-				return valto;
+				if (val.constructor == Object) {
+					var valto = to || {};
+					copyObj(val, valto);
+					return valto;
+				}
 			}
 			return val;
 		}

@@ -43,7 +43,8 @@
     "run-sequence": "1.1.1",
     "sync-exec": "^0.6.2",
     "tsMatchers": "SimoneGianni/tsMatchers#noded",
-    "typescript": "1.6.2"
+    "typescript": "1.6.2",
+    "debug": "^2.2.0"
   },
   "config": {
     "blanket": {

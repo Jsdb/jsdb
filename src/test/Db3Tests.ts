@@ -786,7 +786,6 @@ describe('Db3 >', () => {
 			};
 			
 			Db3.Utils.copyObj(obj2,obj1);
-			
 			assert("objects merged correctly").when(obj1).is(M.objectMatchingStrictly({
 				a:'bonjour',
 				b:M.arrayEquals([1,2,3]),

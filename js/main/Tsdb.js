@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160903_171559_master_1.0.0_92c756f
+     * TSDB version : 20160906_173317_master_1.0.0_faa5bb0
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160903_171559_master_1.0.0_92c756f';
+    var Version = '20160906_173317_master_1.0.0_faa5bb0';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1871,7 +1871,6 @@ var __extends = (this && this.__extends) || function (d, b) {
                     if (url.split('/').length > 2)
                         return null;
                     return url.replace('/', '');
-                    ;
                 };
                 return EntityEvent;
             })(SingleDbHandlerEvent);
@@ -3581,7 +3580,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                 return new Promise(function (res, err) {
                     io.emit('method', msg, function (resp) {
                         if (resp && resp.error) {
-                            err(resp);
+                            var nerr = new Error(resp.error);
+                            err(nerr);
                         }
                         else {
                             // If the return value is an entity, it will be serialized as a _ref
@@ -4105,9 +4105,11 @@ var __extends = (this && this.__extends) || function (d, b) {
                     }
                 }
                 else if (typeof val === 'object') {
-                    var valto = to || {};
-                    copyObj(val, valto);
-                    return valto;
+                    if (val.constructor == Object) {
+                        var valto = to || {};
+                        copyObj(val, valto);
+                        return valto;
+                    }
                 }
                 return val;
             }
