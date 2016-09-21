@@ -785,11 +785,18 @@ module Tsdb {
 			clear() :Promise<any>;
 			
 			/**
-			 * Fetch the specified key from the collection.  
-			 * 
-			 * TODO does this only dereference or also load the value?
+			 * Fetch the specified key from the collection. The value will
+			 * be loaded, so if the collection is a reference collection the
+			 * reference will be resolved AND the target entity fully loaded. 
 			 */
 			fetch(ctx:Object, key :string|number|E) :Promise<IEventDetails<E>>;
+
+			/**
+			 * Check whether this collection contains the given key. The value
+			 * will not be loaded, only the presence of the corresponding key
+			 * will be asserted.
+			 */
+			contains(ctx:Object, key :string|number|E) :Promise<boolean>;
 			
 			/**
 			 * Gives access to the database event for the given key.
@@ -3527,6 +3534,16 @@ module Tsdb {
 			with(key :string|number|Api.Entity) :Api.IEntityOrReferenceEvent<E> {
 				var k = this.normalizeKey(key);
 				return <Api.IEntityOrReferenceEvent<E>><any>this.findCreateChildFor(k);
+			}
+
+			contains(ctx :Object, key :string|number|Api.Entity) :Promise<boolean> {
+				var k = this.normalizeKey(key);
+				var fb = this.state.getTree(this.getUrl() + k +'/');
+				return new Promise<boolean>((res,err)=>{
+					fb.once('value',(ds)=>{
+						res(ds.exists());
+					}, err, ctx);
+				});
 			}
 			
 			isLoaded() {

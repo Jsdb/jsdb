@@ -2202,6 +2202,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         }));
                     });
                 });
+                it('should report positive contains on embedded map', function () {
+                    var wm1 = Db(WithMap).get('wm1');
+                    return Db(wm1.embedMap).contains(_this, 'a').then(function (contains) {
+                        assert("contains is positive").when(contains).is(true);
+                    });
+                });
+                it('should report negative contains on embedded map', function () {
+                    var wm1 = Db(WithMap).get('wm1');
+                    return Db(wm1.embedMap).contains(_this, 'notthere').then(function (contains) {
+                        assert("contains is negative").when(contains).is(false);
+                    });
+                });
                 it('should load all the collection with the parent entity', function () {
                     var wm1 = Db(WithMap).get('wm1');
                     return Db(wm1).load(_this).then(function () {
@@ -2262,6 +2274,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                                 _dis: 'more'
                             })
                         }));
+                    });
+                });
+                it('should report positive contains on ref map', function () {
+                    var wm2 = Db(WithMap).get('wm2');
+                    return Db(wm2.refMap).contains(_this, 'a').then(function (contains) {
+                        assert("contains is positive").when(contains).is(true);
                     });
                 });
                 it('should load all the collection only dereferencing references', function () {
@@ -2548,6 +2566,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert('right type 2').when(ws1.refSet[2]).is(M.instanceOf(WithProps));
                     });
                 });
+                it('should report positive contains on ref set', function () {
+                    var wp1 = Db(WithProps).get('wp1');
+                    var ws2 = Db(WithSet).get('ws2');
+                    return Db(ws2.refSet).contains(_this, wp1).then(function (contains) {
+                        assert("contains is positive").when(contains).is(true);
+                    });
+                });
                 it('should add new element to the embed set', function () {
                     var ws1 = Db(WithSet).get('ws1');
                     var ns = new SubEntity();
@@ -2573,6 +2598,15 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert('serialized correctly').when(kval).is(M.objectMatchingStrictly({
                             str: 'added'
                         }));
+                    });
+                });
+                it('should report positive contains on embed set', function () {
+                    var ws1 = Db(WithSet).get('ws1');
+                    return Db(ws1.embedSet).load(_this).then(function () {
+                        var se1 = ws1.embedSet[0];
+                        return Db(ws1.embedSet).contains(_this, se1);
+                    }).then(function (contains) {
+                        assert("contains is positive").when(contains).is(true);
                     });
                 });
                 it('should add new element to the ref set', function () {

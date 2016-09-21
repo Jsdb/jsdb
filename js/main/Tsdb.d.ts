@@ -588,11 +588,17 @@ declare module Tsdb {
              */
             clear(): Promise<any>;
             /**
-             * Fetch the specified key from the collection.
-             *
-             * TODO does this only dereference or also load the value?
+             * Fetch the specified key from the collection. The value will
+             * be loaded, so if the collection is a reference collection the
+             * reference will be resolved AND the target entity fully loaded.
              */
             fetch(ctx: Object, key: string | number | E): Promise<IEventDetails<E>>;
+            /**
+             * Check whether this collection contains the given key. The value
+             * will not be loaded, only the presence of the corresponding key
+             * will be asserted.
+             */
+            contains(ctx: Object, key: string | number | E): Promise<boolean>;
             /**
              * Gives access to the database event for the given key.
              *
@@ -1757,6 +1763,7 @@ declare module Tsdb {
             remove(keyOrValue: string | number | Api.Entity): Promise<any>;
             fetch(ctx: Object, key: string | number | Api.Entity): Promise<EventDetails<E>>;
             with(key: string | number | Api.Entity): Api.IEntityOrReferenceEvent<E>;
+            contains(ctx: Object, key: string | number | Api.Entity): Promise<boolean>;
             isLoaded(): boolean;
             assertLoaded(): void;
             internalSave(): Promise<any>;

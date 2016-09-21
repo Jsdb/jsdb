@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160920_201902_master_1.0.0_dcd69d7
+     * TSDB version : 20160921_042015_master_1.0.0_c48b5e3
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160920_201902_master_1.0.0_dcd69d7';
+    var Version = '20160921_042015_master_1.0.0_c48b5e3';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2425,6 +2425,15 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MapEvent.prototype.with = function (key) {
                     var k = this.normalizeKey(key);
                     return this.findCreateChildFor(k);
+                };
+                MapEvent.prototype.contains = function (ctx, key) {
+                    var k = this.normalizeKey(key);
+                    var fb = this.state.getTree(this.getUrl() + k + '/');
+                    return new Promise(function (res, err) {
+                        fb.once('value', function (ds) {
+                            res(ds.exists());
+                        }, err, ctx);
+                    });
                 };
                 MapEvent.prototype.isLoaded = function () {
                     return this.collectionLoaded;

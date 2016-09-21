@@ -2311,6 +2311,20 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
+
+			it('should report positive contains on embedded map', ()=>{
+				var wm1 = Db(WithMap).get('wm1');
+				return Db(wm1.embedMap).contains(this,'a').then((contains) => {
+					assert("contains is positive").when(contains).is(true);
+				});
+			});
+
+			it('should report negative contains on embedded map', ()=>{
+				var wm1 = Db(WithMap).get('wm1');
+				return Db(wm1.embedMap).contains(this,'notthere').then((contains) => {
+					assert("contains is negative").when(contains).is(false);
+				});
+			});
 			
 			it('should load all the collection with the parent entity',()=>{
 				var wm1 = Db(WithMap).get('wm1');
@@ -2375,6 +2389,13 @@ describe('Db3 >', () => {
 							_dis:'more'
 						})
 					}));
+				});
+			});
+
+			it('should report positive contains on ref map', ()=>{
+				var wm2 = Db(WithMap).get('wm2');
+				return Db(wm2.refMap).contains(this,'a').then((contains) => {
+					assert("contains is positive").when(contains).is(true);
 				});
 			});
 				
@@ -2534,7 +2555,7 @@ describe('Db3 >', () => {
 			})
 			
 			
-			it ('should fetch an embed with a specific key', () => {
+			it('should fetch an embed with a specific key', () => {
 				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
 					assert("event is right").when(det).is(M.objectMatching({
@@ -2677,7 +2698,14 @@ describe('Db3 >', () => {
 					assert('right type 2').when(ws1.refSet[2]).is(M.instanceOf(WithProps));
 				});
 			});
-			
+
+			it('should report positive contains on ref set', ()=>{
+				var wp1 = Db(WithProps).get('wp1');
+				var ws2 = Db(WithSet).get('ws2');
+				return Db(ws2.refSet).contains(this,wp1).then((contains) => {
+					assert("contains is positive").when(contains).is(true);
+				});
+			});
 			
 			it('should add new element to the embed set', ()=>{
 				var ws1 = Db(WithSet).get('ws1');
@@ -2704,6 +2732,16 @@ describe('Db3 >', () => {
 					assert('serialized correctly').when(kval).is(M.objectMatchingStrictly({
 						str: 'added'
 					}));
+				});
+			});
+
+			it('should report positive contains on embed set', ()=>{
+				var ws1 = Db(WithSet).get('ws1');
+				return Db(ws1.embedSet).load(this).then(() => {
+					var se1 = ws1.embedSet[0];
+					return Db(ws1.embedSet).contains(this,se1);
+				}).then((contains) => {
+					assert("contains is positive").when(contains).is(true);
 				});
 			});
 			
