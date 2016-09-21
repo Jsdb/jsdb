@@ -1743,7 +1743,7 @@ declare module Tsdb {
             moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
             live(ctx: Object): void;
-            load(ctx: Object, deref?: boolean): Promise<any>;
+            load(ctx: Object, fullLoad?: boolean): Promise<any>;
             dereference(ctx: Object): Promise<any>;
             init(h: EventHandler): void;
             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
@@ -1784,7 +1784,7 @@ declare module Tsdb {
             intSuperAdd(key: string | number | Api.Entity, value?: Api.Entity): Promise<any>;
             addToInternal(event: string, key: string, val: E, det: EventDetails<E>): void;
             clearInternal(): void;
-            load(ctx: Object): Promise<E[]>;
+            load(ctx: Object, fullLoad?: boolean): Promise<E[]>;
             dereference(ctx: Object): Promise<E[]>;
         }
         class ListEvent<E extends Api.Entity> extends ArrayCollectionEvent<E> implements Api.IListSetEvent<E> {

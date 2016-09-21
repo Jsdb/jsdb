@@ -3308,7 +3308,7 @@ module Tsdb {
 				this.updated(ctx, ()=>{});
 			}
 			
-			load(ctx:Object,deref = true) :Promise<any> {
+			load(ctx:Object,fullLoad = true) :Promise<any> {
 				return new Promise<any>((resolve,error) => {
 					var allProms :Promise<any>[] = [];
 					this.updated(ctx, (det) => {
@@ -3323,7 +3323,7 @@ module Tsdb {
 							}
 						}
 						if (det.type != Api.EventType.ADDED) return;
-						if (this.isReference && deref) {
+						if (this.isReference && fullLoad) {
 							var evt = <ReferenceEvent<E>>this.findCreateChildFor(det.originalKey);
 							allProms.push(evt.load(ctx).then(()=>{}));
 						}
@@ -3332,7 +3332,7 @@ module Tsdb {
 			}
 			
 			dereference(ctx:Object) :Promise<any> {
-				if (!this.isReference) return this.load(ctx);
+				if (!this.isReference) return this.load(ctx, true);
 				return this.load(ctx,false);
 			}
 			
@@ -3771,8 +3771,8 @@ module Tsdb {
 			}
 			
 
-			load(ctx:Object) :Promise<E[]> {
-				return super.load(ctx).then(()=>this.evarray.arrayValue);
+			load(ctx:Object, fullLoad = true) :Promise<E[]> {
+				return super.load(ctx, fullLoad).then(()=>this.evarray.arrayValue);
 			}
 			
 			dereference(ctx:Object) :Promise<E[]> {
@@ -4472,7 +4472,9 @@ module Tsdb {
 			
 			bindEntity(e :Api.Entity, ev :EntityEvent<any>) {
 				// TODO probably we should check and raise an error is the entity was already bound
-				entEvent.set(e, ev);
+				if (typeof(e) === 'object') {
+					entEvent.set(e, ev);
+				}
 			}
 			
 			createEvent(e :Api.Entity, stack :MetaDescriptor[]|string[] = []) :GenericEvent {
@@ -4484,7 +4486,9 @@ module Tsdb {
 					nre.setEntity(e);
 					nre.classMeta = clmeta;
 					roote = nre;
-					entEvent.set(e, <EntityEvent<any>>roote);
+					if (typeof(e) === 'object') { 
+						entEvent.set(e, <EntityEvent<any>>roote);
+					}
 				} else {
 					if (roote.state != this) throw new Error("The entity " + roote.getUrl(true) + " is already attached to another database, not to " + this.getUrl());
 				}

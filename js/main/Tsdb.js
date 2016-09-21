@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160906_173317_master_1.0.0_faa5bb0
+     * TSDB version : 20160920_201902_master_1.0.0_dcd69d7
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160906_173317_master_1.0.0_faa5bb0';
+    var Version = '20160920_201902_master_1.0.0_dcd69d7';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2207,9 +2207,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MapEvent.prototype.live = function (ctx) {
                     this.updated(ctx, function () { });
                 };
-                MapEvent.prototype.load = function (ctx, deref) {
+                MapEvent.prototype.load = function (ctx, fullLoad) {
                     var _this = this;
-                    if (deref === void 0) { deref = true; }
+                    if (fullLoad === void 0) { fullLoad = true; }
                     return new Promise(function (resolve, error) {
                         var allProms = [];
                         _this.updated(ctx, function (det) {
@@ -2226,7 +2226,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                             }
                             if (det.type != Api.EventType.ADDED)
                                 return;
-                            if (_this.isReference && deref) {
+                            if (_this.isReference && fullLoad) {
                                 var evt = _this.findCreateChildFor(det.originalKey);
                                 allProms.push(evt.load(ctx).then(function () { }));
                             }
@@ -2235,7 +2235,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 MapEvent.prototype.dereference = function (ctx) {
                     if (!this.isReference)
-                        return this.load(ctx);
+                        return this.load(ctx, true);
                     return this.load(ctx, false);
                 };
                 MapEvent.prototype.init = function (h) {
@@ -2666,9 +2666,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this.evarray.clearInternal();
                     this.setEntityOnParent(this.evarray.arrayValue);
                 };
-                ArrayCollectionEvent.prototype.load = function (ctx) {
+                ArrayCollectionEvent.prototype.load = function (ctx, fullLoad) {
                     var _this = this;
-                    return _super.prototype.load.call(this, ctx).then(function () { return _this.evarray.arrayValue; });
+                    if (fullLoad === void 0) { fullLoad = true; }
+                    return _super.prototype.load.call(this, ctx, fullLoad).then(function () { return _this.evarray.arrayValue; });
                 };
                 ArrayCollectionEvent.prototype.dereference = function (ctx) {
                     var _this = this;
@@ -3341,7 +3342,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 DbState.prototype.bindEntity = function (e, ev) {
                     // TODO probably we should check and raise an error is the entity was already bound
-                    Tsdb.entEvent.set(e, ev);
+                    if (typeof (e) === 'object') {
+                        Tsdb.entEvent.set(e, ev);
+                    }
                 };
                 DbState.prototype.createEvent = function (e, stack) {
                     if (stack === void 0) { stack = []; }
@@ -3353,7 +3356,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                         nre.setEntity(e);
                         nre.classMeta = clmeta;
                         roote = nre;
-                        Tsdb.entEvent.set(e, roote);
+                        if (typeof (e) === 'object') {
+                            Tsdb.entEvent.set(e, roote);
+                        }
                     }
                     else {
                         if (roote.state != this)
