@@ -2648,12 +2648,10 @@ module Tsdb {
 						if (!this.entity || !this.classMeta.rightInstance(this.entity)) {
 							this.setEntity(this.classMeta.createInstance());
 						}
-					} else {
-						delete val._ref;
 					}
 					var set :{[index:string]:boolean} = {};
 					for (var k in val) {
-						if (k == 'constructor') continue;
+						if (k == 'constructor' || k == '_ref') continue;
 						// find a descriptor if any, a descriptor is there if the 
 						// property has been annotated somehow (embedded, reference, observable etc..)
 						var descr = this.classMeta.descriptors[k];

@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160921_042015_master_1.0.0_c48b5e3
+     * TSDB version : 20160927_042733_master_1.0.0_cf244fa
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160921_042015_master_1.0.0_c48b5e3';
+    var Version = '20160927_042733_master_1.0.0_cf244fa';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -1519,12 +1519,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                                 this.setEntity(this.classMeta.createInstance());
                             }
                         }
-                        else {
-                            delete val._ref;
-                        }
                         var set = {};
                         for (var k in val) {
-                            if (k == 'constructor')
+                            if (k == 'constructor' || k == '_ref')
                                 continue;
                             // find a descriptor if any, a descriptor is there if the 
                             // property has been annotated somehow (embedded, reference, observable etc..)
