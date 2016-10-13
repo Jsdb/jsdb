@@ -736,6 +736,7 @@ declare module Tsdb {
             limit(limit: number): IQuery<E>;
             range(from: any, to: any): IQuery<E>;
             equals(val: any): IQuery<E>;
+            in(vals: any[]): IQuery<E>;
             /**
              * Convenience sync method to be used inside the handler for {@link updated} to retrieve all the
              * current elements, in right order.
@@ -903,6 +904,10 @@ declare module Tsdb {
             */
             equalTo(value: string | number, key?: string): DbTreeQuery;
             /**
+            * Creates a Query which includes children which match one of the specified values.
+            */
+            valueIn(value: string[] | number[], key?: string): DbTreeQuery;
+            /**
             * Generates a new Query object limited to the first certain number of children.
             */
             limitToFirst(limit: number): DbTreeQuery;
@@ -1045,6 +1050,7 @@ declare module Tsdb {
             startAt(value: string | number, key?: string): DbTreeQuery;
             endAt(value: string | number, key?: string): DbTreeQuery;
             equalTo(value: string | number, key?: string): DbTreeQuery;
+            valueIn(values: string[] | number[], key?: string): DbTreeQuery;
             limitToFirst(limit: number): DbTreeQuery;
             limitToLast(limit: number): DbTreeQuery;
         }
@@ -1865,12 +1871,14 @@ declare module Tsdb {
             private _rangeFrom;
             private _rangeTo;
             private _equals;
+            private _in;
             constructor(ev: GenericEvent);
             getUrl(force: boolean): string;
             onField(field: string, desc?: boolean): QueryImpl<E>;
             limit(limit: number): QueryImpl<E>;
             range(from: any, to: any): QueryImpl<E>;
             equals(val: any): QueryImpl<E>;
+            in(vals: any[]): QueryImpl<E>;
             init(gh: EventHandler): void;
             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
             save(): Promise<any>;

@@ -960,6 +960,7 @@ module Tsdb {
 			limit(limit :number):IQuery<E>;
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
+			in(vals :any[]):IQuery<E>;
 			
 			/**
 			 * Convenience sync method to be used inside the handler for {@link updated} to retrieve all the
@@ -1157,6 +1158,12 @@ module Tsdb {
 			* Creates a Query which includes children which match the specified value.
 			*/
 			equalTo(value: string|number, key?: string): DbTreeQuery;
+
+			/**
+			* Creates a Query which includes children which match one of the specified values.
+			*/
+			valueIn(value: string[]|number[], key?: string): DbTreeQuery;
+			
 			/**
 			* Generates a new Query object limited to the first certain number of children.
 			*/
@@ -1247,7 +1254,7 @@ module Tsdb {
 				return FirebaseDbTreeRoot.readyProm;
 			}
 			getUrl(url :string) :DbTree {
-				var ret = <FirebaseType>new Firebase(this.conf.baseUrl + url);
+				var ret = <DbTree>new Firebase(this.conf.baseUrl + url);
 				if (!this.isReady()) {
 					ret.on = FirebaseDbTreeRoot.wrapReady(ret.on);
 					ret.once = FirebaseDbTreeRoot.wrapReady(ret.once);
@@ -1471,6 +1478,11 @@ module Tsdb {
 			equalTo(value: string|number, key?: string): DbTreeQuery {
 				this.emit('TRC','equalTo',null,value,key);
 				return new MonitoringDbTreeQuery(this.root,this.delegate.equalTo(value,key));
+			}
+
+			valueIn(values: string[]|number[], key?: string) :DbTreeQuery {
+				this.emit('TRC','valueIn',null,values,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.valueIn(values,key));
 			}
 
 			limitToFirst(limit: number): DbTreeQuery {
@@ -4211,6 +4223,7 @@ module Tsdb {
 			private _rangeFrom :any = null;
 			private _rangeTo :any = null;
 			private _equals :any;
+			private _in :any[];
 
 			constructor(ev :GenericEvent) {
 				super();
@@ -4246,6 +4259,11 @@ module Tsdb {
 				return this;
 			}
 
+			in(vals :any[]) {
+				this._in = vals;
+				return this;
+			}
+
 			init(gh :EventHandler) {
 				var h = <CollectionDbEventHandler>gh;
 				h.ref = this.state.getTree(this.parent.getUrl());
@@ -4253,6 +4271,8 @@ module Tsdb {
 					h.ref = h.ref.orderByChild(this.sorting.field);
 					if (typeof(this._equals) !== 'undefined') {
 						h.ref = h.ref.equalTo(this._equals);
+					} if (this._in) {
+						h.ref = h.ref.valueIn(this._in);
 					} else {
 						if (this._rangeFrom) {
 							h.ref = h.ref.startAt(this._rangeFrom);

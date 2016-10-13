@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20160927_042733_master_1.0.0_cf244fa
+     * TSDB version : 20161013_201720_master_1.0.0_7c69c80
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20160927_042733_master_1.0.0_cf244fa';
+    var Version = '20161013_201720_master_1.0.0_7c69c80';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -413,6 +413,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MonitoringDbTreeQuery.prototype.equalTo = function (value, key) {
                     this.emit('TRC', 'equalTo', null, value, key);
                     return new MonitoringDbTreeQuery(this.root, this.delegate.equalTo(value, key));
+                };
+                MonitoringDbTreeQuery.prototype.valueIn = function (values, key) {
+                    this.emit('TRC', 'valueIn', null, values, key);
+                    return new MonitoringDbTreeQuery(this.root, this.delegate.valueIn(values, key));
                 };
                 MonitoringDbTreeQuery.prototype.limitToFirst = function (limit) {
                     this.emit('TRC', 'limitToFirst', null, limit);
@@ -3114,6 +3118,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this._equals = val;
                     return this;
                 };
+                QueryImpl.prototype.in = function (vals) {
+                    this._in = vals;
+                    return this;
+                };
                 QueryImpl.prototype.init = function (gh) {
                     var _this = this;
                     var h = gh;
@@ -3122,6 +3130,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                         h.ref = h.ref.orderByChild(this.sorting.field);
                         if (typeof (this._equals) !== 'undefined') {
                             h.ref = h.ref.equalTo(this._equals);
+                        }
+                        if (this._in) {
+                            h.ref = h.ref.valueIn(this._in);
                         }
                         else {
                             if (this._rangeFrom) {
