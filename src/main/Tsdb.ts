@@ -961,6 +961,8 @@ module Tsdb {
 			range(from :any, to :any):IQuery<E>;
 			equals(val :any):IQuery<E>;
 			in(vals :any[]):IQuery<E>;
+
+			sortBy(field :String):IQuery<E>;
 			
 			/**
 			 * Convenience sync method to be used inside the handler for {@link updated} to retrieve all the
@@ -1172,6 +1174,12 @@ module Tsdb {
 			* Generates a new Query object limited to the last certain number of children.
 			*/
 			limitToLast(limit: number): DbTreeQuery;
+
+			/**
+			 * While orderByChild is used for filtering, and later eventually for sorting, sortByChild 
+			 * is used only for sorting. 
+			 */
+			sortByChild(key :string) :DbTreeQuery;
 		}
 		
 		export interface DbTree extends DbTreeQuery {
@@ -1495,6 +1503,10 @@ module Tsdb {
 				return new MonitoringDbTreeQuery(this.root,this.delegate.limitToLast(limit));
 			}
 			
+			sortByChild(key: string): DbTreeQuery {
+				this.emit('TRC','sortByChild',null,key);
+				return new MonitoringDbTreeQuery(this.root,this.delegate.sortByChild(key));
+			}
 		}
 
 		export class MonitoringDbTree extends MonitoringDbTreeQuery implements DbTree {
@@ -4225,6 +4237,8 @@ module Tsdb {
 			private _equals :any;
 			private _in :any[];
 
+			private _sortField :string;
+
 			constructor(ev :GenericEvent) {
 				super();
 				this.realField = {};
@@ -4264,6 +4278,11 @@ module Tsdb {
 				return this;
 			}
 
+			sortBy(sortField :string) {
+				this._sortField = sortField;
+				return this;
+			}
+
 			init(gh :EventHandler) {
 				var h = <CollectionDbEventHandler>gh;
 				h.ref = this.state.getTree(this.parent.getUrl());
@@ -4294,6 +4313,9 @@ module Tsdb {
 					} else {
 						h.ref = h.ref.limitToFirst(limVal);
 					}
+				}
+				if (this._sortField) {
+					h.ref = h.ref.sortByChild(this._sortField);
 				}
 				h.event = this;
 				h.hookAll((ds,prev,event) => this.handleDbEvent(h,event,ds,prev));

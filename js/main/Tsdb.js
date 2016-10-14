@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20161013_201720_master_1.0.0_7c69c80
+     * TSDB version : 20161014_025050_master_1.0.0_f7c513e
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20161013_201720_master_1.0.0_7c69c80';
+    var Version = '20161014_025050_master_1.0.0_f7c513e';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -425,6 +425,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                 MonitoringDbTreeQuery.prototype.limitToLast = function (limit) {
                     this.emit('TRC', 'limitToLast', null, limit);
                     return new MonitoringDbTreeQuery(this.root, this.delegate.limitToLast(limit));
+                };
+                MonitoringDbTreeQuery.prototype.sortByChild = function (key) {
+                    this.emit('TRC', 'sortByChild', null, key);
+                    return new MonitoringDbTreeQuery(this.root, this.delegate.sortByChild(key));
                 };
                 return MonitoringDbTreeQuery;
             })();
@@ -3122,6 +3126,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                     this._in = vals;
                     return this;
                 };
+                QueryImpl.prototype.sortBy = function (sortField) {
+                    this._sortField = sortField;
+                    return this;
+                };
                 QueryImpl.prototype.init = function (gh) {
                     var _this = this;
                     var h = gh;
@@ -3156,6 +3164,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                         else {
                             h.ref = h.ref.limitToFirst(limVal);
                         }
+                    }
+                    if (this._sortField) {
+                        h.ref = h.ref.sortByChild(this._sortField);
                     }
                     h.event = this;
                     h.hookAll(function (ds, prev, event) { return _this.handleDbEvent(h, event, ds, prev); });

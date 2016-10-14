@@ -737,6 +737,7 @@ declare module 'jsdb' {
                             range(from: any, to: any): IQuery<E>;
                             equals(val: any): IQuery<E>;
                             in(vals: any[]): IQuery<E>;
+                            sortBy(field: String): IQuery<E>;
                             /**
                                 * Convenience sync method to be used inside the handler for {@link updated} to retrieve all the
                                 * current elements, in right order.
@@ -915,6 +916,11 @@ declare module 'jsdb' {
                              * Generates a new Query object limited to the last certain number of children.
                              */
                             limitToLast(limit: number): DbTreeQuery;
+                            /**
+                                * While orderByChild is used for filtering, and later eventually for sorting, sortByChild
+                                * is used only for sorting.
+                                */
+                            sortByChild(key: string): DbTreeQuery;
                     }
                     interface DbTree extends DbTreeQuery {
                             /**
@@ -1049,6 +1055,7 @@ declare module 'jsdb' {
                             valueIn(values: string[] | number[], key?: string): DbTreeQuery;
                             limitToFirst(limit: number): DbTreeQuery;
                             limitToLast(limit: number): DbTreeQuery;
+                            sortByChild(key: string): DbTreeQuery;
                     }
                     class MonitoringDbTree extends MonitoringDbTreeQuery implements DbTree {
                             constructor(root: MonitoringDbTreeRoot, delegate: DbTree);
@@ -1851,6 +1858,7 @@ declare module 'jsdb' {
                             range(from: any, to: any): QueryImpl<E>;
                             equals(val: any): QueryImpl<E>;
                             in(vals: any[]): QueryImpl<E>;
+                            sortBy(sortField: string): QueryImpl<E>;
                             init(gh: EventHandler): void;
                             findCreateChildFor(metaOrkey: string | MetaDescriptor, force?: boolean): GenericEvent;
                             save(): Promise<any>;
