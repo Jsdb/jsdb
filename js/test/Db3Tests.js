@@ -2224,6 +2224,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         }));
                     });
                 });
+                // FIXFIX
                 it('should load the collection with the parent entity and preserve it on save', function () {
                     var wm1 = Db(WithMap).get('wm1');
                     return Db(wm1).load(_this).then(function () {
@@ -2446,6 +2447,26 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         }));
                     });
                 });
+                it('should fetch (and re fetch) nulls from a non existing path', function () {
+                    var wm1 = Db(WithMap).get('wm555');
+                    return Db(wm1.embedMap).fetch(_this, 'b').then(function (det) {
+                        assert("event is right").when(det).is(M.objectMatching({
+                            type: Db3.Api.EventType.REMOVED,
+                            populating: false,
+                            originalKey: 'b',
+                            payload: null
+                        }));
+                    }).then(function () {
+                        return Db(wm1.embedMap).fetch(_this, 'b');
+                    }).then(function (det) {
+                        assert("event is right").when(det).is(M.objectMatching({
+                            type: Db3.Api.EventType.REMOVED,
+                            populating: false,
+                            originalKey: 'b',
+                            payload: null
+                        }));
+                    });
+                });
                 it('should fetch a ref with a specific key and remove it', function () {
                     var wm1 = Db(WithMap).get('wm2');
                     return Db(wm1.refMap).fetch(_this, 'b').then(function (det) {
@@ -2470,6 +2491,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                         assert("Should not return a removed element when using fetch").when(val.type).is(Db3.Api.EventType.REMOVED);
                     });
                 });
+                // FIXFIX
                 it('should save a new entity with a manually built map', function () {
                     var nwm = new WithMap();
                     var sub = new SubEntity();
@@ -2478,17 +2500,37 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
                     return Db(nwm).save()
                         .then(function () {
                         var url = Db(nwm).getUrl();
+                        console.log(baseUrl + url);
                         return new Promise(function (ok) {
                             new Firebase(baseUrl + url).once('value', ok);
                         });
                     })
                         .then(function (ds) {
+                        console.log("Value is", ds.val());
                         assert('saved map looks right').when(ds.val()).is(M.objectMatching({
                             embedMap: {
                                 a: {
                                     str: 'Im new'
                                 }
                             }
+                        }));
+                    });
+                });
+                it('should save a new entity without set map', function () {
+                    var nwm = new WithMap();
+                    nwm.anyOtherProp = 'ciao';
+                    Db(nwm).assignUrl();
+                    return Db(nwm).save()
+                        .then(function () {
+                        var url = Db(nwm).getUrl();
+                        return new Promise(function (ok) {
+                            new Firebase(baseUrl + url).once('value', ok);
+                        });
+                    })
+                        .then(function (ds) {
+                        console.log("Value is", ds.val());
+                        assert('saved map looks right').when(ds.val()).is(M.objectMatching({
+                            anyOtherProp: 'ciao'
                         }));
                     });
                 });

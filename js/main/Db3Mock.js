@@ -551,6 +551,16 @@ var __extends = (this && this.__extends) || function (d, b) {
                 ret.qlistener.limitFromLast = true;
                 return ret;
             };
+            Db3MockTree.prototype.valueIn = function (values, key) {
+                var ret = this.subQuery();
+                // TODO implement this
+                return ret;
+            };
+            Db3MockTree.prototype.sortByChild = function (key) {
+                var ret = this.subQuery();
+                // TODO implement this
+                return ret;
+            };
             Db3MockTree.prototype.child = function (path) {
                 return new Db3MockTree(this.root, this.url + '/' + normalizeUrl(path));
             };

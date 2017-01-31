@@ -3611,11 +3611,13 @@ module Tsdb {
 			}
 			
 			serialize(localsOnly:boolean = false, fields? :string[]) :Object {
+				//if (!this.isLoaded()) return undefined;
 				// LazyParse : handle the case this has not been loaded
 				if (this.lastDs && !this.lastDsParsed) {
 					return this.lastDs.val();
 				}
 				var obj = {};
+				if (!this.realField) return obj;
 				var preEntity = this.entity;
 				this.entity = this.realField;
 				try {

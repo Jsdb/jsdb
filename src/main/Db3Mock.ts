@@ -564,6 +564,18 @@ module Db3MockRoot {
 			return ret;
 		}
 
+		valueIn(values: string[]|number[], key?: string) :Tsdb.Spi.DbTreeQuery {
+			var ret = this.subQuery();
+			// TODO implement this
+			return ret;
+		}
+
+		sortByChild(key: string): Tsdb.Spi.DbTreeQuery {
+			var ret = this.subQuery();
+			// TODO implement this
+			return ret;
+		}
+
 		child(path :string) {
 			return new Db3MockTree(this.root, this.url + '/' + normalizeUrl(path));
 		}

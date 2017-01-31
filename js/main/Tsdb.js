@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20161014_025050_master_1.0.0_f7c513e
+     * TSDB version : 20170131_202753_master_1.0.0_e9684dd
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20161014_025050_master_1.0.0_f7c513e';
+    var Version = '20170131_202753_master_1.0.0_e9684dd';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -2485,11 +2485,14 @@ var __extends = (this && this.__extends) || function (d, b) {
                 };
                 MapEvent.prototype.serialize = function (localsOnly, fields) {
                     if (localsOnly === void 0) { localsOnly = false; }
+                    //if (!this.isLoaded()) return undefined;
                     // LazyParse : handle the case this has not been loaded
                     if (this.lastDs && !this.lastDsParsed) {
                         return this.lastDs.val();
                     }
                     var obj = {};
+                    if (!this.realField)
+                        return obj;
                     var preEntity = this.entity;
                     this.entity = this.realField;
                     try {

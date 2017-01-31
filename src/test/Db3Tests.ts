@@ -2337,6 +2337,7 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			// FIXFIX
 			it('should load the collection with the parent entity and preserve it on save',()=>{
 				var wm1 = Db(WithMap).get('wm1');
 				return Db(wm1).load(this).then(() => {
@@ -2568,6 +2569,28 @@ describe('Db3 >', () => {
 					}));
 				});
 			});
+
+			it('should fetch (and re fetch) nulls from a non existing path', () => {
+				var wm1 = Db(WithMap).get('wm555');
+				return Db(wm1.embedMap).fetch(this,'b').then((det) => {
+					assert("event is right").when(det).is(M.objectMatching({
+						type: Db3.Api.EventType.REMOVED,
+						populating: false,
+						originalKey: 'b',
+						payload: null
+					}));
+				}).then(()=>{
+					return Db(wm1.embedMap).fetch(this,'b');
+				}).then((det) => {
+					assert("event is right").when(det).is(M.objectMatching({
+						type: Db3.Api.EventType.REMOVED,
+						populating: false,
+						originalKey: 'b',
+						payload: null
+					}));
+				});
+			});
+			
 			
 			it('should fetch a ref with a specific key and remove it', () => {
 				var wm1 = Db(WithMap).get('wm2');
@@ -2594,6 +2617,7 @@ describe('Db3 >', () => {
 				});
 			});
 			
+			// FIXFIX
 			it('should save a new entity with a manually built map', () => {
 				var nwm = new WithMap();
 				var sub = new SubEntity();
@@ -2603,17 +2627,39 @@ describe('Db3 >', () => {
 				return Db(nwm).save()
 				.then(() => {
 					var url = Db(nwm).getUrl();
+					console.log(baseUrl + url);
 					return new Promise((ok) => {
 						new Firebase(baseUrl + url).once('value',ok);
 					});
 				})
 				.then((ds :FirebaseDataSnapshot) => {
+					console.log("Value is", ds.val());
 					assert('saved map looks right').when(ds.val()).is(M.objectMatching({
 						embedMap : {
 							a: {
 								str: 'Im new'
 							}
 						}
+					}));
+				});
+			});
+
+			it('should save a new entity without set map', () => {
+				var nwm = new WithMap();
+				nwm.anyOtherProp = 'ciao';
+				Db(nwm).assignUrl();
+				
+				return Db(nwm).save()
+				.then(() => {
+					var url = Db(nwm).getUrl();
+					return new Promise((ok) => {
+						new Firebase(baseUrl + url).once('value',ok);
+					});
+				})
+				.then((ds :FirebaseDataSnapshot) => {
+					console.log("Value is", ds.val());
+					assert('saved map looks right').when(ds.val()).is(M.objectMatching({
+						anyOtherProp: 'ciao'
 					}));
 				});
 			});
