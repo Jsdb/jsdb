@@ -350,7 +350,12 @@ module Tsdb {
 			 * Special event used on collection to notify that the collection has finished loading, and following 
 			 * events will be updates to the previous state and not initial population of the collection.
 			 */
-			LIST_END
+			LIST_END,
+
+			/**
+			 * Event sent when a query or a collection reports or updates the count of elements.
+			 */
+			COUNTED
 		}
 
 		/**
@@ -680,6 +685,14 @@ module Tsdb {
 		 * but also {@link IQuery}.
 		 */
 		export interface IReadableCollection<E extends Entity> extends IEvent {
+			/**
+			 * Registers a callback to get notified about number of elements in this collection.
+			 * 
+			 * The callback will be called first time, eventually using cached data, and
+			 * then when elements are added or removed.
+			 */
+			counted(ctx:Object, callback :(ed:IEventDetails<number>)=>void) :void;
+
 			/**
 			 * Registers a callback to get notified about updates to the collection.
 			 * 
@@ -3278,7 +3291,6 @@ module Tsdb {
 					this.ref.off(cb.event, cb.fn);
 				}
 			}
-			
 		}
 
 		/**
@@ -3331,6 +3343,10 @@ module Tsdb {
 				h.ispopulating = true;
 				h.istracking = true;
 				super.on(h);
+			}
+
+			counted(ctx:Object, callback :(ed:EventDetails<number>)=>void) :void {
+				this.query().limit(0).counted(ctx, callback);
 			}
 			
 			live(ctx :Object) {
@@ -4233,7 +4249,7 @@ module Tsdb {
 		
 		export class QueryImpl<E> extends ArrayCollectionEvent<E> implements Api.IQuery<E> {
 			
-			private _limit :number = 0;
+			private _limit :number = null;
 			private _rangeFrom :any = null;
 			private _rangeTo :any = null;
 			private _equals :any;
@@ -4258,7 +4274,24 @@ module Tsdb {
 				};
 				return this;
 			}
-			
+
+			counted(ctx :Object, cb :(ed:EventDetails<number>)=>void) {
+				var h = new CollectionDbEventHandler(ctx, cb);
+				h.dbEvents = ['counted'];
+				super.on(h);
+			}
+
+			handleDbEvent(handler :CollectionDbEventHandler, event :string, ds :Spi.DbTreeSnap, prevKey :string) {
+				if (event == 'counted') {
+					var ed = new EventDetails<number>();
+					ed.payload = ds.val();
+					ed.type = Api.EventType.COUNTED;
+					handler.handle(ed);
+				} else {
+					super.handleDbEvent(handler, event, ds, prevKey);
+				}
+			}
+
 			limit(limit :number) {
 				this._limit = limit;
 				return this; 
@@ -4303,8 +4336,8 @@ module Tsdb {
 						}
 					}
 				}
-				var limVal = this._limit || 0;
-				if (limVal != 0) {
+				var limVal = this._limit;
+				if (limVal !== null) {
 					var limLast = this.sorting && this.sorting.desc;
 					if (limVal < 0) {
 						limVal = Math.abs(limVal);
