@@ -13,12 +13,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 
 })(["require", "exports"], function (require, exports) {
     /**
-     * TSDB version : 20170131_202753_master_1.0.0_e9684dd
+     * TSDB version : 20170508_051726_master_1.0.0_38e72bd
      */
     var glb = typeof window !== 'undefined' ? window : global;
     var Firebase = glb['Firebase'] || require('firebase');
     var Promise = glb['Promise'] || require('es6-promise').Promise;
-    var Version = '20170131_202753_master_1.0.0_e9684dd';
+    var Version = '20170508_051726_master_1.0.0_38e72bd';
     var Tsdb = (function () {
         function Tsdb() {
         }
@@ -155,6 +155,10 @@ var __extends = (this && this.__extends) || function (d, b) {
                  * events will be updates to the previous state and not initial population of the collection.
                  */
                 EventType[EventType["LIST_END"] = 5] = "LIST_END";
+                /**
+                 * Event sent when a query or a collection reports or updates the count of elements.
+                 */
+                EventType[EventType["COUNTED"] = 6] = "COUNTED";
             })(Api.EventType || (Api.EventType = {}));
             var EventType = Api.EventType;
             var DefaultClientSideSocketFactory = (function () {
@@ -2209,6 +2213,9 @@ var __extends = (this && this.__extends) || function (d, b) {
                     h.istracking = true;
                     _super.prototype.on.call(this, h);
                 };
+                MapEvent.prototype.counted = function (ctx, callback) {
+                    this.query().limit(0).counted(ctx, callback);
+                };
                 MapEvent.prototype.live = function (ctx) {
                     this.updated(ctx, function () { });
                 };
@@ -3095,7 +3102,7 @@ var __extends = (this && this.__extends) || function (d, b) {
                 __extends(QueryImpl, _super);
                 function QueryImpl(ev) {
                     _super.call(this);
-                    this._limit = 0;
+                    this._limit = null;
                     this._rangeFrom = null;
                     this._rangeTo = null;
                     this.realField = {};
@@ -3111,6 +3118,22 @@ var __extends = (this && this.__extends) || function (d, b) {
                         desc: desc
                     };
                     return this;
+                };
+                QueryImpl.prototype.counted = function (ctx, cb) {
+                    var h = new CollectionDbEventHandler(ctx, cb);
+                    h.dbEvents = ['counted'];
+                    _super.prototype.on.call(this, h);
+                };
+                QueryImpl.prototype.handleDbEvent = function (handler, event, ds, prevKey) {
+                    if (event == 'counted') {
+                        var ed = new EventDetails();
+                        ed.payload = ds.val();
+                        ed.type = Api.EventType.COUNTED;
+                        handler.handle(ed);
+                    }
+                    else {
+                        _super.prototype.handleDbEvent.call(this, handler, event, ds, prevKey);
+                    }
                 };
                 QueryImpl.prototype.limit = function (limit) {
                     this._limit = limit;
@@ -3154,8 +3177,8 @@ var __extends = (this && this.__extends) || function (d, b) {
                             }
                         }
                     }
-                    var limVal = this._limit || 0;
-                    if (limVal != 0) {
+                    var limVal = this._limit;
+                    if (limVal !== null) {
                         var limLast = this.sorting && this.sorting.desc;
                         if (limVal < 0) {
                             limVal = Math.abs(limVal);

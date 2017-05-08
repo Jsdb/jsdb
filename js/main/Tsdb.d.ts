@@ -212,6 +212,10 @@ declare module Tsdb {
              * events will be updates to the previous state and not initial population of the collection.
              */
             LIST_END = 5,
+            /**
+             * Event sent when a query or a collection reports or updates the count of elements.
+             */
+            COUNTED = 6,
         }
         /**
          * Class describing an event from the Db. It is used in every listener callback.
@@ -493,6 +497,13 @@ declare module Tsdb {
          * but also {@link IQuery}.
          */
         interface IReadableCollection<E extends Entity> extends IEvent {
+            /**
+             * Registers a callback to get notified about number of elements in this collection.
+             *
+             * The callback will be called first time, eventually using cached data, and
+             * then when elements are added or removed.
+             */
+            counted(ctx: Object, callback: (ed: IEventDetails<number>) => void): void;
             /**
              * Registers a callback to get notified about updates to the collection.
              *
@@ -1761,6 +1772,7 @@ declare module Tsdb {
             changed(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             moved(ctx: Object, callback: (ed: EventDetails<E>) => void): void;
             updated(ctx: Object, callback: (ed: EventDetails<E>) => void, discriminator?: any): void;
+            counted(ctx: Object, callback: (ed: EventDetails<number>) => void): void;
             live(ctx: Object): void;
             load(ctx: Object, fullLoad?: boolean): Promise<any>;
             dereference(ctx: Object): Promise<any>;
@@ -1883,6 +1895,8 @@ declare module Tsdb {
             constructor(ev: GenericEvent);
             getUrl(force: boolean): string;
             onField(field: string, desc?: boolean): QueryImpl<E>;
+            counted(ctx: Object, cb: (ed: EventDetails<number>) => void): void;
+            handleDbEvent(handler: CollectionDbEventHandler, event: string, ds: Spi.DbTreeSnap, prevKey: string): void;
             limit(limit: number): QueryImpl<E>;
             range(from: any, to: any): QueryImpl<E>;
             equals(val: any): QueryImpl<E>;
