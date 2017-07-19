@@ -452,3 +452,10 @@ gulp.task("clean:typedoc", function (cb) {
 		"docs"
 	], cb);
 });
+
+/**
+ * Exit when all tasks are completed
+ */
+gulp.doneCallback = function (err) {
+  process.exit(err ? 1 : 0);
+};
